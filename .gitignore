@@ -25,5 +25,5 @@ archive/
 data/
 last_run.txt
 specter2_ids.txt
-specter2_embeddings.txt
+specter2_embeddings.npy
 
