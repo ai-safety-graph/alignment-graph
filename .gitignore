@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.pyo
+*.pyc
+*.pyd
+.venv/
+venv/
+
+# Node / frontend
+ui/node_modules/
+ui/.next/
+ui/dist/
+ui/build/
+
+# General OS / misc
+.DS_Store
+*.log
+.env
+.env.*.local
+archive/
+
+# Pipeline state (runtime artifacts)
+data/
+last_run.txt
+specter2_ids.txt
+specter2_embeddings.txt
+

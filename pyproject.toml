@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aisafety-pipeline"
+version = "0.1.0"
+description = "Staged arXiv → SQLite → Embeddings → Filter → Clustering → labeling → JSON exports"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "MIT" }
+authors = [{ name = "Savva Lambin" }]
+
+dependencies = [
+  "numpy==2.2.6",
+  "pandas==2.3.1",
+  "scikit-learn==1.7.1",
+  "requests==2.32.4",
+  "hdbscan==0.8.40",
+  "umap-learn==0.5.9.post2",
+  "transformers==4.51.3",
+  "adapters==1.2.0",
+  # runtime deps you likely also need:
+  # "torch",           # install the correct wheel for your platform/CUDA separately
+  # "networkx",        # needed for FR layout
+  # "fa2; platform_system != 'Windows'",  # ForceAtlas2 (optional; FR works everywhere)
+]
+
+[project.scripts]
+aisafety-pipeline = "aisafety_pipeline.utils:cli_entry"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aisafety_pipeline"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "src/aisafety_pipeline",
+  "README.md",
+  "pyproject.toml",
+]
