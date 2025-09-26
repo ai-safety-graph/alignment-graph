@@ -12,7 +12,7 @@ import type {
   LinkObject,
   NodeObject,
 } from 'react-force-graph-2d'
-import { Trash } from 'lucide-react'
+import { Trash, Search } from 'lucide-react'
 
 import { useForceConfig } from '../hooks/useForceConfig'
 import { useGraphShortcuts } from '../hooks/useGraphShortcuts'
@@ -391,17 +391,21 @@ export default function ArxivGraph({ src = '/graph.json' }: { src?: string }) {
 
       {/* Search Bar */}
       <div className='fixed top-3 left-1/2 -translate-x-1/2 z-10 bg-[#2a2a2a] backdrop-blur-xs rounded-3xl w-[min(550px,80vw)] border border-[#333333]'>
-        <div className='flex items-center'>
+        <div className='flex items-center gap-2'>
           <div className='relative flex-1'>
+            <Search
+              className='absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none'
+              size={16}
+            />
             <input
               ref={searchInputRef}
-              placeholder='Search papers'
+              placeholder='Search papers on AI safety & alignment'
               value={query}
               onChange={(e) => {
                 if (selectedId != null) onBackgroundClick()
                 setQuery(e.target.value)
               }}
-              className='w-full px-3 py-2 pr-16 rounded-3xl bg-neutral-900 border border-[#333333] text-[#e5e5e5] placeholder-[#666666] outline-none focus:ring-2 focus:ring-[#4ea8de]'
+              className='w-full pl-9 pr-20 py-2 rounded-3xl bg-neutral-900 border border-[#333333] text-[#e5e5e5] placeholder-[#666666] outline-none focus:ring-2 focus:ring-[#4ea8de]'
             />
             <div className='absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[11px] text-neutral-400 pointer-events-none select-none'>
               <kbd className='px-1.5 py-0.5 rounded bg-transparent border border-neutral-600 text-[11px] font-mono'>

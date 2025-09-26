@@ -11,6 +11,8 @@ interface PaperDetailsProps {
   neighbors: NeighborEntry[]
   onClose: () => void
   onSelectPaper: (id: number) => void
+  showShortcutHints?: boolean
+  variant?: 'panel' | 'modal'
 }
 
 export default function PaperDetails({
@@ -19,43 +21,61 @@ export default function PaperDetails({
   neighbors,
   onClose,
   onSelectPaper,
+  showShortcutHints = true,
+  variant = 'panel',
 }: PaperDetailsProps) {
   const urlKey = paper.ln || (paper as any).aid
   const { data: lazy, loading, error } = usePaperSummary(urlKey)
 
   const summaryText = lazy?.sm ?? paper.sm
-  return (
-    <aside className='fixed top-[72px] right-4 bottom-4 w-[440px] z-10 bg-[#262626] backdrop-blur-md border border-[#333333] rounded-xl p-3 overflow-auto text-[#e5e5e5] scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent scrollbar-hover:scrollbar-thumb-[#666]'>
-      <div>
-        <div className='flex items-center justify-between mb-2'>
-          <div className='flex items-center gap-2 mb-0.5'>
-            <span
-              className='inline-block w-2 h-2 rounded-full mt-0.5 border border-[#333333]'
-              style={{ background: cidToColor(paper.cid) }}
-              aria-hidden
-            />
-            <span className='text-[13px] text-neutral-400'>
-              {clusters[String(paper.cid)]?.label ?? `Cluster ${paper.cid}`} •{' '}
-              {paper.dm}
-            </span>
-          </div>
-          <div className='flex items-center gap-1'>
-            <kbd className='px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-600 text-[10px] font-mono text-neutral-300'>
-              Esc
-            </kbd>
-            <button
-              onClick={onClose}
-              className='p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200'
-              aria-label='Close details'
-            >
-              <CircleX size={20} />
-            </button>
-          </div>
-        </div>
 
-        <h4 className='mt-1 mb-2 text-lg font-semibold leading-snug text-[#e5e5e5]'>
-          {paper.t}
-        </h4>
+  const outer =
+    variant === 'panel'
+      ? 'fixed top-[72px] right-4 bottom-4 w-[440px] z-10'
+      : // modal: fill the parent box (parent will center & size it)
+        'relative w-full h-full'
+
+  const chrome =
+    variant === 'panel'
+      ? 'bg-[#262626] backdrop-blur-md border border-[#333333] rounded-xl pb-3 px-3 overflow-auto text-[#e5e5e5] scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent scrollbar-hover:scrollbar-thumb-[#666]'
+      : // modal: a bit larger padding
+        'bg-[#262626] backdrop-blur-md border border-[#333333] rounded-2xl pb-3 px-3 overflow-auto text-[#e5e5e5] scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent'
+  return (
+    <aside className={`${outer} ${chrome}`}>
+      <div>
+        <div className='py-3 sticky top-0 bg-[#262626]'>
+          <div className='flex items-center justify-between mb-2'>
+            <div className='flex items-center gap-2 mb-0.5'>
+              <span
+                className='inline-block w-2 h-2 rounded-full mt-0.5 border border-[#333333]'
+                style={{ background: cidToColor(paper.cid) }}
+                aria-hidden
+              />
+              <span className='text-[13px] text-neutral-400'>
+                {clusters[String(paper.cid)]?.label ?? `Cluster ${paper.cid}`} •{' '}
+                {paper.dm}
+              </span>
+            </div>
+            <div className='flex items-center gap-1'>
+              {showShortcutHints && (
+                <kbd className='px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-600 text-[10px] font-mono text-neutral-300'>
+                  Esc
+                </kbd>
+              )}
+              <button
+                onClick={onClose}
+                className='p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200'
+                aria-label='Close details'
+              >
+                <CircleX size={20} />
+              </button>
+            </div>
+          </div>
+
+          <h4 className='mt-1 mb-2 text-lg font-semibold leading-snug text-[#e5e5e5]'>
+            {paper.t}
+          </h4>
+        </div>
         <div className='text-[13px] mb-1.5'>
           <strong>Authors:</strong> {paper.au}
         </div>
