@@ -10,13 +10,6 @@ import type {
 import { cidToColor } from '../lib/colors'
 import { buildAdjacency } from '../lib/graph'
 
-/**
- * MobilePapers
- * A lightweight, touch-friendly alternative to the canvas graph for small screens.
- * - Fetches the same /graph.json
- * - Client-side fuzzy-ish search with scoring similar to ArxivGraph
- * - Tapping an item opens PaperDetails, with neighbors computed via adjacency
- */
 export default function MobilePapers({
   src = '/graph.json',
 }: {
@@ -133,7 +126,7 @@ export default function MobilePapers({
 
   const sentinelRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
-    setLimit(40) // reset when filter or query changes
+    setLimit(40)
   }, [activeCid, query])
   useEffect(() => {
     const el = sentinelRef.current
@@ -275,10 +268,8 @@ export default function MobilePapers({
         <div ref={sentinelRef} className='h-10' />
       </div>
 
-      {/* Details overlay (simple full-screen sheet for mobile) */}
       {selected && (
         <div className='fixed inset-0 z-20 bg-black/70 flex items-center justify-center p-3'>
-          {/* click background to close */}
           <button
             aria-label='Close overlay'
             onClick={() => setSelectedId(null)}
@@ -300,7 +291,7 @@ export default function MobilePapers({
               onClose={() => setSelectedId(null)}
               onSelectPaper={(id) => setSelectedId(id)}
               showShortcutHints={false}
-              variant='modal' // <— key line
+              variant='modal'
             />
           </div>
         </div>

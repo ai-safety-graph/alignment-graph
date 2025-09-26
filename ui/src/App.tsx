@@ -9,7 +9,13 @@ export default function App() {
   if (isSmall === null) return <div className='h-screen bg-neutral-950' />
 
   return (
-    <Suspense fallback={<div className='p-4 text-neutral-300'>Loading…</div>}>
+    <Suspense
+      fallback={
+        <div className='flex h-screen w-screen items-center justify-center bg-neutral-950 text-neutral-300'>
+          Loading View...
+        </div>
+      }
+    >
       {isSmall ? (
         <MobilePapers src='/graph.json' />
       ) : (
