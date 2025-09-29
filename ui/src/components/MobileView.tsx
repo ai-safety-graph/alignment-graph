@@ -236,7 +236,9 @@ export default function MobilePapers({
 
       <div className='flex-1 overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent scrollbar-hover:scrollbar-thumb-[#666]'>
         {!data && (
-          <div className='p-4 text-sm text-neutral-400'>Loading papers…</div>
+          <div className='flex h-screen w-screen items-center justify-center bg-neutral-950 text-neutral-300'>
+            Loading papers…
+          </div>
         )}
 
         {data && filtered.length === 0 && (
