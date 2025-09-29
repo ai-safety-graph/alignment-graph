@@ -2,15 +2,6 @@
 base = "ui"
 command = "npm ci && npm run build"
 publish = "dist"
-# Skip build when only non-UI parts changed (safe for first build),
-# but rebuild if these important files change.
-ignore = """
-if [ -z "$CACHED_COMMIT_REF" ]; then
-  exit 1
-fi
-git diff --quiet "$CACHED_COMMIT_REF" "$COMMIT_REF" -- \
-  ui/ netlify.toml ui/package.json ui/package-lock.json ui/vite.config.* ui/tsconfig*.json
-"""
 
 [build.environment]
 NODE_VERSION = "20"

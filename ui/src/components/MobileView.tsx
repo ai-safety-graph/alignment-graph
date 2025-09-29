@@ -170,8 +170,18 @@ export default function MobilePapers({
   return (
     <div className='fixed inset-0 bg-neutral-950 text-[#e5e5e5] flex flex-col'>
       {/* Top bar / search */}
-      <div className='sticky top-0 z-10 p-3 bg-neutral-950/90 backdrop-blur border-b border-neutral-800'>
-        <div className='flex items-center gap-2'>
+      <div className='sticky top-0 z-10 p-3 bg-neutral-950/90 backdrop-blur border-b border-neutral-800 items-center flex gap-3'>
+        <a
+          target='_blank'
+          href='https://github.com/ai-safety-graph/alignment-graph'
+        >
+          <img
+            src='/ag-logo.svg'
+            alt='Alignment Graph Logo'
+            className='h-8 w-auto opacity-50 saturate-70'
+          />
+        </a>
+        <div className='flex items-center gap-2 flex-1'>
           <div className='relative flex-1'>
             <Search
               className='absolute left-3 top-1/2 -translate-y-1/2'

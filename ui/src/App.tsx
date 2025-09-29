@@ -1,8 +1,8 @@
 import { Suspense, lazy } from 'react'
 import { useMediaQuery } from './hooks/useMediaQuery'
 
-const ArxivGraph = lazy(() => import('./components/ArxivGraph'))
-const MobilePapers = lazy(() => import('./components/MobilePapers'))
+const ArxivGraph = lazy(() => import('./components/Graph'))
+const MobilePapers = lazy(() => import('./components/MobileView'))
 
 export default function App() {
   const isSmall = useMediaQuery('(max-width: 768px)')

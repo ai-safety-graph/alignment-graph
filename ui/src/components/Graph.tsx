@@ -458,6 +458,18 @@ export default function ArxivGraph({ src = '/graph.json' }: { src?: string }) {
       )}
 
       <ClusterLegendOverlay clusters={clusters} />
+      <div className='fixed right-4 top-4 z-10'>
+        <a
+          target='_blank'
+          href='https://github.com/ai-safety-graph/alignment-graph'
+        >
+          <img
+            src='/ag-logo.svg'
+            alt='Alignment Graph Logo'
+            className='h-10 w-auto opacity-50 saturate-70'
+          />
+        </a>
+      </div>
     </div>
   )
 }

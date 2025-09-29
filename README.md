@@ -1,4 +1,4 @@
-# AI Safety Pipeline
+# AI Safety Pipeline & Visualisation
 
 A staged pipeline for harvesting **arXiv** papers → storing in **SQLite** → generating **SPECTER2 embeddings** → applying **filters** → **clustering** → exporting **JSON** for downstream visualization.
 
@@ -70,12 +70,14 @@ After installation, the CLI is available as:
 
 ## Development
 
-- Code is organized in a package under src/aisafety_pipeline/
+- Pipeline code is organized in a package under src/aisafety_pipeline/
 
 - CLI entry point lives in utils.py
 
 - Run without installation via:
   `python -m aisafety_pipeline.utils --help`
+
+- UI uses seperate components for desktop and mobile views
 
 ## Reproducing the results (date window & seeds)
 
