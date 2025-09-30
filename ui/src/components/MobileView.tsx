@@ -19,7 +19,10 @@ export default function MobilePapers({
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
+
   const listRef = useRef<HTMLDivElement | null>(null)
+  const searchBarRef = useRef<HTMLDivElement | null>(null)
+  const [searchHeight, setSearchHeight] = useState(0)
 
   // Fetch graph data
   useEffect(() => {
@@ -74,7 +77,7 @@ export default function MobilePapers({
     if (!q)
       return data.nodes
         .map((n) => ({ n, score: 0, deg: adj.get(n.id)?.length ?? 0 }))
-        .sort((a, b) => b.deg - a.deg) // default: show higher degree papers first
+        .sort((a, b) => b.deg - a.deg)
 
     const terms = q.split(/\s+/).filter(Boolean)
     const weight = { title: 3, authors: 2, domain: 1.5, summary: 1 }
@@ -115,13 +118,11 @@ export default function MobilePapers({
       .slice(0, 200)
   }, [data, query, adj])
 
-  // Apply cluster filter
   const filtered = useMemo(() => {
     if (activeCid == null) return results
     return results.filter(({ n }) => n.cid === activeCid)
   }, [results, activeCid])
 
-  // Infinite scroll
   const [limit, setLimit] = useState(40)
   const slice = useMemo(() => filtered.slice(0, limit), [filtered, limit])
 
@@ -171,83 +172,101 @@ export default function MobilePapers({
     }
   }, [selected])
 
+  useLayoutEffect(() => {
+    const el = searchBarRef.current
+    if (!el) return
+    const measure = () => setSearchHeight(el.getBoundingClientRect().height)
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
   if (error) {
     return <div className='p-4 text-red-500'>{error}</div>
   }
 
   return (
     <div className='fixed inset-0 bg-neutral-950 text-[#e5e5e5] flex flex-col'>
-      {/* Top bar / search */}
-      <div className='sticky top-0 z-10 p-3 bg-neutral-950/90 backdrop-blur border-b border-neutral-800 items-center flex gap-3'>
-        <a
-          target='_blank'
-          href='https://github.com/ai-safety-graph/alignment-graph'
-        >
-          <img
-            src='/ag-logo.svg'
-            alt='Alignment Graph Logo'
-            className='h-8 w-auto opacity-50 saturate-70'
-          />
-        </a>
-        <div className='flex items-center gap-2 flex-1'>
-          <div className='relative flex-1'>
-            <Search
-              className='absolute left-3 top-1/2 -translate-y-1/2'
-              size={16}
-            />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder='Search papers on AI safety & alignment'
-              className='w-full pl-9 pr-10 py-2 rounded-xl bg-neutral-900 border border-[#333333] text-[#e5e5e5] placeholder-[#666666] outline-none focus:ring-2 focus:ring-[#4ea8de]'
-            />
-          </div>
-          {query && (
-            <button
-              aria-label='Clear'
-              onClick={() => setQuery('')}
-              className='p-2 rounded-lg text-neutral-400 hover:text-neutral-200'
-            >
-              <Trash size={18} />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {data && (
-        <>
-          {/* Cluster chips row */}
-          <div className='flex gap-2 overflow-x-auto px-4 pt-3 pb-2 sticky top-[52px] bg-neutral-950/90 backdrop-blur border-b border-neutral-900 scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent scrollbar-hover:scrollbar-thumb-[#666]'>
-            {clusterEntries.map(([cid, meta]) => (
-              <button
-                key={cid}
-                onClick={() =>
-                  setActiveCid((prev) => (prev === +cid ? null : +cid))
-                }
-                className={`px-3 py-1 rounded-full border text-sm whitespace-nowrap ${
-                  activeCid === +cid
-                    ? 'bg-neutral-800 border-neutral-500'
-                    : 'border-neutral-700 hover:border-neutral-500'
-                }`}
-              >
-                <span
-                  className='inline-block w-2 h-2 mr-2 rounded-full mt-0.5 border border-[#333333]'
-                  style={{ backgroundColor: cidToColor(Number(cid)) }}
-                  aria-hidden
-                />
-                {(meta.label ?? `Cluster ${cid}`) + ' • ' + meta.size}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-
       <div
         ref={listRef}
         className='flex-1 overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent scrollbar-hover:scrollbar-thumb-[#666]'
       >
+        <div className='px-4 pt-4 pb-2'>
+          <a
+            target='_blank'
+            href='https://github.com/ai-safety-graph/alignment-graph'
+            className='flex items-center justify-center'
+          >
+            <img
+              src='/ag-logo.svg'
+              alt='Alignment Graph Logo'
+              className='h-10 w-auto opacity-50 saturate-70'
+            />
+          </a>
+        </div>
+        <div
+          ref={searchBarRef}
+          className='sticky top-0 z-10 p-3 bg-neutral-950/90 backdrop-blur border-b border-neutral-800 items-center flex gap-3'
+        >
+          <div className='flex items-center gap-2 flex-1'>
+            <div className='relative flex-1'>
+              <Search
+                className='absolute left-3 top-1/2 -translate-y-1/2'
+                size={16}
+              />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder='Search papers on AI safety & alignment'
+                className='w-full pl-9 pr-10 py-2 rounded-xl bg-neutral-900 border border-[#333333] text-[#e5e5e5] placeholder-[#666666] outline-none focus:ring-2 focus:ring-[#4ea8de]'
+              />
+            </div>
+            {query && (
+              <button
+                aria-label='Clear'
+                onClick={() => setQuery('')}
+                className='p-2 rounded-lg text-neutral-400 hover:text-neutral-200'
+              >
+                <Trash size={18} />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {data && (
+          <>
+            <div
+              className='flex gap-2 overflow-x-auto px-4 pt-3 pb-2 bg-neutral-950/90 backdrop-blur border-b border-neutral-900
+                         scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent scrollbar-hover:scrollbar-thumb-[#666]'
+              style={{ position: 'sticky', top: searchHeight }}
+            >
+              {clusterEntries.map(([cid, meta]) => (
+                <button
+                  key={cid}
+                  onClick={() =>
+                    setActiveCid((prev) => (prev === +cid ? null : +cid))
+                  }
+                  className={`px-3 py-1 rounded-full border text-sm whitespace-nowrap ${
+                    activeCid === +cid
+                      ? 'bg-neutral-800 border-neutral-500'
+                      : 'border-neutral-700 hover:border-neutral-500'
+                  }`}
+                >
+                  <span
+                    className='inline-block w-2 h-2 mr-2 rounded-full mt-0.5 border border-[#333333]'
+                    style={{ backgroundColor: cidToColor(Number(cid)) }}
+                    aria-hidden
+                  />
+                  {(meta.label ?? `Cluster ${cid}`) + ' • ' + meta.size}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
         {!data && (
-          <div className='flex h-screen w-screen items-center justify-center bg-neutral-950 text-neutral-300'>
+          <div className='flex h-[60vh] items-center justify-center text-neutral-300'>
             Loading papers…
           </div>
         )}
@@ -256,37 +275,40 @@ export default function MobilePapers({
           <div className='p-6 text-center text-neutral-400'>No matches.</div>
         )}
 
-        <ul className='divide-y divide-neutral-800 '>
-          {slice.map(({ n, deg }) => (
-            <li key={n.id}>
-              <button
-                onClick={() => setSelectedId(n.id)}
-                className='w-full text-left px-4 py-3 active:bg-neutral-900'
-              >
-                <div className='text-[13px] text-neutral-400 truncate'>
-                  {n.au}
-                </div>
-                <div className='mt-0.5 text-[15px] leading-snug'>{n.t}</div>
-                <div className='mt-1 text-[12px] text-neutral-400 flex items-center gap-2'>
-                  <div className='flex items-center gap-2 mb-0.5'>
-                    <span
-                      className='inline-block w-2 h-2 rounded-full border border-[#333333]'
-                      style={{ background: cidToColor(n.cid) }}
-                      aria-hidden
-                    />
-                    <span>
-                      {clusters[String(n.cid)]?.label ?? `Cluster ${n.cid}`}
-                    </span>
-                    <span>•</span>
-                    <span>{n.dm}</span>
-                    <span>•</span>
-                    <span>{deg} related</span>
+        {data && (
+          <ul className='divide-y divide-neutral-800 '>
+            {slice.map(({ n, deg }) => (
+              <li key={n.id}>
+                <button
+                  onClick={() => setSelectedId(n.id)}
+                  className='w-full text-left px-4 py-3 active:bg-neutral-900'
+                >
+                  <div className='text-[13px] text-neutral-400 truncate'>
+                    {n.au}
                   </div>
-                </div>
-              </button>
-            </li>
-          ))}
-        </ul>
+                  <div className='mt-0.5 text-[15px] leading-snug'>{n.t}</div>
+                  <div className='mt-1 text-[12px] text-neutral-400 flex items-center gap-2'>
+                    <div className='flex items-center gap-2 mb-0.5'>
+                      <span
+                        className='inline-block w-2 h-2 rounded-full border border-[#333333]'
+                        style={{ background: cidToColor(n.cid) }}
+                        aria-hidden
+                      />
+                      <span>
+                        {clusters[String(n.cid)]?.label ?? `Cluster ${n.cid}`}
+                      </span>
+                      <span>•</span>
+                      <span>{n.dm}</span>
+                      <span>•</span>
+                      <span>{deg} related</span>
+                    </div>
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
         {/* infinite scroll sentinel */}
         <div ref={sentinelRef} className='h-10' />
       </div>
@@ -298,15 +320,7 @@ export default function MobilePapers({
             onClick={() => setSelectedId(null)}
             className='absolute inset-0'
           />
-          <div
-            className='
-        relative z-10
-        w-full max-w-[720px]
-        h-[92dvh] 
-        rounded-2xl shadow-2xl
-        overflow-hidden
-      '
-          >
+          <div className='relative z-10 w-full max-w-[720px] h-[92dvh] rounded-2xl shadow-2xl overflow-hidden'>
             <PaperDetails
               paper={selected}
               clusters={clusters}
