@@ -2,6 +2,7 @@ import { CircleX } from 'lucide-react'
 import { cidToColor } from '../lib/colors'
 import type { ClustersLegend, NodeCompact } from '../lib/types'
 import { usePaperSummary } from '../hooks/usePaperSummary'
+import { useRef, useLayoutEffect } from 'react'
 
 type NeighborEntry = { n: NodeCompact; w: number }
 
@@ -26,8 +27,15 @@ export default function PaperDetails({
 }: PaperDetailsProps) {
   const urlKey = paper.ln || (paper as any).aid
   const { data: lazy, loading, error } = usePaperSummary(urlKey)
+  const scrollerRef = useRef<HTMLDivElement | null>(null)
 
   const summaryText = lazy?.sm ?? paper.sm
+
+  useLayoutEffect(() => {
+    const el = scrollerRef.current
+    if (!el) return
+    el.scrollTop = 0
+  }, [paper.id || urlKey])
 
   const outer =
     variant === 'panel'
@@ -41,7 +49,7 @@ export default function PaperDetails({
       : // modal: a bit larger padding
         'bg-[#262626] backdrop-blur-md border border-[#333333] rounded-2xl pb-3 px-3 overflow-auto text-[#e5e5e5] scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent'
   return (
-    <aside className={`${outer} ${chrome}`}>
+    <aside ref={scrollerRef as any} className={`${outer} ${chrome}`}>
       <div>
         <div className='py-3 sticky top-0 bg-[#262626]'>
           <div className='flex items-center justify-between mb-2'>

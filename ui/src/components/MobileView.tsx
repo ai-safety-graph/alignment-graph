@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from 'react'
+import { useEffect, useMemo, useState, useRef, useLayoutEffect } from 'react'
 import { Trash, Search } from 'lucide-react'
 
 import PaperDetails from './PaperDetails'
@@ -19,6 +19,7 @@ export default function MobilePapers({
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const listRef = useRef<HTMLDivElement | null>(null)
 
   // Fetch graph data
   useEffect(() => {
@@ -128,6 +129,13 @@ export default function MobilePapers({
   useEffect(() => {
     setLimit(40)
   }, [activeCid, query])
+
+  useLayoutEffect(() => {
+    const el = listRef.current
+    if (!el) return
+    el.scrollTop = 0
+  }, [activeCid, query])
+
   useEffect(() => {
     const el = sentinelRef.current
     if (!el) return
@@ -234,7 +242,10 @@ export default function MobilePapers({
         </>
       )}
 
-      <div className='flex-1 overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent scrollbar-hover:scrollbar-thumb-[#666]'>
+      <div
+        ref={listRef}
+        className='flex-1 overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent scrollbar-hover:scrollbar-thumb-[#666]'
+      >
         {!data && (
           <div className='flex h-screen w-screen items-center justify-center bg-neutral-950 text-neutral-300'>
             Loading papers…
