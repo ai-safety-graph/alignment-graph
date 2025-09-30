@@ -302,7 +302,7 @@ export default function MobilePapers({
             className='
         relative z-10
         w-full max-w-[720px]
-        h-[min(92vh,900px)]
+        h-[92dvh] 
         rounded-2xl shadow-2xl
         overflow-hidden
       '
