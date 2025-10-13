@@ -1,26 +1,91 @@
 from __future__ import annotations
-import datetime as dt, os, time as _time, xml.etree.ElementTree as ET
+import datetime as dt, os, time as _time, xml.etree.ElementTree as ET, random
 from pathlib import Path
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from .config import OAI_BASE, OAI_SETS, OAI_PREFIX, OAI_THROTTLE_SEC, STATE_FILE, BLUE, GREEN, RESET
-from .db import init_db
 
+# ---- Session with retries & polite UA ----
+_SESSION: requests.Session | None = None
+
+def _get_session() -> requests.Session:
+    global _SESSION
+    if _SESSION is not None:
+        return _SESSION
+    s = requests.Session()
+    retry = Retry(
+        total=8,                      # overall cap
+        connect=5,                    # connection-level retries
+        read=5,                       # read timeouts / incomplete reads
+        backoff_factor=1.5,           # 0, 1.5, 3.0, 6.0, 12.0, ...
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=frozenset(["GET"]),
+        respect_retry_after_header=True,
+        raise_on_status=False,        # let us inspect responses
+    )
+    adapter = HTTPAdapter(max_retries=retry, pool_connections=4, pool_maxsize=8)
+    s.mount("https://", adapter)
+    s.mount("http://", adapter)
+    ua = os.getenv("AIS_USER_AGENT", "aisafety-pipeline/1.0 (+contact: your-email@example.com)")
+    s.headers.update({"User-Agent": ua, "Accept": "application/xml,text/xml;q=0.9,*/*;q=0.8"})
+    _SESSION = s
+    return s
 
 def _iso_date(d: dt.date) -> str: return d.strftime("%Y-%m-%d")
-
 def _today_iso() -> str: return _iso_date(dt.date.today())
 
+def _sleep_with_jitter(base: float):
+    # adds 0–30% jitter to avoid thundering herd
+    _time.sleep(base * (1.0 + 0.3 * random.random()))
 
 def _oai_fetch(params: dict) -> str:
-    for attempt in range(5):
-        if attempt:
-            _time.sleep(OAI_THROTTLE_SEC * (attempt + 1))
-        r = requests.get(OAI_BASE, params=params, timeout=60)
-        if r.ok:
-            _time.sleep(OAI_THROTTLE_SEC)
+    """
+    Robust fetch that:
+      - retries on read/connect timeout and 5xx/429
+      - honors 503 Retry-After
+      - applies polite throttle between successful requests
+    """
+    s = _get_session()
+    # Slightly longer read timeout; separate connect/read tuple
+    timeout = (10, 120)  # connect=10s, read=120s
+    attempts = 6
+    for attempt in range(attempts):
+        try:
+            r = s.get(OAI_BASE, params=params, timeout=timeout, allow_redirects=True)
+            # If arXiv asks us to wait (503 + Retry-After), honor it explicitly
+            if r.status_code == 503:
+                ra = r.headers.get("Retry-After")
+                if ra:
+                    try:
+                        secs = int(ra)
+                    except ValueError:
+                        secs = 10
+                else:
+                    secs = 10
+                _sleep_with_jitter(secs)
+                continue
+            r.raise_for_status()
+            # Success
+            _sleep_with_jitter(OAI_THROTTLE_SEC)
             return r.text
-    r.raise_for_status()
-
+        except (requests.exceptions.ReadTimeout,
+                requests.exceptions.ConnectTimeout,
+                requests.exceptions.ChunkedEncodingError) as e:
+            # exponential backoff with jitter
+            backoff = OAI_THROTTLE_SEC * (2 ** attempt)
+            _sleep_with_jitter(backoff)
+            if attempt == attempts - 1:
+                raise
+        except requests.exceptions.HTTPError as e:
+            # For persistent 4xx (other than 429) there's no point in retrying.
+            if 400 <= r.status_code < 500 and r.status_code != 429:
+                raise
+            # Otherwise, let Retry + our loop handle it
+            backoff = OAI_THROTTLE_SEC * (2 ** attempt)
+            _sleep_with_jitter(backoff)
+    # Should be unreachable
+    raise RuntimeError("Exhausted retries calling arXiv OAI-PMH")
 
 def _oai_iter_records(from_date: str, until_date: str, oai_set: str):
     params = {
