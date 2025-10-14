@@ -66,7 +66,7 @@ After installation, the CLI is available as:
   `aisafety-pipeline export-graph --db data/arxiv_papers.db --out ui/public/graph.json --coords fr`
 
 - Lazy-load paper summaries JSON:
-  `isafety-pipeline export-summaries --db data/arxiv_papers.db --out ui/public/summaries.json`
+  `aisafety-pipeline export-summaries --db data/arxiv_papers.db --out ui/public/summaries.json`
 
 ## Development
 

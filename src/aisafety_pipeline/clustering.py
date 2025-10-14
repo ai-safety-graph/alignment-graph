@@ -80,6 +80,6 @@ def cmd_cluster(args):
         for pid, k1, k2, k3 in df[["id", "kmeans_cluster", "agg_cluster", "hdbscan_cluster"]].itertuples(index=False, name=None):
             cur.execute("UPDATE papers SET kmeans_cluster=?, agg_cluster=?, hdbscan_cluster=? WHERE id=?", (int(k1), int(k2), int(k3), pid))
         cur.execute("COMMIT")
-        print(f"{GREEN}cluster:{RESET} labels updated.")
+        print(f"{GREEN}clusters updated.{RESET}")
     finally:
         conn.close()
