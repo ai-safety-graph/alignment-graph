@@ -108,18 +108,24 @@ def cmd_stage1(args):
 
 # ---- Stage-2 filter (centroid) ----
 
-def load_vectors(conn, ids):
-    if not ids: return {}
-    placeholders = ",".join(["?"]*len(ids))
-    rows = conn.execute(
-        f"SELECT paper_id, dim, vector FROM embeddings WHERE model=? AND paper_id IN ({placeholders})",
-        ("specter2", *ids)
-    ).fetchall()
+def load_vectors(conn, ids, *, model="specter2", chunk_size=900):
+    if not ids:
+        return {}
+
     V = {}
-    for pid, d, blob in rows:
-        import numpy as np
-        v = vec_from_bytes(blob, d).astype(np.float32)
-        V[pid] = v / (np.linalg.norm(v)+1e-12)
+    for i in range(0, len(ids), chunk_size):
+        batch = ids[i:i+chunk_size]
+        placeholders = ",".join(["?"] * len(batch))
+        sql = f"""
+            SELECT paper_id, dim, vector
+            FROM embeddings
+            WHERE model=? AND paper_id IN ({placeholders})
+        """
+        rows = conn.execute(sql, (model, *batch)).fetchall()
+        for pid, d, blob in rows:
+            v = vec_from_bytes(blob, d).astype(np.float32)
+            V[pid] = v / (np.linalg.norm(v) + 1e-12)
+
     return V
 
 
