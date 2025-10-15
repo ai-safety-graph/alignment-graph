@@ -2,6 +2,8 @@
 
 A staged pipeline for harvesting **arXiv** papers → storing in **SQLite** → generating **SPECTER2 embeddings** → applying **filters** → **clustering** → exporting **JSON** for downstream visualization.
 
+[Live Web App](https://alignment-graph.netlify.app/)
+
 ## Features
 
 - 🔄 OAI-PMH harvest from arXiv (`cs`, `stat`, `econ`)
@@ -43,30 +45,53 @@ After installation, the CLI is available as:
 ### Common workflow
 
 **1. Harvest arXiv metadata into SQLite**
-`aisafety-pipeline harvest --from 2024-01-01 --until 2024-12-31 --db data/arxiv_papers.db`
+
+```bash
+aisafety-pipeline harvest --from 2024-01-01 --until 2024-12-31 --db data/arxiv_papers.db
+```
 
 **2. Regex / keyword stage-1 filter**
-`aisafety-pipeline stage1 --db data/arxiv_papers.db`
+
+```bash
+aisafety-pipeline stage1 --db data/arxiv_papers.db
+```
 
 **3. Generate embeddings (SPECTER2)**
-`aisafety-pipeline embed --db data/arxiv_papers.db --device auto`
+
+```bash
+aisafety-pipeline embed --db data/arxiv_papers.db --device auto
+```
 
 **4. Stage-2 semantic filter (centroid with seeds)**
-`aisafety-pipeline filter --db data/arxiv_papers.db --method centroid --seeds seeds.txt --tau 0.92`
+
+```bash
+aisafety-pipeline filter --db data/arxiv_papers.db --method centroid --seeds seeds.txt --tau 0.92
+```
 
 **5. Cluster the kept Papers**
-`aisafety-pipeline cluster --db data/arxiv_papers.db --kmeans 8 --agg 8 --hdbscan-min 5`
+
+```bash
+aisafety-pipeline cluster --db data/arxiv_papers.db --kmeans 8 --agg 8 --hdbscan-min 5
+```
 
 **6. Auto-label clusters**
-`aisafety-pipeline label --db data/arxiv_papers.db`
+
+```bash
+aisafety-pipeline label --db data/arxiv_papers.db
+```
 
 **7. Export**
 
-- Force-directed graph JSON (for react-force-graph):
-  `aisafety-pipeline export-graph --db data/arxiv_papers.db --out ui/public/graph.json --coords fr`
+- **Force-directed graph JSON (for react-force-graph):**
 
-- Lazy-load paper summaries JSON:
-  `aisafety-pipeline export-summaries --db data/arxiv_papers.db --out ui/public/summaries.json`
+  ```bash
+  aisafety-pipeline export-graph --db data/arxiv_papers.db --out ui/public/graph.json --coords fr
+  ```
+
+- **Lazy-load paper summaries JSON:**
+  ```bash
+  aisafety-pipeline export-summaries --db data/arxiv_papers.db --out ui/public/summaries.json
+  ```
 
 ## Development
 
