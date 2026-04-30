@@ -80,10 +80,18 @@ export default function ArxivGraph({ src = '/graph.json' }: { src?: string }) {
     }
   }, [src])
 
+  const staticMode = data?.meta?.coords?.included === true
+
   // Prepare simulation nodes (mutable x/y)
   const simNodes = useMemo(() => {
     if (!data) return [] as (NodeCompact & { x: number; y: number })[]
-    return data.nodes.map((n) => ({ ...n, x: n.x ?? 0, y: n.y ?? 0 }))
+    const isStatic = data.meta?.coords?.included === true
+    return data.nodes.map((n) => ({
+      ...n,
+      x: n.x ?? 0,
+      y: n.y ?? 0,
+      ...(isStatic ? { fx: n.x ?? 0, fy: n.y ?? 0 } : {}),
+    }))
   }, [data])
 
   const simById = useMemo(() => {
@@ -185,13 +193,13 @@ export default function ArxivGraph({ src = '/graph.json' }: { src?: string }) {
       if (matchSet) return matchSet.has(id) || !!neighborSet?.has(id)
       return true
     },
-    [lockedId, selectedId, matchSet, neighborSet]
+    [lockedId, selectedId, matchSet, neighborSet],
   )
 
   // Selection + neighbors
   const selected = useMemo(
-    () => (selectedId != null ? byId.get(selectedId) ?? null : null),
-    [selectedId, byId]
+    () => (selectedId != null ? (byId.get(selectedId) ?? null) : null),
+    [selectedId, byId],
   )
   const selectedNeighbors = useMemo(() => {
     if (selectedId == null) return []
@@ -201,8 +209,8 @@ export default function ArxivGraph({ src = '/graph.json' }: { src?: string }) {
       .sort((a, b) => b.w - a.w)
   }, [selectedId, adj, byId])
 
-  // Force configuration
-  useForceConfig(fgRef, !!data)
+  // Force configuration (skipped when coordinates are precomputed)
+  useForceConfig(fgRef, !!data && !staticMode)
 
   // Autofit once per src
   const didAutoFit = useRef(false)
@@ -269,7 +277,7 @@ export default function ArxivGraph({ src = '/graph.json' }: { src?: string }) {
   const hoverTimer = useRef<number | null>(null)
   const onNodeHover = (
     node: NodeObject | null,
-    prevNode?: NodeObject | null
+    prevNode?: NodeObject | null,
   ) => {
     if (node && !isInteractive((node as any).id)) {
       setPinned(prevNode as any, false)
@@ -312,7 +320,7 @@ export default function ArxivGraph({ src = '/graph.json' }: { src?: string }) {
   const nodeCanvasObject = (
     node: NodeObject,
     ctx: CanvasRenderingContext2D,
-    globalScale: number
+    globalScale: number,
   ) => {
     const n = node as unknown as NodeCompact
     const r = 4
@@ -363,7 +371,7 @@ export default function ArxivGraph({ src = '/graph.json' }: { src?: string }) {
           nodeId='id'
           linkSource='s'
           linkTarget='t'
-          cooldownTicks={90}
+          cooldownTicks={staticMode ? 0 : 90}
           enableNodeDrag={false}
           nodeCanvasObject={nodeCanvasObject}
           nodeLabel={nodeLabel}

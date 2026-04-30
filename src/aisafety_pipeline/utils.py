@@ -88,8 +88,10 @@ def build_parser() -> argparse.ArgumentParser:
     fg.add_argument("--umap-min-dist", type=float, default=0.10)
     fg.add_argument("--umap-rand", type=int, default=42)
     fg.add_argument("--pca-rand", type=int, default=42)
-    fg.add_argument("--canvas-w", type=int, default=1000)
-    fg.add_argument("--canvas-h", type=int, default=700)
+    fg.add_argument("--fr-k", type=float, default=None,
+        help="FR spring constant (higher = more spread). Default 1/sqrt(N). Try 0.3–1.0 for large graphs.")
+    fg.add_argument("--canvas-w", type=int, default=4000)
+    fg.add_argument("--canvas-h", type=int, default=2800)
     fg.add_argument("--canvas-pad", type=int, default=24)
     fg.add_argument("--include-summaries", action="store_true")
     fg.add_argument("--max-summary-len", type=int, default=400)

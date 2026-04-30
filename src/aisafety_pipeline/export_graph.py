@@ -57,12 +57,13 @@ def export_json_graph(
     # FR (spring) params
     fr_iterations: int = 300,
     fr_seed: int = 42,
+    fr_k: Optional[float] = None,   # spring constant; None = 1/sqrt(N). Try 0.3–1.0 to spread nodes.
     # UMAP/PCA params
     umap_n_neighbors: int = 15,
     umap_min_dist: float = 0.10,
     umap_random_state: int = 42,
     pca_random_state: int = 42,
-    canvas_w: int = 1000, canvas_h: int = 700, canvas_pad: int = 24,
+    canvas_w: int = 4000, canvas_h: int = 2800, canvas_pad: int = 24,
     # Connectivity control
     add_cluster_mst: bool = True,
     # Output options
@@ -286,7 +287,7 @@ def export_json_graph(
                 if method_req == "fr" and coords_arr is None:
                     pos = nx.spring_layout(
                         G, dim=2, weight="weight",
-                        iterations=int(fr_iterations), seed=int(fr_seed), k=None, scale=1.0
+                        iterations=int(fr_iterations), seed=int(fr_seed), k=fr_k, scale=1.0
                     )
                     coords_arr = np.vstack([pos[i] for i in range(N)]).astype(np.float32)
                     method_used = "fr"
@@ -344,7 +345,7 @@ def export_json_graph(
                     return P
 
                 if method_used in ("fa2", "fr"):
-                    norm = _spread(norm, r_min=0.01, iters=1)
+                    norm = _spread(norm, r_min=0.025, iters=3)
 
                 xs = (canvas_pad + norm[:, 0] * (canvas_w - 2 * canvas_pad)).astype(np.int32)
                 ys = (canvas_pad + norm[:, 1] * (canvas_h - 2 * canvas_pad)).astype(np.int32)
@@ -440,6 +441,7 @@ def cmd_export_graph(args):
         same_cluster_only=args.same_cluster_only,
         include_coords=(args.coords != "none"),
         coords_method=args.coords,
+        fr_k=args.fr_k,
         umap_n_neighbors=args.umap_n_neighbors,
         umap_min_dist=args.umap_min_dist,
         umap_random_state=args.umap_rand,
