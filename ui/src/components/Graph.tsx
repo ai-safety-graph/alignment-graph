@@ -12,7 +12,7 @@ import type {
   LinkObject,
   NodeObject,
 } from 'react-force-graph-2d'
-import { Trash, Search } from 'lucide-react'
+import { Trash, Search, BarChart2 } from 'lucide-react'
 
 import { useForceConfig } from '../hooks/useForceConfig'
 import { useGraphShortcuts } from '../hooks/useGraphShortcuts'
@@ -29,7 +29,13 @@ import PaperDetails from './PaperDetails'
 import SearchResultsOverlay from './SearchResultsOverlay'
 import ClusterLegendOverlay from './ClusterLegendOverlay'
 
-export default function ArxivGraph({ src = '/graph.json' }: { src?: string }) {
+export default function ArxivGraph({
+  src = '/graph.json',
+  onToggleView,
+}: {
+  src?: string
+  onToggleView?: () => void
+}) {
   const fgRef = useRef<ForceGraphMethods | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -456,6 +462,17 @@ export default function ArxivGraph({ src = '/graph.json' }: { src?: string }) {
           }}
         />
       )}
+
+      {/* Stats toggle */}
+      <div className='fixed top-4 left-4 z-10'>
+        <button
+          aria-label='Show stats'
+          onClick={onToggleView}
+          className='p-2 rounded-full cursor-pointer bg-[#2a2a2a] border border-[#333333] text-neutral-400 hover:text-neutral-200'
+        >
+          <BarChart2 size={18} />
+        </button>
+      </div>
 
       <ClusterLegendOverlay clusters={clusters} />
       <div className='fixed right-4 top-4 z-10'>

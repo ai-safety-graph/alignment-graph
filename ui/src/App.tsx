@@ -1,11 +1,17 @@
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, useState } from 'react'
 import { useMediaQuery } from './hooks/useMediaQuery'
 
 const ArxivGraph = lazy(() => import('./components/Graph'))
 const MobilePapers = lazy(() => import('./components/MobileView'))
+const StatsPage = lazy(() => import('./components/StatsView'))
+
+type View = 'graph' | 'stats'
 
 export default function App() {
   const isSmall = useMediaQuery('(max-width: 768px)')
+  const [view, setView] = useState<View>('graph')
+  const toggleView = () => setView((v) => (v === 'graph' ? 'stats' : 'graph'))
+
   if (isSmall === null) return <div className='h-screen bg-neutral-950' />
 
   return (
@@ -16,10 +22,12 @@ export default function App() {
         </div>
       }
     >
-      {isSmall ? (
-        <MobilePapers src='/graph.json' />
+      {view === 'stats' ? (
+        <StatsPage src='/graph.json' onToggleView={toggleView} />
+      ) : isSmall ? (
+        <MobilePapers src='/graph.json' onToggleView={toggleView} />
       ) : (
-        <ArxivGraph src='/graph.json' />
+        <ArxivGraph src='/graph.json' onToggleView={toggleView} />
       )}
     </Suspense>
   )

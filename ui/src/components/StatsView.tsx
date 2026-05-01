@@ -1,19 +1,17 @@
 import { useEffect, useMemo, useState, useRef, useLayoutEffect } from 'react'
-import { Trash, Search } from 'lucide-react'
-
-import PaperDetails from './PaperDetails'
-import type {
-  GraphDataCompact,
-  NodeCompact,
-  ClustersLegend,
-} from '../lib/types'
+import { ArrowLeft, Search, Trash } from 'lucide-react'
+import type { GraphDataCompact, NodeCompact, ClustersLegend } from '../lib/types'
 import { cidToColor } from '../lib/colors'
 import { buildAdjacency } from '../lib/graph'
+import ClusterPieChart from './ClusterPieChart'
+import PaperDetails from './PaperDetails'
 
-export default function MobilePapers({
+export default function StatsView({
   src = '/graph.json',
+  onToggleView,
 }: {
   src?: string
+  onToggleView: () => void
 }) {
   const [data, setData] = useState<GraphDataCompact | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -21,10 +19,7 @@ export default function MobilePapers({
   const [selectedId, setSelectedId] = useState<number | null>(null)
 
   const listRef = useRef<HTMLDivElement | null>(null)
-  const searchBarRef = useRef<HTMLDivElement | null>(null)
-  const [searchHeight, setSearchHeight] = useState(0)
 
-  // Fetch graph data
   useEffect(() => {
     let alive = true
     ;(async () => {
@@ -44,7 +39,6 @@ export default function MobilePapers({
     }
   }, [src])
 
-  // Build adjacency & byId maps for neighbor details
   const { byId, adj, clusters } = useMemo(() => {
     if (!data) {
       return {
@@ -57,22 +51,19 @@ export default function MobilePapers({
     return { byId, adj, clusters: data.clusters }
   }, [data])
 
-  // Cluster chips state
   const [activeCid, setActiveCid] = useState<number | null>(null)
   const clusterEntries = useMemo(
     () =>
       Object.entries(clusters) as Array<
         [string, { label?: string | null; size: number }]
       >,
-    [clusters],
+    [clusters]
   )
 
   const lc = (s?: string | null) => (s ?? '').toLowerCase()
 
-  // Scored search results (reuse weights from desktop component)
   const results = useMemo(() => {
-    if (!data)
-      return [] as Array<{ n: NodeCompact; score: number; deg: number }>
+    if (!data) return [] as Array<{ n: NodeCompact; score: number; deg: number }>
     const q = lc(query).trim()
     if (!q)
       return data.nodes
@@ -150,8 +141,8 @@ export default function MobilePapers({
   }, [filtered.length])
 
   const selected = useMemo(
-    () => (selectedId != null ? (byId.get(selectedId) ?? null) : null),
-    [selectedId, byId],
+    () => (selectedId != null ? byId.get(selectedId) ?? null : null),
+    [selectedId, byId]
   )
 
   const selectedNeighbors = useMemo(() => {
@@ -172,54 +163,29 @@ export default function MobilePapers({
     }
   }, [selected])
 
-  useLayoutEffect(() => {
-    const el = searchBarRef.current
-    if (!el) return
-    const measure = () => setSearchHeight(el.getBoundingClientRect().height)
-    measure()
-    const ro = new ResizeObserver(measure)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
-
-  if (error) {
-    return <div className='p-4 text-red-500'>{error}</div>
-  }
-
   return (
     <div className='fixed inset-0 bg-neutral-950 text-[#e5e5e5] flex flex-col'>
-      <div
-        ref={listRef}
-        className='flex-1 overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent scrollbar-hover:scrollbar-thumb-[#666]'
-      >
-        <div className='px-4 pt-4 pb-2'>
-          <a
-            target='_blank'
-            href='https://github.com/ai-safety-graph/alignment-graph'
-            className='flex items-center justify-center'
-          >
-            <img
-              src='/ag-logo.svg'
-              alt='Alignment Graph Logo'
-              className='h-10 w-auto opacity-50 saturate-70'
-            />
-          </a>
-        </div>
-        <div
-          ref={searchBarRef}
-          className='sticky top-0 z-10 p-3 bg-neutral-950/90 backdrop-blur border-b border-neutral-800 items-center flex gap-3'
+      {/* Top: full-width search bar, centered */}
+      <div className='shrink-0 border-b border-neutral-800 bg-neutral-950/90 backdrop-blur px-3 py-3 flex items-center gap-3'>
+        <button
+          onClick={onToggleView}
+          className='shrink-0 text-neutral-400 hover:text-neutral-200 cursor-pointer'
+          aria-label='Back to graph'
         >
-          <div className='flex items-center gap-2 flex-1'>
+          <ArrowLeft size={16} />
+        </button>
+        <div className='flex-1 flex justify-center'>
+          <div className='relative w-full max-w-xl flex items-center gap-2'>
             <div className='relative flex-1'>
               <Search
-                className='absolute left-3 top-1/2 -translate-y-1/2'
+                className='absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400'
                 size={16}
               />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder='Search papers on AI safety & alignment'
-                className='w-full pl-9 pr-10 py-2 rounded-xl bg-neutral-900 border border-[#333333] text-[#e5e5e5] placeholder-[#666666] outline-none focus:ring-2 focus:ring-[#4ea8de]'
+                className='w-full pl-9 pr-3 py-2 rounded-xl bg-neutral-900 border border-[#333333] text-[#e5e5e5] placeholder-[#666666] outline-none focus:ring-2 focus:ring-[#4ea8de]'
               />
             </div>
             {query && (
@@ -233,14 +199,17 @@ export default function MobilePapers({
             )}
           </div>
         </div>
+        {/* Spacer balances the back arrow so the input stays visually centred */}
+        <div className='shrink-0 w-6' />
+      </div>
 
-        {data && (
-          <>
-            <div
-              className='flex gap-2 overflow-x-auto px-4 pt-3 pb-2 bg-neutral-950/90 backdrop-blur border-b border-neutral-900
-                         scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent scrollbar-hover:scrollbar-thumb-[#666]'
-              style={{ position: 'sticky', top: searchHeight }}
-            >
+      {/* Body: list (2/3) + chart (1/3) */}
+      <div className='flex flex-1 overflow-hidden'>
+        {/* Left: paper list */}
+        <div className='flex flex-col overflow-hidden' style={{ flex: '2 1 0', minWidth: 0 }}>
+          {data && (
+            <div className='shrink-0 flex gap-2 overflow-x-auto px-4 pt-3 pb-2 border-b border-neutral-900
+                            scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent'>
               {clusterEntries.map(([cid, meta]) => (
                 <button
                   key={cid}
@@ -254,7 +223,7 @@ export default function MobilePapers({
                   }`}
                 >
                   <span
-                    className='inline-block w-2 h-2 mr-2 rounded-full mt-0.5 border border-[#333333]'
+                    className='inline-block w-2 h-2 mr-2 rounded-full border border-[#333333]'
                     style={{ backgroundColor: cidToColor(Number(cid)) }}
                     aria-hidden
                   />
@@ -262,55 +231,73 @@ export default function MobilePapers({
                 </button>
               ))}
             </div>
-          </>
-        )}
+          )}
 
-        {!data && (
-          <div className='flex h-[60vh] items-center justify-center text-neutral-300'>
-            Loading papers…
+          <div
+            ref={listRef}
+            className='flex-1 overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent'
+          >
+            {error && <p className='p-4 text-red-400'>{error}</p>}
+
+            {!data && (
+              <div className='flex h-[60vh] items-center justify-center text-neutral-400'>
+                Loading…
+              </div>
+            )}
+
+            {data && filtered.length === 0 && (
+              <div className='p-6 text-center text-neutral-400'>No matches.</div>
+            )}
+
+            {data && (
+              <ul className='divide-y divide-neutral-800'>
+                {slice.map(({ n, deg }) => (
+                  <li key={n.id}>
+                    <button
+                      onClick={() => setSelectedId(n.id)}
+                      className='w-full text-left px-4 py-3 hover:bg-neutral-900 active:bg-neutral-900'
+                    >
+                      <div className='text-[13px] text-neutral-400 truncate'>
+                        {n.au}
+                      </div>
+                      <div className='mt-0.5 text-[15px] leading-snug'>{n.t}</div>
+                      <div className='mt-1 text-[12px] text-neutral-400 flex items-center gap-2'>
+                        <div className='flex items-center gap-2 mb-0.5'>
+                          <span
+                            className='inline-block w-2 h-2 rounded-full border border-[#333333]'
+                            style={{ background: cidToColor(n.cid) }}
+                            aria-hidden
+                          />
+                          <span>
+                            {clusters[String(n.cid)]?.label ?? `Cluster ${n.cid}`}
+                          </span>
+                          <span>•</span>
+                          <span>{n.dm}</span>
+                          <span>•</span>
+                          <span>{deg} related</span>
+                        </div>
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <div ref={sentinelRef} className='h-10' />
           </div>
-        )}
+        </div>
 
-        {data && filtered.length === 0 && (
-          <div className='p-6 text-center text-neutral-400'>No matches.</div>
-        )}
-
-        {data && (
-          <ul className='divide-y divide-neutral-800 '>
-            {slice.map(({ n, deg }) => (
-              <li key={n.id}>
-                <button
-                  onClick={() => setSelectedId(n.id)}
-                  className='w-full text-left px-4 py-3 active:bg-neutral-900'
-                >
-                  <div className='text-[13px] text-neutral-400 truncate'>
-                    {n.au}
-                  </div>
-                  <div className='mt-0.5 text-[15px] leading-snug'>{n.t}</div>
-                  <div className='mt-1 text-[12px] text-neutral-400 flex items-center gap-2'>
-                    <div className='flex items-center gap-2 mb-0.5'>
-                      <span
-                        className='inline-block w-2 h-2 rounded-full border border-[#333333]'
-                        style={{ background: cidToColor(n.cid) }}
-                        aria-hidden
-                      />
-                      <span>
-                        {clusters[String(n.cid)]?.label ?? `Cluster ${n.cid}`}
-                      </span>
-                      <span>•</span>
-                      <span>{n.dm}</span>
-                      <span>•</span>
-                      <span>{deg} related</span>
-                    </div>
-                  </div>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {/* infinite scroll sentinel */}
-        <div ref={sentinelRef} className='h-10' />
+        {/* Right: chart — 1/3 */}
+        <div
+          className='flex flex-col items-center justify-center border-l border-neutral-800 px-6'
+          style={{ flex: '1 1 0', minWidth: 0 }}
+        >
+          {data ? (
+            <ClusterPieChart clusters={data.clusters} />
+          ) : (
+            <div className='text-neutral-400'>Loading…</div>
+          )}
+        </div>
       </div>
 
       {selected && (
