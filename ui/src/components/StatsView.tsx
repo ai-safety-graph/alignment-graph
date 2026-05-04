@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useState, useRef, useLayoutEffect } from 'react'
 import { ArrowLeft, Search, Trash } from 'lucide-react'
-import type { GraphDataCompact, NodeCompact, ClustersLegend } from '../lib/types'
-import { cidToColor } from '../lib/colors'
+import type {
+  GraphDataCompact,
+  NodeCompact,
+  ClustersLegend,
+} from '../lib/types'
 import { buildAdjacency } from '../lib/graph'
-import ClusterPieChart from './ClusterPieChart'
 import PaperDetails from './PaperDetails'
+import PaperList from './PaperList'
+import FilterBar from './FilterBar'
+import { usePaperFilters } from '../hooks/usePaperFilters'
 
 export default function StatsView({
   src = '/graph.json',
@@ -51,19 +56,11 @@ export default function StatsView({
     return { byId, adj, clusters: data.clusters }
   }, [data])
 
-  const [activeCid, setActiveCid] = useState<number | null>(null)
-  const clusterEntries = useMemo(
-    () =>
-      Object.entries(clusters) as Array<
-        [string, { label?: string | null; size: number }]
-      >,
-    [clusters]
-  )
-
   const lc = (s?: string | null) => (s ?? '').toLowerCase()
 
   const results = useMemo(() => {
-    if (!data) return [] as Array<{ n: NodeCompact; score: number; deg: number }>
+    if (!data)
+      return [] as Array<{ n: NodeCompact; score: number; deg: number }>
     const q = lc(query).trim()
     if (!q)
       return data.nodes
@@ -109,40 +106,33 @@ export default function StatsView({
       .slice(0, 200)
   }, [data, query, adj])
 
-  const filtered = useMemo(() => {
-    if (activeCid == null) return results
-    return results.filter(({ n }) => n.cid === activeCid)
-  }, [results, activeCid])
-
-  const [limit, setLimit] = useState(40)
-  const slice = useMemo(() => filtered.slice(0, limit), [filtered, limit])
-
-  const sentinelRef = useRef<HTMLDivElement | null>(null)
-  useEffect(() => {
-    setLimit(40)
-  }, [activeCid, query])
+  const {
+    filtered,
+    activeCids,
+    activeYear,
+    activeMonth,
+    activeDomains,
+    clusterEntries,
+    availableYears,
+    availableMonths,
+    availableDomains,
+    hasActiveFilters,
+    clearAllFilters,
+    toggleCluster,
+    toggleYear,
+    toggleMonth,
+    toggleDomain,
+  } = usePaperFilters(results, data)
 
   useLayoutEffect(() => {
     const el = listRef.current
     if (!el) return
     el.scrollTop = 0
-  }, [activeCid, query])
-
-  useEffect(() => {
-    const el = sentinelRef.current
-    if (!el) return
-    const io = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting) {
-        setLimit((l) => Math.min(l + 40, filtered.length))
-      }
-    })
-    io.observe(el)
-    return () => io.disconnect()
-  }, [filtered.length])
+  }, [filtered])
 
   const selected = useMemo(
-    () => (selectedId != null ? byId.get(selectedId) ?? null : null),
-    [selectedId, byId]
+    () => (selectedId != null ? (byId.get(selectedId) ?? null) : null),
+    [selectedId, byId],
   )
 
   const selectedNeighbors = useMemo(() => {
@@ -203,36 +193,32 @@ export default function StatsView({
         <div className='shrink-0 w-6' />
       </div>
 
-      {/* Body: list (2/3) + chart (1/3) */}
-      <div className='flex flex-1 overflow-hidden'>
-        {/* Left: paper list */}
-        <div className='flex flex-col overflow-hidden' style={{ flex: '2 1 0', minWidth: 0 }}>
+      {/* Body */}
+      <div className='flex flex-row flex-1 overflow-hidden'>
+        <div className='flex flex-col flex-1 overflow-hidden min-w-0'>
+          {/* Filters */}
           {data && (
-            <div className='shrink-0 flex gap-2 overflow-x-auto px-4 pt-3 pb-2 border-b border-neutral-900
-                            scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent'>
-              {clusterEntries.map(([cid, meta]) => (
-                <button
-                  key={cid}
-                  onClick={() =>
-                    setActiveCid((prev) => (prev === +cid ? null : +cid))
-                  }
-                  className={`px-3 py-1 rounded-full border text-sm whitespace-nowrap ${
-                    activeCid === +cid
-                      ? 'bg-neutral-800 border-neutral-500'
-                      : 'border-neutral-700 hover:border-neutral-500'
-                  }`}
-                >
-                  <span
-                    className='inline-block w-2 h-2 mr-2 rounded-full border border-[#333333]'
-                    style={{ backgroundColor: cidToColor(Number(cid)) }}
-                    aria-hidden
-                  />
-                  {(meta.label ?? `Cluster ${cid}`) + ' • ' + meta.size}
-                </button>
-              ))}
+            <div className='shrink-0 border-b border-neutral-900'>
+              <FilterBar
+                clusterEntries={clusterEntries}
+                availableYears={availableYears}
+                availableMonths={availableMonths}
+                availableDomains={availableDomains}
+                activeCids={activeCids}
+                activeYear={activeYear}
+                activeMonth={activeMonth}
+                activeDomains={activeDomains}
+                hasActiveFilters={hasActiveFilters}
+                onToggleCluster={toggleCluster}
+                onToggleYear={toggleYear}
+                onToggleMonth={toggleMonth}
+                onToggleDomain={toggleDomain}
+                onClearAll={clearAllFilters}
+              />
             </div>
           )}
 
+          {/* Paper list */}
           <div
             ref={listRef}
             className='flex-1 overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent'
@@ -246,68 +232,22 @@ export default function StatsView({
             )}
 
             {data && filtered.length === 0 && (
-              <div className='p-6 text-center text-neutral-400'>No matches.</div>
+              <div className='p-6 text-center text-neutral-400'>
+                No matches.
+              </div>
             )}
 
-            {data && (
-              <ul className='divide-y divide-neutral-800'>
-                {slice.map(({ n, deg }) => (
-                  <li key={n.id}>
-                    <button
-                      onClick={() => setSelectedId(n.id)}
-                      className='w-full text-left px-4 py-3 hover:bg-neutral-900 active:bg-neutral-900'
-                    >
-                      <div className='text-[13px] text-neutral-400 truncate'>
-                        {n.au}
-                      </div>
-                      <div className='mt-0.5 text-[15px] leading-snug'>{n.t}</div>
-                      <div className='mt-1 text-[12px] text-neutral-400 flex items-center gap-2'>
-                        <div className='flex items-center gap-2 mb-0.5'>
-                          <span
-                            className='inline-block w-2 h-2 rounded-full border border-[#333333]'
-                            style={{ background: cidToColor(n.cid) }}
-                            aria-hidden
-                          />
-                          <span>
-                            {clusters[String(n.cid)]?.label ?? `Cluster ${n.cid}`}
-                          </span>
-                          <span>•</span>
-                          <span>{n.dm}</span>
-                          <span>•</span>
-                          <span>{deg} related</span>
-                        </div>
-                      </div>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            <div ref={sentinelRef} className='h-10' />
+            <PaperList
+              items={filtered}
+              clusters={clusters}
+              onSelectId={setSelectedId}
+              enableHover
+            />
           </div>
         </div>
 
-        {/* Right: chart — 1/3 */}
-        <div
-          className='flex flex-col items-center justify-center border-l border-neutral-800 px-6'
-          style={{ flex: '1 1 0', minWidth: 0 }}
-        >
-          {data ? (
-            <ClusterPieChart clusters={data.clusters} />
-          ) : (
-            <div className='text-neutral-400'>Loading…</div>
-          )}
-        </div>
-      </div>
-
-      {selected && (
-        <div className='fixed inset-0 z-20 bg-black/70 flex items-center justify-center p-3'>
-          <button
-            aria-label='Close overlay'
-            onClick={() => setSelectedId(null)}
-            className='absolute inset-0'
-          />
-          <div className='relative z-10 w-full max-w-[720px] h-[92dvh] rounded-2xl shadow-2xl overflow-hidden'>
+        {selected && (
+          <div className='w-1/2 border-l border-neutral-800 overflow-y-auto'>
             <PaperDetails
               paper={selected}
               clusters={clusters}
@@ -315,11 +255,11 @@ export default function StatsView({
               onClose={() => setSelectedId(null)}
               onSelectPaper={(id) => setSelectedId(id)}
               showShortcutHints={false}
-              variant='modal'
+              variant='embedded'
             />
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }

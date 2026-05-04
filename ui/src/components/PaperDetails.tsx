@@ -13,7 +13,7 @@ interface PaperDetailsProps {
   onClose: () => void
   onSelectPaper: (id: number) => void
   showShortcutHints?: boolean
-  variant?: 'panel' | 'modal'
+  variant?: 'panel' | 'modal' | 'embedded'
 }
 
 export default function PaperDetails({

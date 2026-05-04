@@ -2,18 +2,22 @@ import { useEffect, useMemo, useState, useRef, useLayoutEffect } from 'react'
 import { Trash, Search } from 'lucide-react'
 
 import PaperDetails from './PaperDetails'
+import PaperList from './PaperList'
 import type {
   GraphDataCompact,
   NodeCompact,
   ClustersLegend,
 } from '../lib/types'
-import { cidToColor } from '../lib/colors'
 import { buildAdjacency } from '../lib/graph'
+import FilterBar from './FilterBar'
+import { usePaperFilters } from '../hooks/usePaperFilters'
 
 export default function MobilePapers({
   src = '/graph.json',
+  onToggleView: _onToggleView,
 }: {
   src?: string
+  onToggleView?: () => void
 }) {
   const [data, setData] = useState<GraphDataCompact | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -56,16 +60,6 @@ export default function MobilePapers({
     const { byId, adj } = buildAdjacency(data.nodes, data.links)
     return { byId, adj, clusters: data.clusters }
   }, [data])
-
-  // Cluster chips state
-  const [activeCid, setActiveCid] = useState<number | null>(null)
-  const clusterEntries = useMemo(
-    () =>
-      Object.entries(clusters) as Array<
-        [string, { label?: string | null; size: number }]
-      >,
-    [clusters],
-  )
 
   const lc = (s?: string | null) => (s ?? '').toLowerCase()
 
@@ -118,36 +112,29 @@ export default function MobilePapers({
       .slice(0, 200)
   }, [data, query, adj])
 
-  const filtered = useMemo(() => {
-    if (activeCid == null) return results
-    return results.filter(({ n }) => n.cid === activeCid)
-  }, [results, activeCid])
-
-  const [limit, setLimit] = useState(40)
-  const slice = useMemo(() => filtered.slice(0, limit), [filtered, limit])
-
-  const sentinelRef = useRef<HTMLDivElement | null>(null)
-  useEffect(() => {
-    setLimit(40)
-  }, [activeCid, query])
+  const {
+    filtered,
+    activeCids,
+    activeYear,
+    activeMonth,
+    activeDomains,
+    clusterEntries,
+    availableYears,
+    availableMonths,
+    availableDomains,
+    hasActiveFilters,
+    clearAllFilters,
+    toggleCluster,
+    toggleYear,
+    toggleMonth,
+    toggleDomain,
+  } = usePaperFilters(results, data)
 
   useLayoutEffect(() => {
     const el = listRef.current
     if (!el) return
     el.scrollTop = 0
-  }, [activeCid, query])
-
-  useEffect(() => {
-    const el = sentinelRef.current
-    if (!el) return
-    const io = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting) {
-        setLimit((l) => Math.min(l + 40, filtered.length))
-      }
-    })
-    io.observe(el)
-    return () => io.disconnect()
-  }, [filtered.length])
+  }, [filtered])
 
   const selected = useMemo(
     () => (selectedId != null ? (byId.get(selectedId) ?? null) : null),
@@ -235,34 +222,27 @@ export default function MobilePapers({
         </div>
 
         {data && (
-          <>
-            <div
-              className='flex gap-2 overflow-x-auto px-4 pt-3 pb-2 bg-neutral-950/90 backdrop-blur border-b border-neutral-900
-                         scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent scrollbar-hover:scrollbar-thumb-[#666]'
-              style={{ position: 'sticky', top: searchHeight }}
-            >
-              {clusterEntries.map(([cid, meta]) => (
-                <button
-                  key={cid}
-                  onClick={() =>
-                    setActiveCid((prev) => (prev === +cid ? null : +cid))
-                  }
-                  className={`px-3 py-1 rounded-full border text-sm whitespace-nowrap ${
-                    activeCid === +cid
-                      ? 'bg-neutral-800 border-neutral-500'
-                      : 'border-neutral-700 hover:border-neutral-500'
-                  }`}
-                >
-                  <span
-                    className='inline-block w-2 h-2 mr-2 rounded-full mt-0.5 border border-[#333333]'
-                    style={{ backgroundColor: cidToColor(Number(cid)) }}
-                    aria-hidden
-                  />
-                  {(meta.label ?? `Cluster ${cid}`) + ' • ' + meta.size}
-                </button>
-              ))}
-            </div>
-          </>
+          <div
+            className='sticky bg-neutral-950/90 backdrop-blur border-b border-neutral-900'
+            style={{ top: searchHeight }}
+          >
+            <FilterBar
+              clusterEntries={clusterEntries}
+              availableYears={availableYears}
+              availableMonths={availableMonths}
+              availableDomains={availableDomains}
+              activeCids={activeCids}
+              activeYear={activeYear}
+              activeMonth={activeMonth}
+              activeDomains={activeDomains}
+              hasActiveFilters={hasActiveFilters}
+              onToggleCluster={toggleCluster}
+              onToggleYear={toggleYear}
+              onToggleMonth={toggleMonth}
+              onToggleDomain={toggleDomain}
+              onClearAll={clearAllFilters}
+            />
+          </div>
         )}
 
         {!data && (
@@ -275,42 +255,11 @@ export default function MobilePapers({
           <div className='p-6 text-center text-neutral-400'>No matches.</div>
         )}
 
-        {data && (
-          <ul className='divide-y divide-neutral-800 '>
-            {slice.map(({ n, deg }) => (
-              <li key={n.id}>
-                <button
-                  onClick={() => setSelectedId(n.id)}
-                  className='w-full text-left px-4 py-3 active:bg-neutral-900'
-                >
-                  <div className='text-[13px] text-neutral-400 truncate'>
-                    {n.au}
-                  </div>
-                  <div className='mt-0.5 text-[15px] leading-snug'>{n.t}</div>
-                  <div className='mt-1 text-[12px] text-neutral-400 flex items-center gap-2'>
-                    <div className='flex items-center gap-2 mb-0.5'>
-                      <span
-                        className='inline-block w-2 h-2 rounded-full border border-[#333333]'
-                        style={{ background: cidToColor(n.cid) }}
-                        aria-hidden
-                      />
-                      <span>
-                        {clusters[String(n.cid)]?.label ?? `Cluster ${n.cid}`}
-                      </span>
-                      <span>•</span>
-                      <span>{n.dm}</span>
-                      <span>•</span>
-                      <span>{deg} related</span>
-                    </div>
-                  </div>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {/* infinite scroll sentinel */}
-        <div ref={sentinelRef} className='h-10' />
+        <PaperList
+          items={filtered}
+          clusters={clusters}
+          onSelectId={setSelectedId}
+        />
       </div>
 
       {selected && (
