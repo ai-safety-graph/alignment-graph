@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useRef, useLayoutEffect } from 'react'
 import { Trash, Search } from 'lucide-react'
 
-import PaperDetails from './PaperDetails'
+import MobilePaperDetails from './MobilePaperDetails'
 import PaperList from './PaperList'
 import type {
   GraphDataCompact,
@@ -270,14 +270,12 @@ export default function MobilePapers({
             className='absolute inset-0'
           />
           <div className='relative z-10 w-full max-w-[720px] h-[92dvh] rounded-2xl shadow-2xl overflow-hidden'>
-            <PaperDetails
+            <MobilePaperDetails
               paper={selected}
               clusters={clusters}
               neighbors={selectedNeighbors}
               onClose={() => setSelectedId(null)}
               onSelectPaper={(id) => setSelectedId(id)}
-              showShortcutHints={false}
-              variant='modal'
             />
           </div>
         </div>

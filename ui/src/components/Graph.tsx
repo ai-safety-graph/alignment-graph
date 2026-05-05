@@ -25,7 +25,7 @@ import type {
   NodeCompact,
 } from '../lib/types'
 
-import PaperDetails from './PaperDetails'
+import GraphPaperDetails from './GraphPaperDetails'
 import SearchResultsOverlay from './SearchResultsOverlay'
 import ClusterLegendOverlay from './ClusterLegendOverlay'
 
@@ -450,7 +450,7 @@ export default function ArxivGraph({
       )}
 
       {selected && (
-        <PaperDetails
+        <GraphPaperDetails
           paper={selected}
           clusters={clusters}
           neighbors={selectedNeighbors}

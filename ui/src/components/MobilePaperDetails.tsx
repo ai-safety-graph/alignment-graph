@@ -6,29 +6,24 @@ import { useRef, useLayoutEffect } from 'react'
 
 type NeighborEntry = { n: NodeCompact; w: number }
 
-interface PaperDetailsProps {
+interface Props {
   paper: NodeCompact
   clusters: ClustersLegend
   neighbors: NeighborEntry[]
   onClose: () => void
   onSelectPaper: (id: number) => void
-  showShortcutHints?: boolean
-  variant?: 'panel' | 'modal' | 'embedded'
 }
 
-export default function PaperDetails({
+export default function MobilePaperDetails({
   paper,
   clusters,
   neighbors,
   onClose,
   onSelectPaper,
-  showShortcutHints = true,
-  variant = 'panel',
-}: PaperDetailsProps) {
+}: Props) {
   const urlKey = paper.ln || (paper as any).aid
   const { data: lazy, loading, error } = usePaperSummary(urlKey)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
-
   const summaryText = lazy?.sm ?? paper.sm
 
   useLayoutEffect(() => {
@@ -37,19 +32,11 @@ export default function PaperDetails({
     el.scrollTop = 0
   }, [paper.id || urlKey])
 
-  const outer =
-    variant === 'panel'
-      ? 'fixed top-[72px] right-4 bottom-4 w-[440px] z-10'
-      : // modal: fill the parent box (parent will center & size it)
-        'relative w-full h-full'
-
-  const chrome =
-    variant === 'panel'
-      ? 'bg-[#262626] backdrop-blur-md border border-[#333333] rounded-xl pb-3 px-3 overflow-auto text-[#e5e5e5] scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent scrollbar-hover:scrollbar-thumb-[#666]'
-      : // modal: a bit larger padding
-        'bg-[#262626] backdrop-blur-md border border-[#333333] rounded-2xl pb-3 px-3 overflow-auto text-[#e5e5e5] scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent'
   return (
-    <aside ref={scrollerRef as any} className={`${outer} ${chrome}`}>
+    <aside
+      ref={scrollerRef as any}
+      className='relative w-full h-full bg-[#262626] backdrop-blur-md border border-[#333333] rounded-2xl pb-3 px-3 overflow-auto text-[#e5e5e5] scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent'
+    >
       <div>
         <div className='py-3 sticky top-0 bg-[#262626]'>
           <div className='flex items-center justify-between mb-2'>
@@ -64,20 +51,13 @@ export default function PaperDetails({
                 {paper.dm}
               </span>
             </div>
-            <div className='flex items-center gap-1'>
-              {showShortcutHints && (
-                <kbd className='px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-600 text-[10px] font-mono text-neutral-300'>
-                  Esc
-                </kbd>
-              )}
-              <button
-                onClick={onClose}
-                className='p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200'
-                aria-label='Close details'
-              >
-                <CircleX size={20} />
-              </button>
-            </div>
+            <button
+              onClick={onClose}
+              className='p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200'
+              aria-label='Close details'
+            >
+              <CircleX size={20} />
+            </button>
           </div>
 
           <h4 className='mt-1 mb-2 text-lg font-semibold leading-snug text-[#e5e5e5]'>
@@ -101,7 +81,7 @@ export default function PaperDetails({
             View on arXiv ↗
           </a>
         </div>
-        {/* <div className='font-semibold my-2 text-neutral-200'>Summary</div> */}
+
         {loading && !summaryText && (
           <div className='text-[13px] italic text-neutral-400'>
             Loading summary…
@@ -142,7 +122,7 @@ export default function PaperDetails({
         </div>
 
         <ul className='list-none p-0 m-0'>
-          {neighbors.map(({ n /*w*/ }) => (
+          {neighbors.map(({ n }) => (
             <li key={n.id} className='py-1.5 border-b border-neutral-800'>
               <div className='flex justify-between gap-2'>
                 <a
@@ -156,9 +136,6 @@ export default function PaperDetails({
                 >
                   {n.t.length > 80 ? n.t.slice(0, 77) + '…' : n.t}
                 </a>
-                {/* <span className='text-neutral-300 tabular-nums'>
-                  {w.toFixed(3)}
-                </span> */}
               </div>
               <div className='text-[12px] text-neutral-500'>
                 <div>{n.au}</div>

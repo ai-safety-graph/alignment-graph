@@ -6,7 +6,7 @@ import type {
   ClustersLegend,
 } from '../lib/types'
 import { buildAdjacency } from '../lib/graph'
-import PaperDetails from './PaperDetails'
+import StatsPaperDetails from './StatsPaperDetails'
 import PaperList from './PaperList'
 import FilterBar from './FilterBar'
 import { usePaperFilters } from '../hooks/usePaperFilters'
@@ -246,19 +246,21 @@ export default function StatsView({
           </div>
         </div>
 
-        {selected && (
-          <div className='w-1/2 border-l border-neutral-800 overflow-y-auto'>
-            <PaperDetails
+        <div className='w-1/2 border-l border-neutral-800 overflow-y-auto'>
+          {selected ? (
+            <StatsPaperDetails
               paper={selected}
               clusters={clusters}
               neighbors={selectedNeighbors}
               onClose={() => setSelectedId(null)}
               onSelectPaper={(id) => setSelectedId(id)}
-              showShortcutHints={false}
-              variant='embedded'
             />
-          </div>
-        )}
+          ) : (
+            <div className='flex h-full items-center justify-center text-neutral-500 text-sm'>
+              Select a paper to load details
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
