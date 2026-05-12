@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef, useLayoutEffect } from 'react'
-import { ArrowLeft, Search, Trash } from 'lucide-react'
+import { Share2, Search, Trash } from 'lucide-react'
 import type {
   GraphDataCompact,
   NodeCompact,
@@ -157,10 +157,10 @@ export default function StatsView({
       <div className='shrink-0 border-b border-neutral-800 bg-neutral-950/90 backdrop-blur px-3 py-3 flex items-center gap-3'>
         <button
           onClick={onToggleView}
-          className='shrink-0 text-neutral-400 hover:text-neutral-200 cursor-pointer'
+          className='shrink-0 p-2 rounded-full cursor-pointer bg-[#2a2a2a] border border-[#333333] text-neutral-400 hover:text-neutral-200'
           aria-label='Back to graph'
         >
-          <ArrowLeft size={16} />
+          <Share2 size={18} />
         </button>
         <div className='flex-1 flex justify-center'>
           <div className='relative w-full max-w-xl flex items-center gap-2'>

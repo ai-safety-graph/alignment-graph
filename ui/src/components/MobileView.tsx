@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef, useLayoutEffect } from 'react'
-import { Trash, Search } from 'lucide-react'
+import { Trash, Search, Newspaper } from 'lucide-react'
 
 import MobilePaperDetails from './MobilePaperDetails'
 import PaperList from './PaperList'
@@ -14,7 +14,7 @@ import { usePaperFilters } from '../hooks/usePaperFilters'
 
 export default function MobilePapers({
   src = '/graph.json',
-  onToggleView: _onToggleView,
+  onToggleView,
 }: {
   src?: string
   onToggleView?: () => void
@@ -193,6 +193,13 @@ export default function MobilePapers({
           ref={searchBarRef}
           className='sticky top-0 z-10 p-3 bg-neutral-950/90 backdrop-blur border-b border-neutral-800 items-center flex gap-3'
         >
+          <button
+            onClick={onToggleView}
+            className='shrink-0 p-2 rounded-full cursor-pointer bg-[#2a2a2a] border border-[#333333] text-neutral-400 hover:text-neutral-200'
+            aria-label='Show stats'
+          >
+            <Newspaper size={18} />
+          </button>
           <div className='flex items-center gap-2 flex-1'>
             <div className='relative flex-1'>
               <Search

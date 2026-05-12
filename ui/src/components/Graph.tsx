@@ -12,7 +12,7 @@ import type {
   LinkObject,
   NodeObject,
 } from 'react-force-graph-2d'
-import { Trash, Search, BarChart2 } from 'lucide-react'
+import { Trash, Search, Newspaper } from 'lucide-react'
 
 import { useForceConfig } from '../hooks/useForceConfig'
 import { useGraphShortcuts } from '../hooks/useGraphShortcuts'
@@ -470,7 +470,7 @@ export default function ArxivGraph({
           onClick={onToggleView}
           className='p-2 rounded-full cursor-pointer bg-[#2a2a2a] border border-[#333333] text-neutral-400 hover:text-neutral-200'
         >
-          <BarChart2 size={18} />
+          <Newspaper size={18} />
         </button>
       </div>
 
