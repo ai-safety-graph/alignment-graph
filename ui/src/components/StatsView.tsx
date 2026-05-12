@@ -110,17 +110,14 @@ export default function StatsView({
     filtered,
     activeCids,
     activeYear,
-    activeMonth,
     activeDomains,
     clusterEntries,
     availableYears,
-    availableMonths,
     availableDomains,
     hasActiveFilters,
     clearAllFilters,
     toggleCluster,
     toggleYear,
-    toggleMonth,
     toggleDomain,
   } = usePaperFilters(results, data)
 
@@ -202,16 +199,13 @@ export default function StatsView({
               <FilterBar
                 clusterEntries={clusterEntries}
                 availableYears={availableYears}
-                availableMonths={availableMonths}
                 availableDomains={availableDomains}
                 activeCids={activeCids}
                 activeYear={activeYear}
-                activeMonth={activeMonth}
                 activeDomains={activeDomains}
                 hasActiveFilters={hasActiveFilters}
                 onToggleCluster={toggleCluster}
                 onToggleYear={toggleYear}
-                onToggleMonth={toggleMonth}
                 onToggleDomain={toggleDomain}
                 onClearAll={clearAllFilters}
               />
