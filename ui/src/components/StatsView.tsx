@@ -7,6 +7,7 @@ import type {
 } from '../lib/types'
 import { buildAdjacency } from '../lib/graph'
 import StatsPaperDetails from './StatsPaperDetails'
+import MobilePaperDetails from './MobilePaperDetails'
 import PaperList from './PaperList'
 import FilterBar from './FilterBar'
 import { usePaperFilters } from '../hooks/usePaperFilters'
@@ -240,7 +241,7 @@ export default function StatsView({
           </div>
         </div>
 
-        <div className='w-1/2 border-l border-neutral-800 overflow-y-auto'>
+        <div className='hidden md:block w-1/2 border-l border-neutral-800 overflow-y-auto'>
           {selected ? (
             <StatsPaperDetails
               paper={selected}
@@ -256,6 +257,24 @@ export default function StatsView({
           )}
         </div>
       </div>
+      {selected && (
+        <div className='md:hidden fixed inset-0 z-20 bg-black/70 flex items-center justify-center p-3'>
+          <button
+            aria-label='Close overlay'
+            onClick={() => setSelectedId(null)}
+            className='absolute inset-0'
+          />
+          <div className='relative z-10 w-full max-w-[720px] h-[92dvh] rounded-2xl shadow-2xl overflow-hidden'>
+            <MobilePaperDetails
+              paper={selected}
+              clusters={clusters}
+              neighbors={selectedNeighbors}
+              onClose={() => setSelectedId(null)}
+              onSelectPaper={(id) => setSelectedId(id)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
