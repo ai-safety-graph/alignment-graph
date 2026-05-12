@@ -1,16 +1,14 @@
-import { Suspense, lazy, useState } from 'react'
+import { Suspense, lazy } from 'react'
+import { Routes, Route, useNavigate } from 'react-router-dom'
 import { useMediaQuery } from './hooks/useMediaQuery'
 
 const ArxivGraph = lazy(() => import('./components/Graph'))
 const MobilePapers = lazy(() => import('./components/MobileView'))
 const StatsPage = lazy(() => import('./components/StatsView'))
 
-type View = 'graph' | 'stats'
-
 export default function App() {
   const isSmall = useMediaQuery('(max-width: 768px)')
-  const [view, setView] = useState<View>('graph')
-  const toggleView = () => setView((v) => (v === 'graph' ? 'stats' : 'graph'))
+  const navigate = useNavigate()
 
   if (isSmall === null) return <div className='h-screen bg-neutral-950' />
 
@@ -22,13 +20,22 @@ export default function App() {
         </div>
       }
     >
-      {view === 'stats' ? (
-        <StatsPage src='/graph.json' onToggleView={toggleView} />
-      ) : isSmall ? (
-        <MobilePapers src='/graph.json' onToggleView={toggleView} />
-      ) : (
-        <ArxivGraph src='/graph.json' onToggleView={toggleView} />
-      )}
+      <Routes>
+        <Route
+          path='/'
+          element={
+            isSmall ? (
+              <MobilePapers src='/graph.json' onToggleView={() => navigate('/stats')} />
+            ) : (
+              <ArxivGraph src='/graph.json' onToggleView={() => navigate('/stats')} />
+            )
+          }
+        />
+        <Route
+          path='/stats'
+          element={<StatsPage src='/graph.json' onToggleView={() => navigate('/')} />}
+        />
+      </Routes>
     </Suspense>
   )
 }
