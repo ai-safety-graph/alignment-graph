@@ -70,8 +70,6 @@ def build_parser() -> argparse.ArgumentParser:
     e = sp.add_parser("cluster", help="Cluster only kept papers")
     e.add_argument("--db", default=config.DB_PATH)
     e.add_argument("--kmeans", type=int, default=8)
-    e.add_argument("--agg", type=int, default=8)
-    e.add_argument("--hdbscan-min", type=int, default=5)
     e.add_argument("--reduce-dim", type=int, default=None)
     e.add_argument("--device", default="auto")
     e.set_defaults(func=clustering.cmd_cluster)

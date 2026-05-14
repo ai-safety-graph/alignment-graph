@@ -187,7 +187,7 @@ _SQLITE_SCHEMA = {
         CREATE TABLE IF NOT EXISTS papers (
             id TEXT PRIMARY KEY REFERENCES papers_raw(id) ON DELETE CASCADE,
             title TEXT, authors TEXT, published TEXT, summary TEXT, link TEXT,
-            kmeans_cluster INTEGER, agg_cluster INTEGER, hdbscan_cluster INTEGER,
+            kmeans_cluster INTEGER,
             ai_regex_hit INTEGER, ai_sem_sim REAL, ai_stage2_keep INTEGER,
             ai_stage2_reason TEXT, domain_tag TEXT,
             graph_x REAL, graph_y REAL
@@ -223,7 +223,7 @@ _PG_SCHEMA = [
     CREATE TABLE IF NOT EXISTS papers (
         id TEXT PRIMARY KEY REFERENCES papers_raw(id) ON DELETE CASCADE,
         title TEXT, authors TEXT, published TEXT, summary TEXT, link TEXT,
-        kmeans_cluster INTEGER, agg_cluster INTEGER, hdbscan_cluster INTEGER,
+        kmeans_cluster INTEGER,
         ai_regex_hit INTEGER, ai_sem_sim REAL, ai_stage2_keep BOOLEAN,
         ai_stage2_reason TEXT, domain_tag TEXT,
         graph_x REAL, graph_y REAL,

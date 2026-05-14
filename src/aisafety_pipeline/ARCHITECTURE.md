@@ -19,6 +19,7 @@ The package supports two database backends transparently: **SQLite** (local / st
 ### `config.py`
 
 Central configuration:
+
 - `DB_PATH` — SQLite path (local dev)
 - `DATABASE_URL` — PostgreSQL DSN (production; activates `PgConnection`)
 - `API_HOST`, `API_PORT`, `API_CORS_ORIGINS`
@@ -29,6 +30,7 @@ Central configuration:
 Owns database connection setup and schema initialization for both backends.
 
 Key exports:
+
 - `connect(db_arg)` — returns `SqliteConnection` or `PgConnection` based on `DATABASE_URL`
 - `init_db(db_arg)` — creates schema for the detected backend
 - `SqliteConnection` / `PgConnection` — unified wrapper pair with `is_pg` flag
@@ -36,6 +38,7 @@ Key exports:
 Both wrappers implement the same cursor interface. `PgConnection` uses psycopg2 with `DictCursor` and intercepts `BEGIN`/`COMMIT`/`ROLLBACK` strings to map them to connection-level calls. Parameter placeholders (`?`, `:name`) are translated to psycopg2 format (`%s`, `%(name)s`) automatically.
 
 Schema variants:
+
 - **SQLite**: `papers_raw`, `papers`, `embeddings` (BLOB), `cluster_meta`
 - **PostgreSQL**: `papers_raw`, `papers` (with `embedding vector(768)`, `graph_x`, `graph_y`), `cluster_meta` + HNSW index
 
@@ -46,6 +49,7 @@ Harvests metadata from arXiv via OAI-PMH into `papers_raw`. Uses `:name` paramst
 ### `filters.py`
 
 Implements filtering stages:
+
 - **stage 1**: regex/keyword gating into `papers`
 - **stage 2**: semantic filtering using centroid or logistic regression
 
@@ -56,6 +60,7 @@ Dual-mode for vector loading: PostgreSQL reads `papers.embedding`, SQLite reads 
 Generates SPECTER2 embeddings and stores them.
 
 Dual-mode storage:
+
 - PostgreSQL: `UPDATE papers SET embedding = %s WHERE id = %s`
 - SQLite: INSERT into separate `embeddings` BLOB table
 
@@ -117,6 +122,7 @@ Each pipeline stage persists its outputs back into the database. `serve` require
 ### Connection model
 
 `db.connect()` auto-detects backend:
+
 - `DATABASE_URL` set → `PgConnection` (psycopg2, DictCursor, pgvector registered)
 - `DATABASE_URL` unset → `SqliteConnection` (sqlite3, row_factory=Row, foreign keys ON)
 
@@ -137,6 +143,7 @@ Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `kmeans_clust
 ### PostgreSQL tables
 
 Same as SQLite except:
+
 - `papers` includes `embedding vector(768)` (replaces the `embeddings` table)
 - `papers` includes `graph_x REAL`, `graph_y REAL`
 - No separate `embeddings` table
@@ -186,6 +193,7 @@ All `ai_stage2_keep = 1` papers. Keyed by canonical arXiv abs URL.
 ## CLI Surface
 
 Notable defaults:
+
 - Stage-2 method: `centroid`
 - Graph export coords: `fr` (Fruchterman-Reingold)
 - Graph output: compact unless `--verbose`
@@ -206,12 +214,14 @@ Notable defaults:
 ## Safe Edit Zones
 
 Safe:
+
 - CLI help text and ergonomics
 - Internal helpers, logging
 - Export metadata fields (coordinated with UI)
 - Labeling heuristics
 
 Be careful around:
+
 - SQL schema changes (either backend)
 - `is_pg` branching logic in pipeline modules
 - Embedding serialization format (`bytes_from_vec` / `vec_from_bytes`)
@@ -224,11 +234,10 @@ Be careful around:
 
 ## Known Architecture Weak Points
 
-1. **Multi-method clustering, single-method export**: backend stores k-means, agg, HDBSCAN but frontend only consumes k-means.
-2. **Schema migrations are implicit**: `db.py` does `CREATE TABLE IF NOT EXISTS` + `ALTER TABLE ADD COLUMN` for new columns, but has no formal migration framework.
-3. **Duplicate metadata in exports**: graph and summaries overlap; changes must stay consistent.
-4. **Export failures occur late**: missing embeddings only caught at export time.
-5. **`serve` requires PostgreSQL**: the FastAPI backend has no SQLite fallback.
+1. **Schema migrations are implicit**: `db.py` does `CREATE TABLE IF NOT EXISTS` + `ALTER TABLE ADD COLUMN` for new columns, but has no formal migration framework.
+2. **Duplicate metadata in exports**: graph and summaries overlap; changes must stay consistent.
+3. **Export failures occur late**: missing embeddings only caught at export time.
+4. **`serve` requires PostgreSQL**: the FastAPI backend has no SQLite fallback.
 
 ---
 

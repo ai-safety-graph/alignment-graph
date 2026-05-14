@@ -16,14 +16,6 @@ class ClusterManager:
         from sklearn.cluster import KMeans
         km = KMeans(n_clusters=n_clusters, random_state=random_state, n_init=n_init)
         return km.fit_predict(self.embeddings)
-    def agglomerative(self, n_clusters: int = 8, linkage: str = 'ward'):
-        from sklearn.cluster import AgglomerativeClustering
-        ac = AgglomerativeClustering(n_clusters=n_clusters, linkage=linkage)
-        return ac.fit_predict(self.embeddings)
-    def hdbscan(self, min_cluster_size: int = 10, **kwargs):
-        import hdbscan
-        cl = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size, **kwargs)
-        return cl.fit_predict(self.embeddings)
 
 
 def get_papers(conn, only_kept=True) -> pd.DataFrame:
@@ -85,11 +77,9 @@ def cmd_cluster(args):
         print(f"{BLUE}Clustering…{RESET}")
         cm = ClusterManager(embeddings, normalise=True, pca_dim=args.reduce_dim)
         df["kmeans_cluster"] = cm.kmeans(n_clusters=args.kmeans)
-        df["agg_cluster"] = cm.agglomerative(n_clusters=args.agg)
-        df["hdbscan_cluster"] = cm.hdbscan(min_cluster_size=args.hdbscan_min, min_samples=3, metric="euclidean")
         cur = conn.cursor(); cur.execute("BEGIN")
-        for pid, k1, k2, k3 in df[["id", "kmeans_cluster", "agg_cluster", "hdbscan_cluster"]].itertuples(index=False, name=None):
-            cur.execute("UPDATE papers SET kmeans_cluster=?, agg_cluster=?, hdbscan_cluster=? WHERE id=?", (int(k1), int(k2), int(k3), pid))
+        for pid, k in df[["id", "kmeans_cluster"]].itertuples(index=False, name=None):
+            cur.execute("UPDATE papers SET kmeans_cluster=? WHERE id=?", (int(k), pid))
         cur.execute("COMMIT")
         print(f"{GREEN}clusters updated.{RESET}")
     finally:
