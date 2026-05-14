@@ -4,7 +4,6 @@ import datetime as dt
 import gzip
 import json
 import re
-import sqlite3
 from pathlib import Path
 from typing import Optional, Dict, Any
 
@@ -84,8 +83,8 @@ def export_summaries_json(
         }
       }
     """
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
+    from .db import connect
+    conn = connect(db_path)
     try:
         id_whitelist: Optional[set[str]] = None
         if ids_path:
@@ -100,9 +99,13 @@ def export_summaries_json(
         params: list = []
 
         if id_whitelist:
-            placeholders = ",".join(["?"] * len(id_whitelist))
-            where.append(f"id IN ({placeholders})")
-            params.extend(sorted(id_whitelist))
+            if conn.is_pg:
+                where.append("id = ANY(%s)")
+                params.append(list(id_whitelist))
+            else:
+                placeholders = ",".join(["?"] * len(id_whitelist))
+                where.append(f"id IN ({placeholders})")
+                params.extend(sorted(id_whitelist))
 
         if include_all_kept and not id_whitelist:
             where.append("ai_stage2_keep=1")
@@ -111,12 +114,14 @@ def export_summaries_json(
             where.append("kmeans_cluster IS NOT NULL")
 
         where_sql = f"WHERE {' AND '.join(where)}" if where else ""
-        rows = conn.execute(f"""
+        cur = conn.cursor()
+        cur.execute(f"""
             SELECT id, title, authors, published, summary, link, kmeans_cluster, domain_tag
             FROM papers
             {where_sql}
             ORDER BY published DESC
-        """, params).fetchall()
+        """, params if params else None)
+        rows = cur.fetchall()
 
         if not rows:
             raise RuntimeError("No papers matched the selection. Run earlier stages or adjust filters.")

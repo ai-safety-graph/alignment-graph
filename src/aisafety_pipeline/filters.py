@@ -1,5 +1,5 @@
 from __future__ import annotations
-import re, sqlite3, numpy as np
+import re, numpy as np
 from pathlib import Path
 from .config import GREEN, YELLOW, BLUE, RESET
 from .embeddings import vec_from_bytes
@@ -51,23 +51,33 @@ def domain_from_arxiv_categories(categories: str) -> str:
 
 
 def ensure_filter_columns(conn):
-    cur = conn.cursor()
+    if conn.is_pg:
+        return  # PostgreSQL schema already has all columns
     for coldef in [
         "ai_regex_hit INTEGER",
         "ai_sem_sim REAL",
         "ai_stage2_keep INTEGER",
         "ai_stage2_reason TEXT",
-        "domain_tag TEXT"
+        "domain_tag TEXT",
     ]:
-        try: cur.execute(f"ALTER TABLE papers ADD COLUMN {coldef}")
-        except sqlite3.OperationalError: pass
-    try: cur.execute("CREATE INDEX idx_papers_domain_tag ON papers(domain_tag)")
-    except sqlite3.OperationalError: pass
+        try:
+            conn._conn.execute(f"ALTER TABLE papers ADD COLUMN {coldef}")
+        except Exception:
+            pass
+    try:
+        conn._conn.execute("CREATE INDEX idx_papers_domain_tag ON papers(domain_tag)")
+    except Exception:
+        pass
     conn.commit()
 
 
 def cmd_stage1(args):
-    conn = sqlite3.connect(args.db); conn.row_factory = sqlite3.Row
+    from .db import connect
+    conn = connect(args.db)
+    conn.row_factory = None  # DictCursor handled by PgConnection; sqlite3 set below
+    if not conn.is_pg:
+        import sqlite3
+        conn.row_factory = sqlite3.Row
     ensure_filter_columns(conn)
     try:
         rows = conn.execute("SELECT id, title, summary, authors, published, link, categories FROM papers_raw").fetchall()
@@ -113,6 +123,18 @@ def load_vectors(conn, ids, *, model="specter2", chunk_size=900):
         return {}
 
     V = {}
+    if conn.is_pg:
+        rows = conn.execute(
+            "SELECT id, embedding FROM papers WHERE embedding IS NOT NULL AND id = ANY(%s)",
+            (list(ids),),
+        ).fetchall()
+        for pid, vec in rows:
+            if vec is not None:
+                v = np.array(vec, dtype=np.float32)
+                V[pid] = v / (np.linalg.norm(v) + 1e-12)
+        return V
+
+    # SQLite path
     for i in range(0, len(ids), chunk_size):
         batch = ids[i:i+chunk_size]
         placeholders = ",".join(["?"] * len(batch))
@@ -141,7 +163,8 @@ def build_centroid(conn, seeds_path):
 
 
 def cmd_filter(args):
-    conn = sqlite3.connect(args.db); conn.row_factory = sqlite3.Row
+    from .db import connect
+    conn = connect(args.db)
     ensure_filter_columns(conn)
     try:
         ids = [r[0] for r in conn.execute("SELECT id FROM papers").fetchall()]

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import json, gzip, sqlite3
+import json, gzip
 import datetime as dt
 from collections import defaultdict
 from typing import Dict, List, Tuple, Optional
@@ -77,7 +77,8 @@ def export_json_graph(
       clusters: { "<cid>": { label:str|null, size:int } }
       meta: generation info
     """
-    conn = sqlite3.connect(db_path); conn.row_factory = sqlite3.Row
+    from .db import connect
+    conn = connect(db_path)
     try:
         # 1) Load kept + clustered papers
         rows = conn.execute("""
@@ -129,18 +130,31 @@ def export_json_graph(
             ids.append(r["id"]); cluster_ids.append(cid); cluster_counts[cid] += 1
 
         # 4) Embeddings (neighbors + optional coords)
-        placeholders = ",".join(["?"] * len(ids))
-        emb_rows = conn.execute(
-            f"SELECT paper_id, dim, vector FROM embeddings WHERE model=? AND paper_id IN ({placeholders})",
-            (EMB_MODEL, *ids)
-        ).fetchall()
-        vec_by_id = {}
-        dim = None
-        for pid, d, blob in emb_rows:
-            v = vec_from_bytes(blob, d).astype(np.float32)
-            v /= (np.linalg.norm(v) + 1e-12)
-            vec_by_id[pid] = v
-            dim = d
+        if conn.is_pg:
+            emb_rows = conn.execute(
+                "SELECT id, embedding FROM papers WHERE embedding IS NOT NULL AND id = ANY(%s)",
+                (ids,),
+            ).fetchall()
+            vec_by_id = {}
+            dim = EMB_DIMS
+            for pid, vec in emb_rows:
+                if vec is not None:
+                    v = np.array(vec, dtype=np.float32)
+                    v /= (np.linalg.norm(v) + 1e-12)
+                    vec_by_id[pid] = v
+        else:
+            placeholders = ",".join(["?"] * len(ids))
+            emb_rows = conn.execute(
+                f"SELECT paper_id, dim, vector FROM embeddings WHERE model=? AND paper_id IN ({placeholders})",
+                (EMB_MODEL, *ids)
+            ).fetchall()
+            vec_by_id = {}
+            dim = None
+            for pid, d, blob in emb_rows:
+                v = vec_from_bytes(blob, d).astype(np.float32)
+                v /= (np.linalg.norm(v) + 1e-12)
+                vec_by_id[pid] = v
+                dim = d
         missing = [pid for pid in ids if pid not in vec_by_id]
         if missing:
             raise RuntimeError(f"{len(missing)} papers missing embeddings; run embed/cluster.")
@@ -351,6 +365,17 @@ def export_json_graph(
             layout_method_used = method_used
         else:
             layout_method_used = "none"
+
+        # 8b) Persist graph coords back to DB
+        if xs is not None and ys is not None:
+            cur = conn.cursor()
+            cur.execute("BEGIN")
+            for i, aid in enumerate(ids):
+                cur.execute(
+                    "UPDATE papers SET graph_x=?, graph_y=? WHERE id=?",
+                    (float(xs[i]), float(ys[i]), aid),
+                )
+            cur.execute("COMMIT")
 
         # 9) Build nodes
         nodes = []

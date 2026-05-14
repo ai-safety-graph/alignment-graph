@@ -71,9 +71,8 @@ export default function ArxivGraph({
     let alive = true
     ;(async () => {
       try {
-        const res = await fetch(src)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const json = (await res.json()) as GraphDataCompact
+        const { fetchGraph } = await import('../lib/api')
+        const json = await fetchGraph()
         if (!alive) return
         setData(json)
       } catch (e: any) {
@@ -84,7 +83,7 @@ export default function ArxivGraph({
     return () => {
       alive = false
     }
-  }, [src])
+  }, [])
 
   // Prepare simulation nodes (mutable x/y)
   const simNodes = useMemo(() => {

@@ -1,0 +1,44 @@
+from __future__ import annotations
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from .routes import graph, papers, search, clusters, stats
+from ..config import API_CORS_ORIGINS
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Warm the search generator on startup so the first query isn't slow
+    try:
+        from .routes.search import _get_generator
+        _get_generator()
+    except Exception:
+        pass  # model load is optional at startup; will load on first request
+    yield
+
+
+app = FastAPI(
+    title="AI Safety ArXiv API",
+    version="1.0.0",
+    description="REST API for the AI Safety ArXiv corpus with semantic search",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=API_CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(graph.router)
+app.include_router(papers.router)
+app.include_router(search.router)
+app.include_router(clusters.router)
+app.include_router(stats.router)
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}

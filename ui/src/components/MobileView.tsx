@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef, useLayoutEffect } from 'react'
-import { Trash, Search, Newspaper } from 'lucide-react'
+import { Trash, Search, Newspaper, Sparkles } from 'lucide-react'
 
 import MobilePaperDetails from './MobilePaperDetails'
 import PaperList from './PaperList'
@@ -8,12 +8,13 @@ import type {
   NodeCompact,
   ClustersLegend,
 } from '../lib/types'
+import type { SearchResult } from '../lib/api'
 import { buildAdjacency } from '../lib/graph'
 import FilterBar from './FilterBar'
 import { usePaperFilters } from '../hooks/usePaperFilters'
+import { hasApi, searchPapers } from '../lib/api'
 
 export default function MobilePapers({
-  src = '/graph.json',
   onToggleView,
 }: {
   src?: string
@@ -23,6 +24,12 @@ export default function MobilePapers({
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [searchMode, setSearchMode] = useState<'keyword' | 'semantic'>(
+    'keyword',
+  )
+  const [semanticResults, setSemanticResults] = useState<SearchResult[]>([])
+  const [semanticLoading, setSemanticLoading] = useState(false)
+  const apiAvailable = hasApi()
 
   const listRef = useRef<HTMLDivElement | null>(null)
   const searchBarRef = useRef<HTMLDivElement | null>(null)
@@ -33,9 +40,8 @@ export default function MobilePapers({
     let alive = true
     ;(async () => {
       try {
-        const res = await fetch(src)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const json = (await res.json()) as GraphDataCompact
+        const { fetchGraph } = await import('../lib/api')
+        const json = await fetchGraph()
         if (!alive) return
         setData(json)
       } catch (e: any) {
@@ -46,7 +52,27 @@ export default function MobilePapers({
     return () => {
       alive = false
     }
-  }, [src])
+  }, [])
+
+  // Debounced semantic search
+  useEffect(() => {
+    if (searchMode !== 'semantic' || !query.trim()) {
+      setSemanticResults([])
+      return
+    }
+    const t = setTimeout(async () => {
+      setSemanticLoading(true)
+      try {
+        const res = await searchPapers(query.trim(), { limit: 50 })
+        setSemanticResults(res.results)
+      } catch {
+        setSemanticResults([])
+      } finally {
+        setSemanticLoading(false)
+      }
+    }, 400)
+    return () => clearTimeout(t)
+  }, [query, searchMode])
 
   // Build adjacency & byId maps for neighbor details
   const { byId, adj, clusters } = useMemo(() => {
@@ -112,6 +138,20 @@ export default function MobilePapers({
       .slice(0, 200)
   }, [data, query, adj])
 
+  // Convert semantic results to the same scored shape as keyword results
+  const semanticAsScored = useMemo(
+    () =>
+      semanticResults.map((r) => ({
+        n: r as NodeCompact,
+        score: r.sim ?? 0,
+        deg: adj.get(r.id)?.length ?? 0,
+      })),
+    [semanticResults, adj],
+  )
+
+  const activeResults =
+    searchMode === 'semantic' && query.trim() ? semanticAsScored : results
+
   const {
     filtered,
     activeCids,
@@ -125,7 +165,7 @@ export default function MobilePapers({
     toggleCluster,
     toggleYear,
     toggleDomain,
-  } = usePaperFilters(results, data)
+  } = usePaperFilters(activeResults, data)
 
   useLayoutEffect(() => {
     const el = listRef.current
@@ -202,17 +242,50 @@ export default function MobilePapers({
           </button>
           <div className='flex items-center gap-2 flex-1'>
             <div className='relative flex-1'>
-              <Search
-                className='absolute left-3 top-1/2 -translate-y-1/2'
-                size={16}
-              />
+              {semanticLoading ? (
+                <span className='absolute left-3 top-1/2 -translate-y-1/2 text-[#4ea8de] animate-spin text-xs'>
+                  ⟳
+                </span>
+              ) : (
+                <Search
+                  className='absolute left-3 top-1/2 -translate-y-1/2'
+                  size={16}
+                />
+              )}
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder='Search papers on AI safety & alignment'
+                placeholder={
+                  searchMode === 'semantic'
+                    ? 'Semantic search…'
+                    : 'Search papers on AI safety & alignment'
+                }
                 className='w-full pl-9 pr-10 py-2 rounded-xl bg-neutral-900 border border-[#333333] text-[#e5e5e5] placeholder-[#666666] outline-none focus:ring-2 focus:ring-[#4ea8de]'
               />
             </div>
+            {apiAvailable && (
+              <button
+                aria-label={
+                  searchMode === 'semantic'
+                    ? 'Switch to keyword search'
+                    : 'Switch to semantic search'
+                }
+                onClick={() => {
+                  setSearchMode((m) =>
+                    m === 'keyword' ? 'semantic' : 'keyword',
+                  )
+                  setQuery('')
+                }}
+                className={`p-2 rounded-lg border transition-colors ${searchMode === 'semantic' ? 'bg-[#4ea8de]/20 border-[#4ea8de] text-[#4ea8de]' : 'border-[#333333] text-neutral-400 hover:text-neutral-200'}`}
+                title={
+                  searchMode === 'semantic'
+                    ? 'Semantic search on (click to switch)'
+                    : 'Keyword search (click for semantic)'
+                }
+              >
+                <Sparkles size={16} />
+              </button>
+            )}
             {query && (
               <button
                 aria-label='Clear'
@@ -252,7 +325,13 @@ export default function MobilePapers({
           </div>
         )}
 
-        {data && filtered.length === 0 && (
+        {semanticLoading && (
+          <div className='p-4 text-center text-[#4ea8de] text-sm'>
+            Searching…
+          </div>
+        )}
+
+        {!semanticLoading && data && filtered.length === 0 && (
           <div className='p-6 text-center text-neutral-400'>No matches.</div>
         )}
 

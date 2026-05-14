@@ -4,10 +4,13 @@
 
 This repository builds an AI-safety literature exploration system with two major parts:
 
-1. A **Python pipeline** that harvests arXiv metadata, stores it in SQLite, computes embeddings, filters papers, clusters them, labels clusters, and exports frontend-ready JSON artifacts.
-2. A **React/Vite UI** that consumes those exported artifacts to render either a desktop graph view or a mobile-friendly paper view.
+1. A **Python pipeline** that harvests arXiv metadata, stores it in SQLite or PostgreSQL, computes embeddings, filters papers, clusters them, labels clusters, and optionally exports JSON artifacts.
+2. A **React/Vite UI** that loads data either from a live FastAPI backend or from exported static JSON artifacts (fallback / legacy mode).
 
-The overall system is a **producer → artifact → visualization** architecture.
+The system supports two deployment modes:
+
+- **API mode** (production): pipeline → PostgreSQL + pgvector → FastAPI → frontend
+- **Static mode** (legacy/dev): pipeline → SQLite → JSON artifacts → frontend
 
 ---
 
@@ -15,18 +18,18 @@ The overall system is a **producer → artifact → visualization** architecture
 
 ```text
 arXiv OAI-PMH
-  -> papers_raw (SQLite ingest table)
+  -> papers_raw (SQLite or PostgreSQL)
   -> papers (working set / pipeline state)
-  -> embeddings (SPECTER2 vectors)
+  -> embeddings (SPECTER2 vectors — BLOB in SQLite, vector(768) in PostgreSQL)
   -> stage-2 keep / reject decisions
   -> clustering assignments
-  -> cluster labels
-  -> export_graph.py      -> ui/public/graph.json
-  -> export_summaries.py  -> ui/public/summaries.json
-  -> Vite/Netlify frontend
+  -> cluster labels + graph coords (graph_x, graph_y stored in papers table)
+  -> FastAPI backend (API mode)     -> React frontend
+  -> export_graph.py  (static mode) -> ui/public/graph.json
+  -> export_summaries.py (static)   -> ui/public/summaries.json
 ```
 
-Canonical CLI flow from the README:
+Canonical CLI workflow:
 
 ```bash
 aisafety-pipeline harvest
@@ -35,8 +38,8 @@ aisafety-pipeline embed
 aisafety-pipeline filter
 aisafety-pipeline cluster
 aisafety-pipeline label
-aisafety-pipeline export-graph
-aisafety-pipeline export-summaries
+aisafety-pipeline export-graph   # also persists graph_x/y to DB
+aisafety-pipeline serve          # start FastAPI (API mode only)
 ```
 
 ---
@@ -48,210 +51,163 @@ aisafety-pipeline export-summaries
 Primary backend package. Owns:
 
 - arXiv/OAI harvesting
-- SQLite persistence
-- embedding generation
-- filtering
-- clustering
-- cluster labeling
-- artifact export
+- Dual-mode persistence (SQLite via `SqliteConnection`, PostgreSQL via `PgConnection`)
+- Embedding generation and storage
+- Filtering (regex + semantic centroid)
+- Clustering (k-means, agglomerative, HDBSCAN)
+- Cluster labeling
+- Artifact export (JSON) and graph coord persistence
 
 See `src/aisafety_pipeline/ARCHITECTURE.md` for module-level details.
+
+### `src/aisafety_pipeline/api/`
+
+FastAPI backend. Owns:
+
+- REST API serving live data from PostgreSQL
+- Semantic search via pgvector ANN
+- In-process graph response cache (1-hour TTL)
+- CORS for Netlify frontend
+
+See `src/aisafety_pipeline/api/ARCHITECTURE.md` for route-level details.
 
 ### `ui/`
 
 Frontend application built with Vite/React. Owns:
 
-- choosing desktop vs mobile rendering
-- loading `graph.json`
-- rendering graph/list interactions
-- consuming exported artifact schema
+- Choosing desktop vs mobile rendering
+- Fetching data from the API (when `VITE_API_URL` is set) or from static JSON (fallback)
+- Rendering graph/list interactions
+- Keyword search and semantic search (API mode only)
 
 See `ui/ARCHITECTURE.md` for frontend details.
+
+### `migrations/`
+
+One-time migration utilities:
+
+- `sqlite_to_postgres.py`: migrates existing SQLite database to PostgreSQL, converts embedding BLOBs to pgvector, verifies row counts.
 
 ### `data/`
 
 Runtime state and local persistence:
 
-- `arxiv_papers.db`: SQLite database
+- `arxiv_papers.db`: SQLite database (used in local/static mode)
 - `last_run.txt`: harvest state/checkpointing
 
 ### `archive/`
 
-Historical and deprecated pipeline code. This directory should be treated as reference material, not active production code.
-
-### Root generated/runtime artifacts
-
-Examples visible in the tree:
-
-- `specter2_embeddings.npy`
-- `specter2_ids.txt`
-- `embed.log`
-- `filter.log`
-
-These appear to be operational artifacts or historical outputs, not the primary contract consumed by the current UI.
+Historical and deprecated pipeline code. Reference material only, not active production code.
 
 ---
 
 ## Supported Execution Model
 
-The repo is organized as a **staged CLI pipeline** rather than a monolithic application server.
+The public orchestration surface is defined in `src/aisafety_pipeline/utils.py`:
 
-The public orchestration surface is defined in `src/aisafety_pipeline/utils.py` via these commands:
-
-- `harvest`
-- `stage1`
-- `embed`
-- `filter`
-- `cluster`
-- `label`
-- `export-graph`
-- `export-summaries`
-
-The CLI contract should be treated as the supported workflow for both humans and coding agents.
+- `harvest` — OAI-PMH fetch into `papers_raw`
+- `stage1` — regex filter into `papers`
+- `embed` — SPECTER2 embeddings
+- `filter` — semantic stage-2 filter
+- `cluster` — k-means / agg / HDBSCAN assignments
+- `label` — cluster labels into `cluster_meta`
+- `export-graph` — JSON artifact + persists `graph_x/y` to DB
+- `export-summaries` — summary lookup JSON artifact
+- `serve` — start FastAPI with uvicorn (`--host`, `--port`, `--reload`)
 
 ---
 
-## Data and Artifact Contracts
+## Database Backends
 
-### Primary database
+### SQLite (local / static mode)
 
-The main stateful backend store is SQLite.
+Tables: `papers_raw`, `papers`, `embeddings` (BLOB), `cluster_meta`
 
-Key tables:
+Activated when `DATABASE_URL` is unset. Used for local pipeline runs and static artifact export. `db.connect()` returns a `SqliteConnection` wrapper.
 
-- `papers_raw`: harvested source metadata
-- `papers`: working set plus pipeline annotations
-- `embeddings`: vector store keyed by paper id
-- `cluster_meta`: per-method cluster labels and metadata
+### PostgreSQL + pgvector (production / API mode)
 
-### Frontend artifacts
+Tables: `papers_raw`, `papers` (includes `embedding vector(768)`, `graph_x`, `graph_y`), `cluster_meta`
 
-The UI currently depends on exported JSON files in `ui/public/`:
+Activated when `DATABASE_URL` env var is set to a valid PostgreSQL DSN. `db.connect()` returns a `PgConnection` wrapper. Vector search uses an HNSW index (`vector_cosine_ops`).
 
-- `graph.json`
-- `summaries.json`
-
-#### `graph.json`
-
-Primary UI bootstrap artifact. Contains:
-
-- `meta`
-- `clusters`
-- `nodes`
-- `links`
-
-This artifact is built from **kept, clustered papers** and is currently **k-means-centered**.
-
-#### `summaries.json`
-
-Secondary lookup artifact for paper summaries and metadata. Contains:
-
-- `meta`
-- `summaries`
-
-This artifact is keyed by canonical arXiv abs URLs.
+Both backends share the same `Connection` interface so all pipeline modules are backend-agnostic.
 
 ---
 
-## Important Current Assumptions
+## Frontend Artifacts (static mode)
 
-### Cluster namespace
+When `VITE_API_URL` is not set, the UI falls back to static files in `ui/public/`:
 
-Although the database stores multiple clustering outputs (`kmeans_cluster`, `agg_cluster`, `hdbscan_cluster`), the current export path for both graph and summaries uses **k-means as the production cluster id** (`cid`).
+- `graph.json` — compact graph with nodes, links, clusters, and coords
+- `summaries.json` — summary lookup keyed by arXiv abs URL
 
-### Canonical paper identity
-
-Paper ids are treated as canonical arXiv abs URLs, e.g.:
-
-```text
-https://arxiv.org/abs/2401.01234
-```
-
-This matters for joining data across tables and artifacts.
-
-### Reproducibility of stage-2 filtering
-
-`seeds.txt` is tied to a specific date window. To reproduce prior filtering behavior, the harvest window and seed set must match.
+These are produced by `export-graph` and `export-summaries` respectively.
 
 ---
 
 ## Deployment Model
 
-The pipeline is run offline or locally to produce static JSON artifacts.
-The UI then serves those static files via the Vite app and Netlify deployment.
-
-This means the current system is **not** a live API-backed application. It is a **static frontend over precomputed artifacts**.
+| Component | Service | Notes |
+|-----------|---------|-------|
+| PostgreSQL + pgvector | Supabase | Native pgvector, connection pooling |
+| FastAPI API | Render / Railway | `DATABASE_URL` env var required; `aisafety-pipeline serve` entrypoint |
+| Frontend | Netlify | Set `VITE_API_URL` to API URL; falls back to static JSON if unset |
 
 ---
 
-## Active vs Inactive Code
+## Important Assumptions
 
-### Active
+### Cluster namespace
 
-- `src/aisafety_pipeline/*`
-- `ui/*`
-- `data/arxiv_papers.db`
-- `ui/public/graph.json`
-- `ui/public/summaries.json`
+Export and API routes use `kmeans_cluster` as the production cluster id (`cid`). `agg_cluster` and `hdbscan_cluster` are stored but not currently exposed.
 
-### Inactive or legacy
+### Canonical paper identity
 
-- `archive/*`
-- `__pycache__/*`
-- virtualenv contents under `venv/`
+Paper ids are canonical arXiv abs URLs, e.g. `https://arxiv.org/abs/2401.01234`. This is the join key across all tables and artifacts.
 
-Coding agents should prefer active package code over archive or runtime-generated files.
+### Reproducibility of stage-2 filtering
+
+`seeds.txt` is tied to a specific harvest window. To reproduce prior filtering, the harvest window and seed set must match.
 
 ---
 
 ## Safe Edit Zones
 
-AI may usually safely modify:
-
-- documentation
+AI may safely modify:
+- Documentation
 - UI rendering logic
-- export formatting, when coordinated with UI
-- non-schema-preserving pipeline internals
-- CLI help text and ergonomics
+- Export formatting (coordinated with UI)
+- Pipeline internal helpers
+- CLI help text
 
 AI should be careful around:
-
-- SQLite schema changes
-- paper id normalization
-- graph compact-field names
-- cluster id semantics
-- seed-window assumptions for filtering reproducibility
-- anything in `archive/` unless intentionally reviving old logic
+- PostgreSQL/SQLite schema changes
+- Paper id normalization
+- Compact graph field names (`id`, `aid`, `t`, `au`, `pd`, `dm`, `ln`, `cid`)
+- Cluster id semantics
+- `is_pg` branching in pipeline modules
+- pgvector operator syntax (`<=>`)
 
 ---
 
 ## Cross-Subsystem Risks
 
-### 1. Artifact schema drift
-
-If `export_graph.py` or `export_summaries.py` changes field names or key shapes, the UI may silently break.
-
-### 2. Cluster-method mismatch
-
-The pipeline computes multiple cluster assignments, but the current UI contract assumes k-means ids.
-
-### 3. Identifier mismatch
-
-The graph artifact and summaries artifact rely on stable canonical paper ids. Changing id format breaks joins.
-
-### 4. Static artifact staleness
-
-Because the frontend is static, code changes to the pipeline do nothing for production until fresh JSON is exported and deployed.
+1. **Artifact schema drift**: changes to `export_graph.py` field names silently break the UI in static mode.
+2. **Cluster-method mismatch**: API and static export both assume k-means; changing this requires coordinated updates.
+3. **Identifier mismatch**: arXiv abs URL format must remain stable across pipeline and UI.
+4. **Static artifact staleness**: in static mode, pipeline changes have no effect until fresh JSON is exported and redeployed.
+5. **API-only features in UI**: semantic search and paper detail via API are no-ops when `VITE_API_URL` is unset; the UI must degrade gracefully.
 
 ---
 
-## Recommended Mental Model for AI-Assisted Coding
+## Recommended Mental Model
 
-When editing this repository, treat it as three layers:
+When editing this repository, treat it as four layers:
 
-1. **Ingest and analysis layer** (`src/aisafety_pipeline/`)
-2. **Artifact contract layer** (`graph.json`, `summaries.json`)
-3. **Presentation layer** (`ui/`)
+1. **Ingest and analysis** (`src/aisafety_pipeline/` pipeline modules)
+2. **Persistence** (`db.py` — SQLite or PostgreSQL)
+3. **Serving / artifact contract** (API routes or `graph.json` / `summaries.json`)
+4. **Presentation** (`ui/`)
 
-Most safe changes stay within a layer.
-Cross-layer changes should only be made intentionally and documented.
+Most safe changes stay within a layer. Cross-layer changes should be intentional and documented.
