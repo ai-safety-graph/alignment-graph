@@ -21,13 +21,11 @@ export function useRelatedPapers(
         const results = await fetchRelated(paper.aid)
         if (!alive) return
         setNeighbors(
-          results
-            .map((r) => {
-              const id = aidToId.get(r.aid)
-              if (id == null) return null
-              return { n: { ...r, id }, w: r.sim }
-            })
-            .filter((x): x is NeighborEntry => x !== null),
+          results.flatMap((r): NeighborEntry[] => {
+            const id = aidToId.get(r.aid)
+            if (id == null) return []
+            return [{ n: { ...r, id }, w: r.sim }]
+          }),
         )
       } catch {
         if (alive) setNeighbors([])
