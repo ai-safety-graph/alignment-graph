@@ -19,7 +19,7 @@ class ClusterManager:
 
 
 def get_papers(conn, only_kept=True) -> pd.DataFrame:
-    sql = ("SELECT id, title, summary FROM papers WHERE ai_stage2_keep=1"
+    sql = ("SELECT id, title, summary FROM papers WHERE ai_stage2_keep"
            if only_kept else "SELECT id, title, summary FROM papers")
     cur = conn.cursor()
     cur.execute(sql)

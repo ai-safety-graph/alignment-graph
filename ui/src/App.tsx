@@ -33,7 +33,7 @@ export default function App() {
         />
         <Route
           path='/stats'
-          element={<StatsPage src='/graph.json' onToggleView={() => navigate('/')} />}
+          element={<StatsPage onToggleView={() => navigate('/')} />}
         />
       </Routes>
     </Suspense>

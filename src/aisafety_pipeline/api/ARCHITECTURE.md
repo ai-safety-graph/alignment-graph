@@ -16,8 +16,8 @@ src/aisafety_pipeline/api/
   main.py          # FastAPI app, CORS, lifespan
   deps.py          # get_conn() dependency (yields PgConnection per request)
   routes/
-    graph.py       # GET /api/graph
-    papers.py      # GET /api/papers, GET /api/papers/{arxiv_id:path}
+    graph.py       # POST /api/graph/subset
+    papers.py      # GET /api/papers, GET /api/papers/related, GET /api/papers/{arxiv_id:path}
     search.py      # POST /api/search
     clusters.py    # GET /api/clusters
     stats.py       # GET /api/stats
@@ -46,19 +46,19 @@ All route handlers declare `conn: PgConnection = Depends(get_conn)`.
 
 ## Endpoints
 
-### `GET /api/graph`
+### `POST /api/graph/subset`
 
-Returns the compact graph JSON used to bootstrap both the desktop and mobile frontends.
+Returns a compact graph for a specific list of paper IDs. This is the only graph endpoint — there is no full-graph endpoint.
+
+Request body: `{ ids: string[] }` (max 500 IDs)
 
 Response shape: `{ meta, clusters, nodes: NodeCompact[], links: LinkCompact[] }`
 
 Implementation:
-- Reads `papers` where `ai_stage2_keep AND kmeans_cluster IS NOT NULL AND graph_x IS NOT NULL`
+- Fetches only the requested papers (must be `ai_stage2_keep = TRUE`)
 - Reads `cluster_meta` for labels
-- Builds neighbor links: for each node, finds top-k similar papers using pgvector `<=>` operator via self-join batch queries
-- Assembles the same compact schema as `export_graph.py`
-
-**In-process cache**: result stored in `_cache = {"data": None, "ts": 0.0}` with a 1-hour TTL. Cache is invalidated on server restart. This avoids re-querying pgvector on every page load.
+- Re-normalises stored `graph_x/y` coordinates to fit the canvas bounds for the subset
+- Builds neighbor links using pgvector `<=>` cosine similarity (batch queries, threshold 0.85, top-5 per paper)
 
 ### `GET /api/papers`
 
@@ -66,7 +66,20 @@ Paginated paper listing.
 
 Query params: `page` (default 1), `limit` (default 50, max 200), `cluster` (kmeans_cluster), `domain`, `from` (date), `to` (date)
 
-Returns: `{ total, page, limit, results: PaperSummary[] }`
+Returns: `{ total, page, limit, items: NodeCompact[] }`
+
+### `GET /api/papers/related`
+
+On-demand related papers for a selected paper using pgvector HNSW nearest-neighbor lookup. Registered before the catch-all `/{arxiv_id:path}` route.
+
+Query params: `id` (arxiv ID or full URL, required), `limit` (default 10, max 50)
+
+Implementation:
+- Reads the paper's stored `embedding` vector (single row lookup)
+- SQL: `ORDER BY embedding <=> %s LIMIT %s` — served by the HNSW index in ~1–5ms
+- No embedding inference at query time
+
+Returns: `NodeCompact[]` with an additional `sim: float` field (cosine similarity, 0–1).
 
 ### `GET /api/papers/{arxiv_id:path}`
 
@@ -85,13 +98,13 @@ Implementation:
 - SQL: `SELECT ..., 1 - (embedding <=> %s::vector) AS sim FROM papers WHERE ... ORDER BY embedding <=> %s::vector LIMIT %s`
 - Parameters: `[query_vec] + filter_params + [query_vec, limit]` — `query_vec` is passed twice, once for the SELECT similarity value and once for ORDER BY
 
-Returns: `{ results: SearchResult[] }` where each result includes `sim` (cosine similarity, 0–1).
+Returns: `{ query: str, results: SearchResult[] }` where each result includes `sim` (cosine similarity, 0–1).
 
 ### `GET /api/clusters`
 
-All cluster metadata from `cluster_meta` where `method = 'kmeans'`, joined with paper counts from `papers`.
+All cluster metadata from `cluster_meta` where `method = 'default'`, joined with paper counts from `papers`.
 
-Returns: `{ clusters: ClusterInfo[] }`
+Returns: array of `{ cid, label, confidence, terms, size }`.
 
 ### `GET /api/stats`
 
@@ -128,9 +141,10 @@ API docs: `http://localhost:8000/docs`
 ## Invariants
 
 - All routes require PostgreSQL — there is no SQLite fallback in the API
-- Graph endpoint cache is in-process only; multiple replicas do not share cache
-- Semantic search requires embeddings in `papers.embedding`; papers without embeddings are excluded from search results
+- There is no full-graph endpoint; the frontend always works with subsets or paginated paper lists
+- Related papers and semantic search both require `embedding` to be populated; papers without embeddings are excluded
 - Cluster ids in API responses always refer to `kmeans_cluster` values
+- `GET /api/papers/related` must remain registered before `GET /api/papers/{arxiv_id:path}` in `papers.py` to avoid the catch-all route swallowing it
 
 ---
 
@@ -138,11 +152,12 @@ API docs: `http://localhost:8000/docs`
 
 Safe:
 - Response field additions (additive, backwards compatible)
-- Cache TTL adjustment
 - Pagination defaults
+- Related papers `limit` cap
 
 Be careful around:
 - pgvector operator syntax (`<=>` for cosine distance)
 - Parameter order in search SQL (`query_vec` used twice)
+- Route registration order in `papers.py` (`/related` before `/{arxiv_id:path}`)
 - `get_conn()` — each request gets its own connection (not pooled at the application level)
 - CORS origins list (affects which frontends can call the API)

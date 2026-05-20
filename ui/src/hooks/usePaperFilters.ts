@@ -1,34 +1,33 @@
 import { useMemo, useState } from 'react'
-import type { GraphDataCompact, NodeCompact } from '../lib/types'
+import type { ClustersLegend, NodeCompact } from '../lib/types'
 
 type ScoredItem = { n: NodeCompact; score: number; deg: number }
 
-export function usePaperFilters(results: ScoredItem[], data: GraphDataCompact | null) {
+export function usePaperFilters(
+  results: ScoredItem[],
+  nodes: NodeCompact[] | null,
+  clusters: ClustersLegend,
+) {
   const [activeCids, setActiveCids] = useState<Set<number>>(new Set())
   const [activeYear, setActiveYear] = useState<number | null>(null)
   const [activeDomains, setActiveDomains] = useState<Set<string>>(new Set())
 
   const clusterEntries = useMemo(
-    () =>
-      data
-        ? (Object.entries(data.clusters) as Array<
-            [string, { label?: string | null; size: number }]
-          >)
-        : [],
-    [data],
+    () => Object.entries(clusters) as Array<[string, { label?: string | null; size: number }]>,
+    [clusters],
   )
 
   const availableYears = useMemo(() => {
-    if (!data) return []
-    const years = new Set(data.nodes.map((n) => new Date(n.pd).getFullYear()))
+    if (!nodes) return []
+    const years = new Set(nodes.map((n) => new Date(n.pd).getFullYear()))
     return [...years].sort((a, b) => a - b)
-  }, [data])
+  }, [nodes])
 
   const availableDomains = useMemo(() => {
-    if (!data) return []
-    const domains = new Set(data.nodes.map((n) => n.dm).filter(Boolean))
+    if (!nodes) return []
+    const domains = new Set(nodes.map((n) => n.dm).filter(Boolean))
     return [...domains].sort()
-  }, [data])
+  }, [nodes])
 
   const filtered = useMemo(() => {
     let res =

@@ -277,6 +277,7 @@ def init_db(db_arg: Optional[str] = None) -> SqliteConnection | PgConnection:
         except Exception:
             pass  # index may fail if embedding col is empty; ok
         conn.commit()
+        _pg_ensure_columns(conn)
     else:
         cur = conn._conn.cursor()
         for ddl in _SQLITE_SCHEMA.values():
@@ -287,6 +288,19 @@ def init_db(db_arg: Optional[str] = None) -> SqliteConnection | PgConnection:
         # Migrate existing DBs that lack the new columns
         _sqlite_ensure_columns(conn)
     return conn
+
+
+def _pg_ensure_columns(conn: PgConnection) -> None:
+    _ENSURE = [
+        ("papers", "graph_x", "REAL"),
+        ("papers", "graph_y", "REAL"),
+    ]
+    for table, col, dtype in _ENSURE:
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {dtype}")
+        except Exception:
+            pass
+    conn.commit()
 
 
 def _sqlite_ensure_columns(conn: SqliteConnection) -> None:

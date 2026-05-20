@@ -1,40 +1,41 @@
 from __future__ import annotations
 import datetime as dt
-import time
 from collections import defaultdict
-from typing import Any, Dict, Optional
-from fastapi import APIRouter, Depends
+from typing import Dict, List, Optional
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, field_validator
 from ..deps import get_conn
 from ...config import EMB_MODEL, EMB_DIMS
 
 router = APIRouter(prefix="/api/graph", tags=["graph"])
 
-# Simple in-process cache (TTL = 1 hour)
-_CACHE_TTL = 3600
-_cache: Dict[str, Any] = {"data": None, "ts": 0.0}
+_MAX_SUBSET = 500
 
 
-def _to_jsonable(obj):
-    import numpy as _np
-    if isinstance(obj, dict):
-        return {str(k): _to_jsonable(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return [_to_jsonable(v) for v in obj]
-    if isinstance(obj, (_np.integer,)):
-        return int(obj)
-    if isinstance(obj, (_np.floating,)):
-        return float(obj)
-    return obj
+class SubsetRequest(BaseModel):
+    ids: List[str]
+
+    @field_validator("ids")
+    @classmethod
+    def validate_ids(cls, v: List[str]) -> List[str]:
+        if not v:
+            raise ValueError("ids must not be empty")
+        if len(v) > _MAX_SUBSET:
+            raise ValueError(f"ids must contain at most {_MAX_SUBSET} items")
+        return v
 
 
-def _build_graph(conn) -> dict:
+def _build_subgraph(conn, paper_ids: List[str]) -> dict:
+    if not conn.is_pg:
+        raise RuntimeError("Subset graph endpoint requires a PostgreSQL connection")
+
     rows = conn.execute("""
         SELECT id, title, authors, published, link, domain_tag, kmeans_cluster,
                graph_x, graph_y
         FROM papers
-        WHERE ai_stage2_keep = TRUE AND kmeans_cluster IS NOT NULL
+        WHERE id = ANY(%s) AND ai_stage2_keep = TRUE AND kmeans_cluster IS NOT NULL
         ORDER BY kmeans_cluster ASC, published DESC
-    """).fetchall()
+    """, (paper_ids,)).fetchall()
 
     if not rows:
         return {"meta": {}, "clusters": {}, "nodes": [], "links": []}
@@ -57,21 +58,36 @@ def _build_graph(conn) -> dict:
     for r in rows:
         cid = int(r[6]) if r[6] is not None else -1
         papers.append({
-            "aid": r[0],
-            "t": r[1] or "",
-            "au": r[2] or "",
-            "pd": str(r[3]) if r[3] else "",
-            "dm": r[5] or "unknown",
-            "ln": r[4] or r[0],
-            "cid": cid,
-            "x": float(r[7]) if r[7] is not None else 0.0,
-            "y": float(r[8]) if r[8] is not None else 0.0,
+            "aid": r[0], "t": r[1] or "", "au": r[2] or "",
+            "pd": str(r[3]) if r[3] else "", "dm": r[5] or "unknown",
+            "ln": r[4] or r[0], "cid": cid,
+            "raw_x": float(r[7]) if r[7] is not None else None,
+            "raw_y": float(r[8]) if r[8] is not None else None,
         })
         ids.append(r[0])
         cluster_ids.append(cid)
         cluster_counts[cid] += 1
 
     N = len(papers)
+    CANVAS_W, CANVAS_H, PAD = 1000, 700, 24
+
+    x_vals = [p["raw_x"] for p in papers if p["raw_x"] is not None]
+    y_vals = [p["raw_y"] for p in papers if p["raw_y"] is not None]
+    has_coords = len(x_vals) == N
+
+    if has_coords:
+        x_min, x_max = min(x_vals), max(x_vals)
+        y_min, y_max = min(y_vals), max(y_vals)
+        x_range = max(x_max - x_min, 1e-9)
+        y_range = max(y_max - y_min, 1e-9)
+        for p in papers:
+            p["x"] = PAD + (p["raw_x"] - x_min) / x_range * (CANVAS_W - 2 * PAD)
+            p["y"] = PAD + (p["raw_y"] - y_min) / y_range * (CANVAS_H - 2 * PAD)
+    else:
+        for p in papers:
+            p["x"] = 0.0
+            p["y"] = 0.0
+
     nodes = [
         {"id": i, "aid": p["aid"], "t": p["t"], "au": p["au"],
          "pd": p["pd"], "dm": p["dm"], "ln": p["ln"], "cid": p["cid"],
@@ -79,20 +95,17 @@ def _build_graph(conn) -> dict:
         for i, p in enumerate(papers)
     ]
 
-    # Build neighbor links using pgvector
-    import numpy as np
-    TOP_K = 5
-    MIN_SIM = 0.85
-
     id_to_idx = {aid: i for i, aid in enumerate(ids)}
     seen: set = set()
     edge_list = []
 
+    TOP_K = 5
+    MIN_SIM = 0.85
+
     batch_size = 200
     for start in range(0, N, batch_size):
         batch_ids = ids[start:start + batch_size]
-        rows_emb = conn.execute(
-            """
+        rows_emb = conn.execute("""
             SELECT a.id AS aid, b.id AS bid,
                    1 - (a.embedding <=> b.embedding) AS sim
             FROM papers a
@@ -101,9 +114,7 @@ def _build_graph(conn) -> dict:
               AND a.id != b.id
               AND 1 - (a.embedding <=> b.embedding) >= %s
               AND a.embedding IS NOT NULL AND b.embedding IS NOT NULL
-            """,
-            (ids, batch_ids, MIN_SIM),
-        ).fetchall()
+        """, (ids, batch_ids, MIN_SIM)).fetchall()
         for aid, bid, sim in rows_emb:
             i, j = id_to_idx.get(aid), id_to_idx.get(bid)
             if i is None or j is None:
@@ -126,7 +137,11 @@ def _build_graph(conn) -> dict:
             "embedding_dim": EMB_DIMS,
             "generated_at": dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat(),
             "neighbors": {"top_k": TOP_K, "min_sim": MIN_SIM, "same_cluster_only": False},
-            "coords": {"included": True, "method": "stored", "canvas": {"w": 1000, "h": 700, "pad": 24}},
+            "coords": {
+                "included": has_coords,
+                "method": "stored-subset" if has_coords else "none",
+                "canvas": {"w": CANVAS_W, "h": CANVAS_H, "pad": PAD},
+            },
             "compact": True,
         },
         "clusters": clusters,
@@ -135,12 +150,9 @@ def _build_graph(conn) -> dict:
     }
 
 
-@router.get("")
-def get_graph(conn=Depends(get_conn)):
-    now = time.time()
-    if _cache["data"] is not None and (now - _cache["ts"]) < _CACHE_TTL:
-        return _cache["data"]
-    data = _build_graph(conn)
-    _cache["data"] = data
-    _cache["ts"] = now
-    return data
+@router.post("/subset")
+def get_subgraph(body: SubsetRequest, conn=Depends(get_conn)):
+    try:
+        return _build_subgraph(conn, body.ids)
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))

@@ -84,7 +84,7 @@ def export_json_graph(
         rows = conn.execute("""
             SELECT id, title, authors, published, summary, link, kmeans_cluster AS cid, domain_tag
             FROM papers
-            WHERE ai_stage2_keep=1 AND kmeans_cluster IS NOT NULL
+            WHERE ai_stage2_keep AND kmeans_cluster IS NOT NULL
             ORDER BY cid ASC, published DESC
         """).fetchall()
         if not rows:

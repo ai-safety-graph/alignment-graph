@@ -1,25 +1,20 @@
 import { useEffect, useMemo, useState, useRef, useLayoutEffect } from 'react'
 import { Share2, Search, Trash } from 'lucide-react'
-import type {
-  GraphDataCompact,
-  NodeCompact,
-  ClustersLegend,
-} from '../lib/types'
-import { buildAdjacency } from '../lib/graph'
+import type { ClustersLegend, NodeCompact } from '../lib/types'
 import StatsPaperDetails from './StatsPaperDetails'
 import MobilePaperDetails from './MobilePaperDetails'
 import PaperList from './PaperList'
 import FilterBar from './FilterBar'
 import { usePaperFilters } from '../hooks/usePaperFilters'
+import { useRelatedPapers } from '../hooks/useRelatedPapers'
 
 export default function StatsView({
-  src = '/graph.json',
   onToggleView,
 }: {
-  src?: string
   onToggleView: () => void
 }) {
-  const [data, setData] = useState<GraphDataCompact | null>(null)
+  const [nodes, setNodes] = useState<NodeCompact[] | null>(null)
+  const [clusters, setClusters] = useState<ClustersLegend>({})
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -30,42 +25,44 @@ export default function StatsView({
     let alive = true
     ;(async () => {
       try {
-        const res = await fetch(src)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const json = (await res.json()) as GraphDataCompact
+        const { fetchAllPapers, fetchClusters } = await import('../lib/api')
+        const [allNodes, allClusters] = await Promise.all([fetchAllPapers(), fetchClusters()])
         if (!alive) return
-        setData(json)
+        setNodes(allNodes)
+        setClusters(allClusters)
       } catch (e: any) {
         if (!alive) return
-        setError(`Failed to load graph: ${e?.message ?? String(e)}`)
+        setError(`Failed to load papers: ${e?.message ?? String(e)}`)
       }
     })()
     return () => {
       alive = false
     }
-  }, [src])
+  }, [])
 
-  const { byId, adj, clusters } = useMemo(() => {
-    if (!data) {
-      return {
-        byId: new Map<number, NodeCompact>(),
-        adj: new Map<number, Array<{ id: number; w: number }>>(),
-        clusters: {} as ClustersLegend,
-      }
-    }
-    const { byId, adj } = buildAdjacency(data.nodes, data.links)
-    return { byId, adj, clusters: data.clusters }
-  }, [data])
+  const byId = useMemo(() => {
+    const m = new Map<number, NodeCompact>()
+    for (const n of nodes ?? []) m.set(n.id, n)
+    return m
+  }, [nodes])
+
+  const aidToId = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const n of nodes ?? []) m.set(n.aid, n.id)
+    return m
+  }, [nodes])
+
+  const adj = useMemo(() => new Map<number, Array<{ id: number; w: number }>>(), [])
 
   const lc = (s?: string | null) => (s ?? '').toLowerCase()
 
   const results = useMemo(() => {
-    if (!data)
+    if (!nodes)
       return [] as Array<{ n: NodeCompact; score: number; deg: number }>
     const q = lc(query).trim()
     if (!q)
-      return data.nodes
-        .map((n) => ({ n, score: 0, deg: adj.get(n.id)?.length ?? 0 }))
+      return nodes
+        .map((n) => ({ n, score: 0, deg: 0 }))
         .sort((a, b) => b.deg - a.deg)
 
     const terms = q.split(/\s+/).filter(Boolean)
@@ -100,12 +97,12 @@ export default function StatsView({
       return { n, score, deg }
     }
 
-    return data.nodes
+    return nodes
       .map(scoreNode)
       .filter((r) => r.score > 0)
       .sort((a, b) => b.score - a.score)
       .slice(0, 200)
-  }, [data, query, adj])
+  }, [nodes, query])
 
   const {
     filtered,
@@ -120,7 +117,7 @@ export default function StatsView({
     toggleCluster,
     toggleYear,
     toggleDomain,
-  } = usePaperFilters(results, data)
+  } = usePaperFilters(results, nodes, clusters)
 
   useLayoutEffect(() => {
     const el = listRef.current
@@ -133,13 +130,7 @@ export default function StatsView({
     [selectedId, byId],
   )
 
-  const selectedNeighbors = useMemo(() => {
-    if (selectedId == null) return []
-    return (adj.get(selectedId) ?? [])
-      .map(({ id, w }) => ({ n: byId.get(id)!, w }))
-      .filter(({ n }) => !!n)
-      .sort((a, b) => b.w - a.w)
-  }, [selectedId, adj, byId])
+  const selectedNeighbors = useRelatedPapers(selected, aidToId)
 
   useEffect(() => {
     if (selected) {
@@ -195,7 +186,7 @@ export default function StatsView({
       <div className='flex flex-row flex-1 overflow-hidden'>
         <div className='flex flex-col flex-1 overflow-hidden min-w-0'>
           {/* Filters */}
-          {data && (
+          {nodes && (
             <div className='shrink-0 border-b border-neutral-900'>
               <FilterBar
                 clusterEntries={clusterEntries}
@@ -220,13 +211,13 @@ export default function StatsView({
           >
             {error && <p className='p-4 text-red-400'>{error}</p>}
 
-            {!data && (
+            {!nodes && (
               <div className='flex h-[60vh] items-center justify-center text-neutral-400'>
                 Loading…
               </div>
             )}
 
-            {data && filtered.length === 0 && (
+            {nodes && filtered.length === 0 && (
               <div className='p-6 text-center text-neutral-400'>
                 No matches.
               </div>

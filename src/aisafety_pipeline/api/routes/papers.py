@@ -65,6 +65,53 @@ def list_papers(
     return {"total": total, "page": page, "limit": limit, "items": items}
 
 
+@router.get("/related")
+def get_related_papers(
+    id: str = Query(...),
+    limit: int = Query(10, ge=1, le=50),
+    conn=Depends(get_conn),
+):
+    paper_id = id if id.startswith("http") else f"https://arxiv.org/abs/{id}"
+
+    emb_row = conn.execute(
+        "SELECT embedding FROM papers WHERE id = %s AND embedding IS NOT NULL",
+        (paper_id,),
+    ).fetchone()
+
+    if not emb_row:
+        raise HTTPException(status_code=404, detail="Paper not found or has no embedding")
+
+    embedding = emb_row[0]
+
+    rows = conn.execute(
+        """
+        SELECT id, title, authors, published, link, domain_tag, kmeans_cluster,
+               1 - (embedding <=> %s) AS sim
+        FROM papers
+        WHERE id != %s
+          AND ai_stage2_keep = TRUE
+          AND embedding IS NOT NULL
+        ORDER BY embedding <=> %s
+        LIMIT %s
+        """,
+        (embedding, paper_id, embedding, limit),
+    ).fetchall()
+
+    return [
+        {
+            "aid": r[0],
+            "t": r[1] or "",
+            "au": r[2] or "",
+            "pd": str(r[3]) if r[3] else "",
+            "ln": r[4] or r[0],
+            "dm": r[5] or "unknown",
+            "cid": r[6],
+            "sim": float(r[7]),
+        }
+        for r in rows
+    ]
+
+
 @router.get("/{arxiv_id:path}")
 def get_paper(arxiv_id: str, conn=Depends(get_conn)):
     # Accept bare ID like "2503.01694" or full URL

@@ -1,4 +1,4 @@
-import type { GraphDataCompact, NodeCompact } from './types'
+import type { ClustersLegend, GraphDataCompact, NodeCompact } from './types'
 
 const BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
 
@@ -22,9 +22,12 @@ export type PaginatedPapers = {
   items: NodeCompact[]
 }
 
-export async function fetchGraph(): Promise<GraphDataCompact> {
-  if (!BASE_URL) return apiFetch<GraphDataCompact>('/graph.json', { cache: 'force-cache' })
-  return apiFetch<GraphDataCompact>('/api/graph')
+export async function fetchSubgraph(paperIds: string[]): Promise<GraphDataCompact> {
+  return apiFetch<GraphDataCompact>('/api/graph/subset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids: paperIds }),
+  })
 }
 
 export async function fetchPaper(arxivUrl: string): Promise<PaperDetail | null> {
@@ -63,6 +66,36 @@ export async function fetchPapers(params: {
   if (params.from) q.set('from', params.from)
   if (params.to) q.set('to', params.to)
   return apiFetch<PaginatedPapers>(`/api/papers?${q}`)
+}
+
+export async function fetchClusters(): Promise<ClustersLegend> {
+  type Row = { cid: number; label: string | null; size: number }
+  const rows = await apiFetch<Row[]>('/api/clusters')
+  const legend: ClustersLegend = {}
+  for (const r of rows) legend[String(r.cid)] = { label: r.label, size: r.size }
+  return legend
+}
+
+export async function fetchAllPapers(): Promise<NodeCompact[]> {
+  const PAGE_SIZE = 200
+  const first = await fetchPapers({ page: 1, limit: PAGE_SIZE })
+  const totalPages = Math.ceil(first.total / PAGE_SIZE)
+  const allItems = totalPages <= 1
+    ? first.items
+    : [...first.items, ...await Promise.all(
+        Array.from({ length: totalPages - 1 }, (_, i) =>
+          fetchPapers({ page: i + 2, limit: PAGE_SIZE }),
+        ),
+      ).then((pages) => pages.flatMap((r) => r.items))]
+  return allItems.map((item, i) => ({ ...item, id: i }))
+}
+
+export type RelatedPaper = NodeCompact & { sim: number }
+
+export async function fetchRelated(arxivId: string, limit = 10): Promise<RelatedPaper[]> {
+  return apiFetch<RelatedPaper[]>(
+    `/api/papers/related?id=${encodeURIComponent(arxivId)}&limit=${limit}`,
+  )
 }
 
 export const hasApi = () => Boolean(BASE_URL)

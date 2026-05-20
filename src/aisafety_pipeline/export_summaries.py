@@ -108,7 +108,7 @@ def export_summaries_json(
                 params.extend(sorted(id_whitelist))
 
         if include_all_kept and not id_whitelist:
-            where.append("ai_stage2_keep=1")
+            where.append("ai_stage2_keep")
 
         if only_clustered:
             where.append("kmeans_cluster IS NOT NULL")

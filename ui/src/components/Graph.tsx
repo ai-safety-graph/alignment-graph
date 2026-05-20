@@ -32,9 +32,11 @@ import ClusterLegendOverlay from './ClusterLegendOverlay'
 export default function ArxivGraph({
   src = '/graph.json',
   onToggleView,
+  paperIds,
 }: {
   src?: string
   onToggleView?: () => void
+  paperIds?: string[]
 }) {
   const fgRef = useRef<ForceGraphMethods | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
@@ -68,11 +70,12 @@ export default function ArxivGraph({
 
   // Data fetch
   useEffect(() => {
+    if (!paperIds?.length) return
     let alive = true
     ;(async () => {
       try {
-        const { fetchGraph } = await import('../lib/api')
-        const json = await fetchGraph()
+        const { fetchSubgraph } = await import('../lib/api')
+        const json = await fetchSubgraph(paperIds)
         if (!alive) return
         setData(json)
       } catch (e: any) {
@@ -83,7 +86,7 @@ export default function ArxivGraph({
     return () => {
       alive = false
     }
-  }, [])
+  }, [paperIds])
 
   // Prepare simulation nodes (mutable x/y)
   const simNodes = useMemo(() => {

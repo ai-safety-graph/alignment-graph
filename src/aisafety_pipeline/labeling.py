@@ -36,7 +36,7 @@ def label_clusters_default(conn, method_name: str = "default", topk_terms: int =
     cur.execute("""
         SELECT p.id, p.title, p.summary, p.kmeans_cluster AS cid
         FROM papers AS p
-        WHERE p.ai_stage2_keep=1 AND p.kmeans_cluster IS NOT NULL
+        WHERE p.ai_stage2_keep AND p.kmeans_cluster IS NOT NULL
         ORDER BY p.kmeans_cluster ASC
     """)
     rows = cur.fetchall()

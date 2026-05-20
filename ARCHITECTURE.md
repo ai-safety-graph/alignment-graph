@@ -10,7 +10,7 @@ This repository builds an AI-safety literature exploration system with two major
 The system supports two deployment modes:
 
 - **API mode** (production): pipeline → PostgreSQL + pgvector → FastAPI → frontend
-- **Static mode** (legacy/dev): pipeline → SQLite → JSON artifacts → frontend
+- **Static mode** (legacy/dev): pipeline → SQLite → JSON artifacts → frontend (limited — MobileView and StatsView require the API)
 
 ---
 
@@ -65,8 +65,10 @@ See `src/aisafety_pipeline/ARCHITECTURE.md` for module-level details.
 FastAPI backend. Owns:
 
 - REST API serving live data from PostgreSQL
+- Paginated paper listing and single paper detail
+- Subset graph building on demand (`POST /api/graph/subset`)
+- On-demand related papers via pgvector HNSW nearest-neighbor (`GET /api/papers/related`)
 - Semantic search via pgvector ANN
-- In-process graph response cache (1-hour TTL)
 - CORS for Netlify frontend
 
 See `src/aisafety_pipeline/api/ARCHITECTURE.md` for route-level details.
@@ -76,8 +78,9 @@ See `src/aisafety_pipeline/api/ARCHITECTURE.md` for route-level details.
 Frontend application built with Vite/React. Owns:
 
 - Choosing desktop vs mobile rendering
-- Fetching data from the API (when `VITE_API_URL` is set) or from static JSON (fallback)
-- Rendering graph/list interactions
+- Fetching all papers and clusters from the API on mount
+- Subset graph rendering for desktop (`POST /api/graph/subset`)
+- On-demand related papers per paper selection (`GET /api/papers/related`)
 - Keyword search and semantic search (API mode only)
 
 See `ui/ARCHITECTURE.md` for frontend details.
@@ -195,9 +198,9 @@ AI should be careful around:
 
 1. **Artifact schema drift**: changes to `export_graph.py` field names silently break the UI in static mode.
 2. **Cluster-method mismatch**: API and static export both assume k-means; changing this requires coordinated updates.
-3. **Identifier mismatch**: arXiv abs URL format must remain stable across pipeline and UI.
+3. **Identifier mismatch**: arXiv abs URL format must remain stable across pipeline and UI. The frontend assigns ephemeral numeric `id` values by index; `aid` (the arXiv URL) is the durable key.
 4. **Static artifact staleness**: in static mode, pipeline changes have no effect until fresh JSON is exported and redeployed.
-5. **API-only features in UI**: semantic search and paper detail via API are no-ops when `VITE_API_URL` is unset; the UI must degrade gracefully.
+5. **API-only features in UI**: semantic search, related papers, and paper listing all require `VITE_API_URL`. MobileView and StatsView will not load papers without it.
 
 ---
 

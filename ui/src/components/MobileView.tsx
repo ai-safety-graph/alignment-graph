@@ -3,15 +3,11 @@ import { Trash, Search, Newspaper, Sparkles } from 'lucide-react'
 
 import MobilePaperDetails from './MobilePaperDetails'
 import PaperList from './PaperList'
-import type {
-  GraphDataCompact,
-  NodeCompact,
-  ClustersLegend,
-} from '../lib/types'
+import type { ClustersLegend, NodeCompact } from '../lib/types'
 import type { SearchResult } from '../lib/api'
-import { buildAdjacency } from '../lib/graph'
 import FilterBar from './FilterBar'
 import { usePaperFilters } from '../hooks/usePaperFilters'
+import { useRelatedPapers } from '../hooks/useRelatedPapers'
 import { hasApi, searchPapers } from '../lib/api'
 
 export default function MobilePapers({
@@ -20,7 +16,8 @@ export default function MobilePapers({
   src?: string
   onToggleView?: () => void
 }) {
-  const [data, setData] = useState<GraphDataCompact | null>(null)
+  const [nodes, setNodes] = useState<NodeCompact[] | null>(null)
+  const [clusters, setClusters] = useState<ClustersLegend>({})
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -35,18 +32,19 @@ export default function MobilePapers({
   const searchBarRef = useRef<HTMLDivElement | null>(null)
   const [searchHeight, setSearchHeight] = useState(0)
 
-  // Fetch graph data
+  // Fetch papers and cluster metadata
   useEffect(() => {
     let alive = true
     ;(async () => {
       try {
-        const { fetchGraph } = await import('../lib/api')
-        const json = await fetchGraph()
+        const { fetchAllPapers, fetchClusters } = await import('../lib/api')
+        const [allNodes, allClusters] = await Promise.all([fetchAllPapers(), fetchClusters()])
         if (!alive) return
-        setData(json)
+        setNodes(allNodes)
+        setClusters(allClusters)
       } catch (e: any) {
         if (!alive) return
-        setError(`Failed to load graph: ${e?.message ?? String(e)}`)
+        setError(`Failed to load papers: ${e?.message ?? String(e)}`)
       }
     })()
     return () => {
@@ -74,29 +72,30 @@ export default function MobilePapers({
     return () => clearTimeout(t)
   }, [query, searchMode])
 
-  // Build adjacency & byId maps for neighbor details
-  const { byId, adj, clusters } = useMemo(() => {
-    if (!data) {
-      return {
-        byId: new Map<number, NodeCompact>(),
-        adj: new Map<number, Array<{ id: number; w: number }>>(),
-        clusters: {} as ClustersLegend,
-      }
-    }
-    const { byId, adj } = buildAdjacency(data.nodes, data.links)
-    return { byId, adj, clusters: data.clusters }
-  }, [data])
+  const byId = useMemo(() => {
+    const m = new Map<number, NodeCompact>()
+    for (const n of nodes ?? []) m.set(n.id, n)
+    return m
+  }, [nodes])
+
+  const aidToId = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const n of nodes ?? []) m.set(n.aid, n.id)
+    return m
+  }, [nodes])
+
+  const adj = useMemo(() => new Map<number, Array<{ id: number; w: number }>>(), [])
 
   const lc = (s?: string | null) => (s ?? '').toLowerCase()
 
   // Scored search results (reuse weights from desktop component)
   const results = useMemo(() => {
-    if (!data)
+    if (!nodes)
       return [] as Array<{ n: NodeCompact; score: number; deg: number }>
     const q = lc(query).trim()
     if (!q)
-      return data.nodes
-        .map((n) => ({ n, score: 0, deg: adj.get(n.id)?.length ?? 0 }))
+      return nodes
+        .map((n) => ({ n, score: 0, deg: 0 }))
         .sort((a, b) => b.deg - a.deg)
 
     const terms = q.split(/\s+/).filter(Boolean)
@@ -131,12 +130,12 @@ export default function MobilePapers({
       return { n, score, deg }
     }
 
-    return data.nodes
+    return nodes
       .map(scoreNode)
       .filter((r) => r.score > 0)
       .sort((a, b) => b.score - a.score)
       .slice(0, 200)
-  }, [data, query, adj])
+  }, [nodes, query])
 
   // Convert semantic results to the same scored shape as keyword results
   const semanticAsScored = useMemo(
@@ -165,7 +164,7 @@ export default function MobilePapers({
     toggleCluster,
     toggleYear,
     toggleDomain,
-  } = usePaperFilters(activeResults, data)
+  } = usePaperFilters(activeResults, nodes, clusters)
 
   useLayoutEffect(() => {
     const el = listRef.current
@@ -178,13 +177,7 @@ export default function MobilePapers({
     [selectedId, byId],
   )
 
-  const selectedNeighbors = useMemo(() => {
-    if (selectedId == null) return []
-    return (adj.get(selectedId) ?? [])
-      .map(({ id, w }) => ({ n: byId.get(id)!, w }))
-      .filter(({ n }) => !!n)
-      .sort((a, b) => b.w - a.w)
-  }, [selectedId, adj, byId])
+  const selectedNeighbors = useRelatedPapers(selected, aidToId)
 
   useEffect(() => {
     if (selected) {
@@ -298,7 +291,7 @@ export default function MobilePapers({
           </div>
         </div>
 
-        {data && (
+        {nodes && (
           <div
             className='sticky bg-neutral-950/90 backdrop-blur border-b border-neutral-900'
             style={{ top: searchHeight }}
@@ -319,7 +312,7 @@ export default function MobilePapers({
           </div>
         )}
 
-        {!data && (
+        {!nodes && (
           <div className='flex h-[60vh] items-center justify-center text-neutral-300'>
             Loading papers…
           </div>
@@ -331,7 +324,7 @@ export default function MobilePapers({
           </div>
         )}
 
-        {!semanticLoading && data && filtered.length === 0 && (
+        {!semanticLoading && nodes && filtered.length === 0 && (
           <div className='p-6 text-center text-neutral-400'>No matches.</div>
         )}
 
