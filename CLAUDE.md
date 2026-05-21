@@ -40,7 +40,6 @@ See the ARCHITECTURE.md files for full detail. Short version:
 **Be careful around:**
 - SQL schema changes (either backend)
 - Compact graph field names
-- `fetchAllPapers` id assignment logic
 - pgvector operator syntax (`<=>`)
 - CORS origins in `main.py`
 - Route registration order in `papers.py`

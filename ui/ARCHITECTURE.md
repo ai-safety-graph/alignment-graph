@@ -118,6 +118,8 @@ Three detail components share the same props interface (`paper`, `clusters`, `ne
 
 `neighbors` is typed as `{ n: NodeCompact; w: number }[]`. In `Graph.tsx` it comes from the subgraph adjacency. In `MobileView` and `StatsView` it comes from `useRelatedPapers`.
 
+`onSelectPaper` takes `aid: string` in `StatsPaperDetails` and `MobilePaperDetails` (the paper's canonical arXiv URL). `GraphPaperDetails` still uses `onSelectPaper(id: number)` because the graph view selects by numeric node id.
+
 Lazy summary hydration via `lib/summaries.ts` → `usePaperSummary` hook.
 In API mode, `getSummaryByUrl()` calls `fetchPaper()` and adapts the result to the `Summary` shape.
 In static mode, it fetches `/summaries.json` and caches in module scope.
@@ -171,7 +173,9 @@ Inherited from the backend exporter. Changing this requires coordinated backend 
 
 ### Numeric `id` is assigned by index, not the database
 
-`fetchAllPapers()` assigns `id: i` (array index) to each paper. This means `id` is only stable within a session. The persistent identifier is `aid` (the canonical arXiv abs URL). `useRelatedPapers` uses `aidToId` to map API responses back to session-stable numeric ids for `byId` lookups.
+`fetchAllPapers()` assigns `id: i` (array index) to each paper. This value is only stable within a session and is used as a React `key` in some list renders. The persistent identifier is `aid` (the canonical arXiv abs URL).
+
+`MobileView` and `StatsView` select papers by `aid` (`selectedId: string | null`), not by numeric `id`. `useRelatedPapers` returns results keyed by `aid` directly from the API — no `aidToId` map is needed. Clicking a related paper always works regardless of whether it is in the currently-loaded page.
 
 ### Search quality depends on `sm`
 
@@ -202,7 +206,6 @@ High-risk:
 - Summary URL canonicalization in `lib/summaries.ts`
 - `hasApi()` guard logic
 - `semanticAsScored` cast in `MobileView.tsx` — must produce `{ n: NodeCompact, score: number, deg: number }`
-- `fetchAllPapers` id assignment — `useRelatedPapers` depends on `aidToId` derived from these ids
 - `usePaperFilters` signature — takes `nodes: NodeCompact[] | null` and `clusters: ClustersLegend` separately (not `GraphDataCompact`)
 - `GraphDataCompact` typing changes
 
