@@ -19,7 +19,7 @@ export default function StatsView({
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
-  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -110,15 +110,9 @@ export default function StatsView({
     isLoadingMoreRef.current = false
   }
 
-  const byId = useMemo(() => {
-    const m = new Map<number, NodeCompact>()
-    for (const n of nodes ?? []) m.set(n.id, n)
-    return m
-  }, [nodes])
-
-  const aidToId = useMemo(() => {
-    const m = new Map<string, number>()
-    for (const n of nodes ?? []) m.set(n.aid, n.id)
+  const byAid = useMemo(() => {
+    const m = new Map<string, NodeCompact>()
+    for (const n of nodes ?? []) m.set(n.aid, n)
     return m
   }, [nodes])
 
@@ -136,11 +130,11 @@ export default function StatsView({
   }, [filtered])
 
   const selected = useMemo(
-    () => (selectedId != null ? (byId.get(selectedId) ?? null) : null),
-    [selectedId, byId],
+    () => (selectedId != null ? (byAid.get(selectedId) ?? null) : null),
+    [selectedId, byAid],
   )
 
-  const selectedNeighbors = useRelatedPapers(selected, aidToId)
+  const selectedNeighbors = useRelatedPapers(selected)
 
   useEffect(() => {
     if (selected) {
@@ -257,7 +251,7 @@ export default function StatsView({
               clusters={clusters}
               neighbors={selectedNeighbors}
               onClose={() => setSelectedId(null)}
-              onSelectPaper={(id) => setSelectedId(id)}
+              onSelectPaper={setSelectedId}
             />
           ) : (
             <div className='flex h-full items-center justify-center text-neutral-500 text-sm'>
@@ -279,7 +273,7 @@ export default function StatsView({
               clusters={clusters}
               neighbors={selectedNeighbors}
               onClose={() => setSelectedId(null)}
-              onSelectPaper={(id) => setSelectedId(id)}
+              onSelectPaper={setSelectedId}
             />
           </div>
         </div>

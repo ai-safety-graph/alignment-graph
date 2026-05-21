@@ -10,7 +10,7 @@ interface Props {
   clusters: ClustersLegend
   neighbors: NeighborEntry[]
   onClose: () => void
-  onSelectPaper: (id: number) => void
+  onSelectPaper: (aid: string) => void
 }
 
 export default function StatsPaperDetails({
@@ -28,7 +28,7 @@ export default function StatsPaperDetails({
     const el = scrollerRef.current
     if (!el) return
     el.scrollTop = 0
-  }, [paper.id || urlKey])
+  }, [paper.aid])
 
   return (
     <aside
@@ -106,12 +106,12 @@ export default function StatsPaperDetails({
 
           <ul className='list-none p-0 m-0'>
             {neighbors.map(({ n }) => (
-              <li key={n.id} className='py-1.5 border-b border-neutral-800'>
+              <li key={n.aid} className='py-1.5 border-b border-neutral-800'>
                 <div className='flex justify-between gap-2'>
                   <a
                     onClick={(e) => {
                       e.preventDefault()
-                      onSelectPaper(n.id)
+                      onSelectPaper(n.aid)
                     }}
                     href='#'
                     className='no-underline text-blue-400 hover:underline flex-1'

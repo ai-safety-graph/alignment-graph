@@ -5,7 +5,7 @@ import { cidToColor } from '../lib/colors'
 interface PaperListProps {
   items: Array<{ n: NodeCompact; deg: number }>
   clusters: ClustersLegend
-  onSelectId: (id: number) => void
+  onSelectId: (aid: string) => void
   enableHover?: boolean
   resetKey?: string
   hasMore?: boolean
@@ -54,9 +54,9 @@ export default function PaperList({
     <>
       <ul className='divide-y divide-neutral-800'>
         {slice.map(({ n, deg }) => (
-          <li key={n.id}>
+          <li key={n.aid}>
             <button
-              onClick={() => onSelectId(n.id)}
+              onClick={() => onSelectId(n.aid)}
               className={`w-full text-left px-4 py-3 active:bg-neutral-900${enableHover ? ' hover:bg-neutral-900' : ''}`}
             >
               <div className='text-[13px] text-neutral-400 truncate'>{n.au}</div>

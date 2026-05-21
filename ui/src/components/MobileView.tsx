@@ -22,7 +22,7 @@ export default function MobilePapers({
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
-  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [searchMode, setSearchMode] = useState<'keyword' | 'semantic'>(
     'keyword',
   )
@@ -137,31 +137,22 @@ export default function MobilePapers({
     return () => clearTimeout(t)
   }, [query, searchMode])
 
-  const byId = useMemo(() => {
-    const m = new Map<number, NodeCompact>()
-    for (const n of nodes ?? []) m.set(n.id, n)
+  const byAid = useMemo(() => {
+    const m = new Map<string, NodeCompact>()
+    for (const n of nodes ?? []) m.set(n.aid, n)
     return m
   }, [nodes])
 
-  const aidToId = useMemo(() => {
-    const m = new Map<string, number>()
-    for (const n of nodes ?? []) m.set(n.aid, n.id)
-    return m
-  }, [nodes])
-
-  // Semantic results use negative ids to avoid colliding with loaded paper ids
-  const semanticById = useMemo(() => {
-    const m = new Map<number, NodeCompact>()
-    semanticResults.forEach((r, i) =>
-      m.set(-(i + 1), { ...r, id: -(i + 1) } as NodeCompact),
-    )
+  const semanticByAid = useMemo(() => {
+    const m = new Map<string, NodeCompact>()
+    semanticResults.forEach((r, i) => m.set(r.aid, { ...r, id: -(i + 1) } as NodeCompact))
     return m
   }, [semanticResults])
 
-  const effectiveById = useMemo(() => {
-    if (searchMode !== 'semantic' || !semanticResults.length) return byId
-    return new Map([...byId, ...semanticById])
-  }, [searchMode, byId, semanticById, semanticResults.length])
+  const effectiveByAid = useMemo(() => {
+    if (searchMode !== 'semantic' || !semanticResults.length) return byAid
+    return new Map([...byAid, ...semanticByAid])
+  }, [searchMode, byAid, semanticByAid, semanticResults.length])
 
   const semanticAsScored = useMemo(
     () =>
@@ -230,11 +221,11 @@ export default function MobilePapers({
   }, [filtered])
 
   const selected = useMemo(
-    () => (selectedId != null ? (effectiveById.get(selectedId) ?? null) : null),
-    [selectedId, effectiveById],
+    () => (selectedId != null ? (effectiveByAid.get(selectedId) ?? null) : null),
+    [selectedId, effectiveByAid],
   )
 
-  const selectedNeighbors = useRelatedPapers(selected, aidToId)
+  const selectedNeighbors = useRelatedPapers(selected)
 
   useEffect(() => {
     if (selected) {
@@ -418,7 +409,7 @@ export default function MobilePapers({
               clusters={clusters}
               neighbors={selectedNeighbors}
               onClose={() => setSelectedId(null)}
-              onSelectPaper={(id) => setSelectedId(id)}
+              onSelectPaper={setSelectedId}
             />
           </div>
         </div>
