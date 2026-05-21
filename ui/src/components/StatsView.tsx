@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useRef, useLayoutEffect } from 'react'
+import type { PaperDetail } from '../lib/api'
 import { Share2, Search, Trash } from 'lucide-react'
 import type { ClustersLegend, NodeCompact } from '../lib/types'
 import StatsPaperDetails from './StatsPaperDetails'
@@ -20,6 +21,7 @@ export default function StatsView({
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [fetchedPaper, setFetchedPaper] = useState<PaperDetail | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -110,12 +112,6 @@ export default function StatsView({
     isLoadingMoreRef.current = false
   }
 
-  const byAid = useMemo(() => {
-    const m = new Map<string, NodeCompact>()
-    for (const n of nodes ?? []) m.set(n.aid, n)
-    return m
-  }, [nodes])
-
   const filtered = useMemo(() => {
     let res = nodes ?? []
     if (activeCids.size > 0) res = res.filter((n) => activeCids.has(n.cid))
@@ -129,10 +125,21 @@ export default function StatsView({
     el.scrollTop = 0
   }, [filtered])
 
-  const selected = useMemo(
-    () => (selectedId != null ? (byAid.get(selectedId) ?? null) : null),
-    [selectedId, byAid],
-  )
+  useEffect(() => {
+    if (!selectedId) {
+      setFetchedPaper(null)
+      return
+    }
+    let cancelled = false
+    import('../lib/api').then(({ fetchPaper }) => {
+      fetchPaper(selectedId).then((p) => {
+        if (!cancelled) setFetchedPaper(p)
+      })
+    })
+    return () => { cancelled = true }
+  }, [selectedId])
+
+  const selected = fetchedPaper
 
   const selectedNeighbors = useRelatedPapers(selected)
 
