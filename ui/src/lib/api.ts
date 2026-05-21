@@ -32,7 +32,7 @@ export async function fetchSubgraph(paperIds: string[]): Promise<GraphDataCompac
 
 export async function fetchPaper(arxivUrl: string): Promise<PaperDetail | null> {
   try {
-    const id = arxivUrl.replace('https://arxiv.org/abs/', '')
+    const id = new URL(arxivUrl).pathname.replace(/^\/abs\//, '')
     return await apiFetch<PaperDetail>(`/api/papers/${encodeURIComponent(id)}`)
   } catch {
     return null

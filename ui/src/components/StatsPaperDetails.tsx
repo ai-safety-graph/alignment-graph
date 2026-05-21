@@ -97,15 +97,6 @@ export default function StatsPaperDetails({
             )
           )}
 
-          {paper.sm && (
-            <>
-              <div className='font-semibold my-2 text-neutral-200'>Summary</div>
-              <p className='whitespace-pre-wrap leading-relaxed text-neutral-300'>
-                {paper.sm}
-              </p>
-            </>
-          )}
-
           <div className='font-semibold my-2 text-neutral-200'>
             Aligned Papers
           </div>
