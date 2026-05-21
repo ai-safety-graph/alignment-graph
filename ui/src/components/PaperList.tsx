@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { NodeCompact, ClustersLegend } from '../lib/types'
 import { cidToColor } from '../lib/colors'
 
@@ -7,6 +7,9 @@ interface PaperListProps {
   clusters: ClustersLegend
   onSelectId: (id: number) => void
   enableHover?: boolean
+  resetKey?: string
+  hasMore?: boolean
+  onLoadMore?: () => void
 }
 
 export default function PaperList({
@@ -14,24 +17,38 @@ export default function PaperList({
   clusters,
   onSelectId,
   enableHover = false,
+  resetKey,
+  hasMore = false,
+  onLoadMore,
 }: PaperListProps) {
   const [limit, setLimit] = useState(40)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
+  const onLoadMoreRef = useRef(onLoadMore)
   const slice = useMemo(() => items.slice(0, limit), [items, limit])
 
+  useLayoutEffect(() => { onLoadMoreRef.current = onLoadMore })
+
+  // Reset to top when resetKey changes (or items reference when no resetKey is provided)
+  const effectiveResetKey = resetKey ?? items
   useEffect(() => {
     setLimit(40)
-  }, [items])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveResetKey])
 
   useEffect(() => {
     const el = sentinelRef.current
     if (!el) return
     const io = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting) setLimit((l) => Math.min(l + 40, items.length))
+      if (!entries[0].isIntersecting) return
+      if (limit < items.length) {
+        setLimit((l) => Math.min(l + 40, items.length))
+      } else if (hasMore) {
+        onLoadMoreRef.current?.()
+      }
     })
     io.observe(el)
     return () => io.disconnect()
-  }, [items.length])
+  }, [items.length, limit, hasMore])
 
   return (
     <>

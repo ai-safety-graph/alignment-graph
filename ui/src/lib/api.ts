@@ -57,15 +57,28 @@ export async function fetchPapers(params: {
   domain?: string
   from?: string
   to?: string
+  q?: string
 } = {}): Promise<PaginatedPapers> {
-  const q = new URLSearchParams()
-  if (params.page != null) q.set('page', String(params.page))
-  if (params.limit != null) q.set('limit', String(params.limit))
-  if (params.cluster != null) q.set('cluster', String(params.cluster))
-  if (params.domain) q.set('domain', params.domain)
-  if (params.from) q.set('from', params.from)
-  if (params.to) q.set('to', params.to)
-  return apiFetch<PaginatedPapers>(`/api/papers?${q}`)
+  const qs = new URLSearchParams()
+  if (params.page != null) qs.set('page', String(params.page))
+  if (params.limit != null) qs.set('limit', String(params.limit))
+  if (params.cluster != null) qs.set('cluster', String(params.cluster))
+  if (params.domain) qs.set('domain', params.domain)
+  if (params.from) qs.set('from', params.from)
+  if (params.to) qs.set('to', params.to)
+  if (params.q) qs.set('q', params.q)
+  return apiFetch<PaginatedPapers>(`/api/papers?${qs}`)
+}
+
+export type StatsResponse = {
+  total_filtered: number
+  domains: Record<string, number>
+  clusters: Record<string, number>
+  by_month: Record<string, number>
+}
+
+export async function fetchStats(): Promise<StatsResponse> {
+  return apiFetch<StatsResponse>('/api/stats')
 }
 
 export async function fetchClusters(): Promise<ClustersLegend> {

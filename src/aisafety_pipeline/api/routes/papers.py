@@ -14,6 +14,7 @@ def list_papers(
     domain: Optional[str] = Query(None),
     from_date: Optional[str] = Query(None, alias="from"),
     to_date: Optional[str] = Query(None, alias="to"),
+    q: Optional[str] = Query(None),
     conn=Depends(get_conn),
 ):
     offset = (page - 1) * limit
@@ -32,6 +33,10 @@ def list_papers(
     if to_date:
         where.append("published <= %s")
         params.append(to_date)
+    if q:
+        where.append("(title ILIKE %s OR authors ILIKE %s)")
+        like = f"%{q}%"
+        params.extend([like, like])
 
     where_sql = "WHERE " + " AND ".join(where)
 
