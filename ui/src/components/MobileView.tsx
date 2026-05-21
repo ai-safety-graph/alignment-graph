@@ -6,7 +6,7 @@ import PaperList from './PaperList'
 import type { ClustersLegend, NodeCompact } from '../lib/types'
 import type { SearchResult } from '../lib/api'
 import FilterBar from './FilterBar'
-import { usePaperFilters } from '../hooks/usePaperFilters'
+import { useApiFilters } from '../hooks/useApiFilters'
 import { useRelatedPapers } from '../hooks/useRelatedPapers'
 import { hasApi, searchPapers } from '../lib/api'
 
@@ -18,39 +18,104 @@ export default function MobilePapers({
 }) {
   const [nodes, setNodes] = useState<NodeCompact[] | null>(null)
   const [clusters, setClusters] = useState<ClustersLegend>({})
+  const [availableDomains, setAvailableDomains] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [searchMode, setSearchMode] = useState<'keyword' | 'semantic'>(
     'keyword',
   )
   const [semanticResults, setSemanticResults] = useState<SearchResult[]>([])
   const [semanticLoading, setSemanticLoading] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
   const apiAvailable = hasApi()
 
   const listRef = useRef<HTMLDivElement | null>(null)
   const searchBarRef = useRef<HTMLDivElement | null>(null)
   const [searchHeight, setSearchHeight] = useState(0)
+  const hasLoadedRef = useRef(false)
+  const isLoadingMoreRef = useRef(false)
+  const loadParamsRef = useRef({
+    query: '',
+    fromDate: undefined as string | undefined,
+    page: 1,
+    hasMore: false,
+  })
 
-  // Fetch papers and cluster metadata
+  // Fetch clusters + available domains once on mount
   useEffect(() => {
     let alive = true
     ;(async () => {
       try {
-        const { fetchAllPapers, fetchClusters } = await import('../lib/api')
-        const [allNodes, allClusters] = await Promise.all([fetchAllPapers(), fetchClusters()])
+        const { fetchClusters, fetchStats } = await import('../lib/api')
+        const [allClusters, stats] = await Promise.all([
+          fetchClusters(),
+          fetchStats(),
+        ])
         if (!alive) return
-        setNodes(allNodes)
         setClusters(allClusters)
-      } catch (e: any) {
-        if (!alive) return
-        setError(`Failed to load papers: ${e?.message ?? String(e)}`)
-      }
+        setAvailableDomains(Object.keys(stats.domains).filter(Boolean).sort())
+      } catch {}
     })()
     return () => {
       alive = false
     }
   }, [])
+
+  // Debounce the search query
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query), 300)
+    return () => clearTimeout(timer)
+  }, [query])
+
+  const {
+    fromDate,
+    datePreset,
+    setDatePreset,
+    activeCids,
+    activeDomains,
+    clusterEntries,
+    hasActiveFilters,
+    clearAllFilters,
+    toggleCluster,
+    toggleDomain,
+  } = useApiFilters(clusters)
+
+  // Keep loadParamsRef in sync so loadMore always reads fresh values
+  loadParamsRef.current = { query: debouncedQuery, fromDate, page, hasMore }
+
+  // Reload keyword papers whenever debounced query, date filter, or mode changes
+  useEffect(() => {
+    if (searchMode !== 'keyword') return
+    let alive = true
+    isLoadingMoreRef.current = false
+    ;(async () => {
+      try {
+        const { fetchPapers } = await import('../lib/api')
+        const result = await fetchPapers({
+          q: debouncedQuery || undefined,
+          from: fromDate,
+          limit: 50,
+        })
+        if (!alive) return
+        setNodes(result.items.map((item, i) => ({ ...item, id: i })))
+        setPage(1)
+        setTotal(result.total)
+        setHasMore(result.items.length < result.total)
+        hasLoadedRef.current = true
+      } catch (e: any) {
+        if (!alive) return
+        if (!hasLoadedRef.current)
+          setError(`Failed to load papers: ${e?.message ?? String(e)}`)
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [debouncedQuery, fromDate, searchMode])
 
   // Debounced semantic search
   useEffect(() => {
@@ -84,87 +149,79 @@ export default function MobilePapers({
     return m
   }, [nodes])
 
-  const adj = useMemo(() => new Map<number, Array<{ id: number; w: number }>>(), [])
+  // Semantic results use negative ids to avoid colliding with loaded paper ids
+  const semanticById = useMemo(() => {
+    const m = new Map<number, NodeCompact>()
+    semanticResults.forEach((r, i) =>
+      m.set(-(i + 1), { ...r, id: -(i + 1) } as NodeCompact),
+    )
+    return m
+  }, [semanticResults])
 
-  const lc = (s?: string | null) => (s ?? '').toLowerCase()
+  const effectiveById = useMemo(() => {
+    if (searchMode !== 'semantic' || !semanticResults.length) return byId
+    return new Map([...byId, ...semanticById])
+  }, [searchMode, byId, semanticById, semanticResults.length])
 
-  // Scored search results (reuse weights from desktop component)
-  const results = useMemo(() => {
-    if (!nodes)
-      return [] as Array<{ n: NodeCompact; score: number; deg: number }>
-    const q = lc(query).trim()
-    if (!q)
-      return nodes
-        .map((n) => ({ n, score: 0, deg: 0 }))
-        .sort((a, b) => b.deg - a.deg)
-
-    const terms = q.split(/\s+/).filter(Boolean)
-    const weight = { title: 3, authors: 2, domain: 1.5, summary: 1 }
-
-    function termCount(hay: string, term: string) {
-      let c = 0
-      let i = 0
-      while ((i = hay.indexOf(term, i)) !== -1) {
-        c++
-        i += term.length
-      }
-      return c
-    }
-
-    function scoreNode(n: NodeCompact) {
-      const title = lc(n.t)
-      const authors = lc(n.au)
-      const domain = lc(n.dm)
-      const summary = lc(n.sm)
-
-      let base = 0
-      for (const t of terms) {
-        base += termCount(title, t) * weight.title
-        base += termCount(authors, t) * weight.authors
-        base += termCount(domain, t) * weight.domain
-        base += termCount(summary, t) * weight.summary
-      }
-      const matched = base > 0
-      const deg = adj.get(n.id)?.length ?? 0
-      const score = matched ? base + Math.min(deg, 50) * 0.02 : 0
-      return { n, score, deg }
-    }
-
-    return nodes
-      .map(scoreNode)
-      .filter((r) => r.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 200)
-  }, [nodes, query])
-
-  // Convert semantic results to the same scored shape as keyword results
   const semanticAsScored = useMemo(
     () =>
-      semanticResults.map((r) => ({
-        n: r as NodeCompact,
+      semanticResults.map((r, i) => ({
+        n: { ...r, id: -(i + 1) } as NodeCompact,
         score: r.sim ?? 0,
-        deg: adj.get(r.id)?.length ?? 0,
+        deg: 0,
       })),
-    [semanticResults, adj],
+    [semanticResults],
+  )
+
+  const keywordResults = useMemo(
+    () => (nodes ?? []).map((n) => ({ n, score: 0, deg: 0 })),
+    [nodes],
   )
 
   const activeResults =
-    searchMode === 'semantic' && query.trim() ? semanticAsScored : results
+    searchMode === 'semantic' && query.trim()
+      ? semanticAsScored
+      : keywordResults
 
-  const {
-    filtered,
-    activeCids,
-    activeYear,
-    activeDomains,
-    clusterEntries,
-    availableYears,
-    availableDomains,
-    hasActiveFilters,
-    clearAllFilters,
-    toggleCluster,
-    toggleYear,
-    toggleDomain,
-  } = usePaperFilters(activeResults, nodes, clusters)
+  const filtered = useMemo(() => {
+    let res = activeResults
+    if (activeCids.size > 0) res = res.filter(({ n }) => activeCids.has(n.cid))
+    if (activeDomains.size > 0)
+      res = res.filter(({ n }) => activeDomains.has(n.dm))
+    return res
+  }, [activeResults, activeCids, activeDomains])
+
+  async function loadMore() {
+    if (searchMode !== 'keyword') return
+    const {
+      query: q,
+      fromDate: fd,
+      page: p,
+      hasMore: hm,
+    } = loadParamsRef.current
+    if (!hm || isLoadingMoreRef.current) return
+    isLoadingMoreRef.current = true
+    try {
+      const { fetchPapers } = await import('../lib/api')
+      const result = await fetchPapers({
+        q: q || undefined,
+        from: fd,
+        limit: 50,
+        page: p + 1,
+      })
+      setNodes((prev) => {
+        const prevLen = prev?.length ?? 0
+        return [
+          ...(prev ?? []),
+          ...result.items.map((item, i) => ({ ...item, id: prevLen + i })),
+        ]
+      })
+      setPage(p + 1)
+      setTotal(result.total)
+      setHasMore((p + 1) * 50 < result.total)
+    } catch {}
+    isLoadingMoreRef.current = false
+  }
 
   useLayoutEffect(() => {
     const el = listRef.current
@@ -173,8 +230,8 @@ export default function MobilePapers({
   }, [filtered])
 
   const selected = useMemo(
-    () => (selectedId != null ? (byId.get(selectedId) ?? null) : null),
-    [selectedId, byId],
+    () => (selectedId != null ? (effectiveById.get(selectedId) ?? null) : null),
+    [selectedId, effectiveById],
   )
 
   const selectedNeighbors = useRelatedPapers(selected, aidToId)
@@ -198,6 +255,10 @@ export default function MobilePapers({
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
+
+  // Pagination only applies when showing keyword results
+  const showingKeywordResults = searchMode === 'keyword' || !query.trim()
+  const resetKey = `${searchMode}|${debouncedQuery}|${fromDate ?? ''}`
 
   if (error) {
     return <div className='p-4 text-red-500'>{error}</div>
@@ -268,6 +329,7 @@ export default function MobilePapers({
                     m === 'keyword' ? 'semantic' : 'keyword',
                   )
                   setQuery('')
+                  setDebouncedQuery('')
                 }}
                 className={`p-2 rounded-lg border transition-colors ${searchMode === 'semantic' ? 'bg-[#4ea8de]/20 border-[#4ea8de] text-[#4ea8de]' : 'border-[#333333] text-neutral-400 hover:text-neutral-200'}`}
                 title={
@@ -298,17 +360,22 @@ export default function MobilePapers({
           >
             <FilterBar
               clusterEntries={clusterEntries}
-              availableYears={availableYears}
               availableDomains={availableDomains}
               activeCids={activeCids}
-              activeYear={activeYear}
               activeDomains={activeDomains}
+              datePreset={datePreset}
               hasActiveFilters={hasActiveFilters}
               onToggleCluster={toggleCluster}
-              onToggleYear={toggleYear}
               onToggleDomain={toggleDomain}
+              onSetDatePreset={setDatePreset}
               onClearAll={clearAllFilters}
             />
+          </div>
+        )}
+
+        {nodes && total > 0 && showingKeywordResults && (
+          <div className='px-4 py-1.5 text-xs text-neutral-500'>
+            Showing {nodes.length} of {total.toLocaleString()} papers
           </div>
         )}
 
@@ -332,6 +399,9 @@ export default function MobilePapers({
           items={filtered}
           clusters={clusters}
           onSelectId={setSelectedId}
+          resetKey={resetKey}
+          hasMore={showingKeywordResults ? hasMore : false}
+          onLoadMore={loadMore}
         />
       </div>
 

@@ -20,8 +20,8 @@ export default function StatsView({
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
-  const [total, setTotal] = useState(0)
   const [hasMore, setHasMore] = useState(false)
+  const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
 
   const listRef = useRef<HTMLDivElement | null>(null)
@@ -80,8 +80,8 @@ export default function StatsView({
         })
         if (!alive) return
         setNodes(result.items.map((item, i) => ({ ...item, id: i })))
-        setTotal(result.total)
         setPage(1)
+        setTotal(result.total)
         setHasMore(result.items.length < result.total)
         hasLoadedRef.current = true
       } catch (e: any) {
@@ -218,6 +218,12 @@ export default function StatsView({
             ref={listRef}
             className='flex-1 overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent'
           >
+            {nodes && total > 0 && (
+              <div className='px-4 py-1.5 text-xs text-neutral-500'>
+                Showing {nodes.length} of {total.toLocaleString()} papers
+              </div>
+            )}
+
             {error && <p className='p-4 text-red-400'>{error}</p>}
 
             {!nodes && (
