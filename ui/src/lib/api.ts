@@ -53,8 +53,8 @@ export async function searchPapers(
 export async function fetchPapers(params: {
   page?: number
   limit?: number
-  cluster?: number
-  domain?: string
+  clusters?: number[]
+  domains?: string[]
   from?: string
   to?: string
   q?: string
@@ -62,8 +62,8 @@ export async function fetchPapers(params: {
   const qs = new URLSearchParams()
   if (params.page != null) qs.set('page', String(params.page))
   if (params.limit != null) qs.set('limit', String(params.limit))
-  if (params.cluster != null) qs.set('cluster', String(params.cluster))
-  if (params.domain) qs.set('domain', params.domain)
+  params.clusters?.forEach((c) => qs.append('cluster', String(c)))
+  params.domains?.forEach((d) => qs.append('domain', d))
   if (params.from) qs.set('from', params.from)
   if (params.to) qs.set('to', params.to)
   if (params.q) qs.set('q', params.q)

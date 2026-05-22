@@ -43,6 +43,8 @@ export default function MobilePapers({
     fromDate: undefined as string | undefined,
     page: 1,
     hasMore: false,
+    activeCids: new Set<number>(),
+    activeDomains: new Set<string>(),
   })
 
   // Fetch clusters + available domains once on mount
@@ -85,9 +87,9 @@ export default function MobilePapers({
   } = useApiFilters(clusters)
 
   // Keep loadParamsRef in sync so loadMore always reads fresh values
-  loadParamsRef.current = { query: debouncedQuery, fromDate, page, hasMore }
+  loadParamsRef.current = { query: debouncedQuery, fromDate, page, hasMore, activeCids, activeDomains }
 
-  // Reload keyword papers whenever debounced query, date filter, or mode changes
+  // Reload keyword papers whenever debounced query, date, cluster/domain filters, or mode changes
   useEffect(() => {
     if (searchMode !== 'keyword') return
     let alive = true
@@ -98,6 +100,8 @@ export default function MobilePapers({
         const result = await fetchPapers({
           q: debouncedQuery || undefined,
           from: fromDate,
+          clusters: activeCids.size > 0 ? [...activeCids] : undefined,
+          domains: activeDomains.size > 0 ? [...activeDomains] : undefined,
           limit: 50,
         })
         if (!alive) return
@@ -115,7 +119,7 @@ export default function MobilePapers({
     return () => {
       alive = false
     }
-  }, [debouncedQuery, fromDate, searchMode])
+  }, [debouncedQuery, fromDate, activeCids, activeDomains, searchMode])
 
   // Debounced semantic search
   useEffect(() => {
@@ -189,6 +193,8 @@ export default function MobilePapers({
       fromDate: fd,
       page: p,
       hasMore: hm,
+      activeCids: cids,
+      activeDomains: dms,
     } = loadParamsRef.current
     if (!hm || isLoadingMoreRef.current) return
     isLoadingMoreRef.current = true
@@ -197,6 +203,8 @@ export default function MobilePapers({
       const result = await fetchPapers({
         q: q || undefined,
         from: fd,
+        clusters: cids.size > 0 ? [...cids] : undefined,
+        domains: dms.size > 0 ? [...dms] : undefined,
         limit: 50,
         page: p + 1,
       })
@@ -249,7 +257,7 @@ export default function MobilePapers({
 
   // Pagination only applies when showing keyword results
   const showingKeywordResults = searchMode === 'keyword' || !query.trim()
-  const resetKey = `${searchMode}|${debouncedQuery}|${fromDate ?? ''}`
+  const resetKey = `${searchMode}|${debouncedQuery}|${fromDate ?? ''}|${[...activeCids].sort()}|${[...activeDomains].sort()}`
 
   if (error) {
     return <div className='p-4 text-red-500'>{error}</div>

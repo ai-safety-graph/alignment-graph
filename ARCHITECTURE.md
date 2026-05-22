@@ -65,7 +65,7 @@ See `src/aisafety_pipeline/ARCHITECTURE.md` for module-level details.
 FastAPI backend. Owns:
 
 - REST API serving live data from PostgreSQL
-- Paginated paper listing and single paper detail
+- Paginated paper listing with server-side filtering (keyword, date, multi-value cluster and domain) and single paper detail
 - Subset graph building on demand (`POST /api/graph/subset`)
 - On-demand related papers via pgvector HNSW nearest-neighbor (`GET /api/papers/related`)
 - Semantic search via pgvector ANN

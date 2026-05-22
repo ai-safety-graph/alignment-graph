@@ -29,7 +29,7 @@ export default function StatsView({
   const listRef = useRef<HTMLDivElement | null>(null)
   const hasLoadedRef = useRef(false)
   const isLoadingMoreRef = useRef(false)
-  const loadParamsRef = useRef({ query: '', fromDate: undefined as string | undefined, page: 1, hasMore: false })
+  const loadParamsRef = useRef({ query: '', fromDate: undefined as string | undefined, page: 1, hasMore: false, activeCids: new Set<number>(), activeDomains: new Set<string>() })
 
   // Fetch clusters + available domains once on mount
   useEffect(() => {
@@ -66,9 +66,9 @@ export default function StatsView({
   } = useApiFilters(clusters)
 
   // Keep loadParamsRef in sync so loadMore always reads fresh values
-  loadParamsRef.current = { query: debouncedQuery, fromDate, page, hasMore }
+  loadParamsRef.current = { query: debouncedQuery, fromDate, page, hasMore, activeCids, activeDomains }
 
-  // Reload papers whenever debounced query or date filter changes
+  // Reload papers whenever debounced query, date, or cluster/domain filters change
   useEffect(() => {
     let alive = true
     isLoadingMoreRef.current = false
@@ -78,6 +78,8 @@ export default function StatsView({
         const result = await fetchPapers({
           q: debouncedQuery || undefined,
           from: fromDate,
+          clusters: activeCids.size > 0 ? [...activeCids] : undefined,
+          domains: activeDomains.size > 0 ? [...activeDomains] : undefined,
           limit: 50,
         })
         if (!alive) return
@@ -92,15 +94,22 @@ export default function StatsView({
       }
     })()
     return () => { alive = false }
-  }, [debouncedQuery, fromDate])
+  }, [debouncedQuery, fromDate, activeCids, activeDomains])
 
   async function loadMore() {
-    const { query, fromDate: fd, page: p, hasMore: hm } = loadParamsRef.current
+    const { query, fromDate: fd, page: p, hasMore: hm, activeCids: cids, activeDomains: dms } = loadParamsRef.current
     if (!hm || isLoadingMoreRef.current) return
     isLoadingMoreRef.current = true
     try {
       const { fetchPapers } = await import('../lib/api')
-      const result = await fetchPapers({ q: query || undefined, from: fd, limit: 50, page: p + 1 })
+      const result = await fetchPapers({
+        q: query || undefined,
+        from: fd,
+        clusters: cids.size > 0 ? [...cids] : undefined,
+        domains: dms.size > 0 ? [...dms] : undefined,
+        limit: 50,
+        page: p + 1,
+      })
       setNodes((prev) => {
         const prevLen = prev?.length ?? 0
         return [...(prev ?? []), ...result.items.map((item, i) => ({ ...item, id: prevLen + i }))]
@@ -112,12 +121,10 @@ export default function StatsView({
     isLoadingMoreRef.current = false
   }
 
-  const filtered = useMemo(() => {
-    let res = nodes ?? []
-    if (activeCids.size > 0) res = res.filter((n) => activeCids.has(n.cid))
-    if (activeDomains.size > 0) res = res.filter((n) => activeDomains.has(n.dm))
-    return res.map((n) => ({ n, deg: 0 }))
-  }, [nodes, activeCids, activeDomains])
+  const filtered = useMemo(
+    () => (nodes ?? []).map((n) => ({ n, deg: 0 })),
+    [nodes],
+  )
 
   useLayoutEffect(() => {
     const el = listRef.current
@@ -244,7 +251,7 @@ export default function StatsView({
               clusters={clusters}
               onSelectId={setSelectedId}
               enableHover
-              resetKey={`${debouncedQuery}|${fromDate ?? ''}`}
+              resetKey={`${debouncedQuery}|${fromDate ?? ''}|${[...activeCids].sort()}|${[...activeDomains].sort()}`}
               hasMore={hasMore}
               onLoadMore={loadMore}
             />

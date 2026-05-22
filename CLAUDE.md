@@ -24,7 +24,7 @@ See the ARCHITECTURE.md files for full detail. Short version:
 
 ## Key Invariants
 
-- Paper identity key is the canonical arXiv abs URL (`aid`), not the numeric `id` (which is session-assigned by index in `fetchAllPapers`)
+- Paper identity key is the canonical arXiv abs URL (`aid`), not the numeric `id` (which is session-assigned by index — `fetchAllPapers` for the graph, or inline in `fetchPapers` results for MobileView/StatsView)
 - `cid` always means `kmeans_cluster` id
 - Compact node fields are: `id`, `aid`, `t`, `au`, `pd`, `dm`, `ln`, `cid` — do not rename without coordinating across API routes and the UI
 - `GET /api/papers/related` must stay registered before `GET /api/papers/{arxiv_id:path}` in `papers.py`

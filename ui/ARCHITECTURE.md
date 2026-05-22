@@ -26,7 +26,7 @@ All data comes from the FastAPI backend via `lib/api.ts`:
 - `fetchPaper(url)` → `GET /api/papers/{id}` — single paper detail including summary
 - `searchPapers(query, opts)` → `POST /api/search` — semantic search
 
-MobileView and StatsView require the API — they load all papers via `fetchAllPapers` and clusters via `fetchClusters` in parallel on mount.
+MobileView and StatsView require the API — they load papers via paginated `fetchPapers` (server-side filtered) and clusters via `fetchClusters` on mount.
 
 ### Static fallback mode (`VITE_API_URL` unset)
 
@@ -81,13 +81,13 @@ Optimized for **local neighborhood exploration**, not full persistent edge displ
 Renders a paper list UX backed by the live API.
 
 Responsibilities:
-- Fetch all papers via `fetchAllPapers()` and clusters via `fetchClusters()` in parallel on mount
-- Keyword search (client-side, weighted by title/authors/domain/summary)
-- **Semantic search** (API mode only) — debounced `POST /api/search` (400ms), toggled by Sparkles button
-- Cluster/year/domain chip filters via `usePaperFilters`
+- Paginated fetch via `fetchPapers()` — server-side keyword (`q`), date (`from`), cluster (`clusters`), and domain (`domains`) filtering; infinite scroll via `loadMore`
+- Clusters via `fetchClusters()` on mount
+- Filter state managed by `useApiFilters` hook — changing any filter triggers a fresh `fetchPapers` call
+- **Semantic search** (API mode only) — debounced `POST /api/search` (400ms), toggled by Sparkles button; cluster/domain filters applied client-side on semantic results
 - Modal paper details with related papers via `useRelatedPapers`
 
-`searchMode` state (`'keyword' | 'semantic'`) switches the active result set between keyword-scored nodes and API-returned `SearchResult[]`. Semantic results are cast to the same scored shape `{ n, score, deg }` via `semanticAsScored` for unified rendering in `PaperList`.
+`searchMode` state (`'keyword' | 'semantic'`) switches the active result set. In keyword mode all filtering is server-side. In semantic mode, text search hits the API and cluster/domain filters are applied client-side on the returned results. Semantic results are cast to the same scored shape `{ n, score, deg }` via `semanticAsScored` for unified rendering in `PaperList`.
 
 Semantic search toggle is only rendered when `hasApi()` is true.
 
@@ -100,9 +100,9 @@ Mobile is intentionally **list-first, search-first, detail-first**.
 Desktop paper browser shown at `/stats`.
 
 Responsibilities:
-- Fetch all papers via `fetchAllPapers()` and clusters via `fetchClusters()` in parallel on mount
-- Keyword search (client-side)
-- Cluster/year/domain chip filters via `usePaperFilters`
+- Paginated fetch via `fetchPapers()` — server-side keyword, date, cluster, and domain filtering; infinite scroll via `loadMore`
+- Clusters via `fetchClusters()` on mount
+- Filter state managed by `useApiFilters` hook
 - Split-pane layout: paper list left, detail panel right (modal on mobile)
 - Related papers in detail panel via `useRelatedPapers`
 
@@ -151,13 +151,13 @@ Central API client. Key exports:
 
 - `BASE_URL` — from `import.meta.env.VITE_API_URL`, trailing slash stripped
 - `hasApi()` — `Boolean(BASE_URL)`
-- `fetchAllPapers()` — paginates `GET /api/papers` at 200/page, assigns `id: i` to each item, returns `NodeCompact[]`
+- `fetchAllPapers()` — paginates `GET /api/papers` at 200/page, assigns `id: i` by index, returns full `NodeCompact[]`; used by the desktop graph loader only
 - `fetchClusters()` — hits `GET /api/clusters`, returns `ClustersLegend`
 - `fetchSubgraph(ids)` — hits `POST /api/graph/subset`, returns `GraphDataCompact`
 - `fetchRelated(arxivId, limit?)` — hits `GET /api/papers/related`, returns `RelatedPaper[]` (NodeCompact + `sim`)
 - `fetchPaper(arxivUrl)` — hits `/api/papers/{id}`, returns `PaperDetail | null`
 - `searchPapers(query, opts)` — hits `POST /api/search`, returns `SearchResponse`
-- `fetchPapers(params)` — hits `GET /api/papers`, returns `PaginatedPapers`
+- `fetchPapers(params)` — hits `GET /api/papers` with optional `q`, `from`, `clusters: number[]`, `domains: string[]`, `page`, `limit`; returns `PaginatedPapers`; used by MobileView and StatsView for server-side filtered pagination
 
 ---
 
@@ -206,7 +206,7 @@ High-risk:
 - Summary URL canonicalization in `lib/summaries.ts`
 - `hasApi()` guard logic
 - `semanticAsScored` cast in `MobileView.tsx` — must produce `{ n: NodeCompact, score: number, deg: number }`
-- `usePaperFilters` signature — takes `nodes: NodeCompact[] | null` and `clusters: ClustersLegend` separately (not `GraphDataCompact`)
+- `useApiFilters` signature — takes `clusters: ClustersLegend`; returns `activeCids: Set<number>`, `activeDomains: Set<string>`, `fromDate`, and toggle/clear functions; changing any value triggers a server re-fetch in callers
 - `GraphDataCompact` typing changes
 
 ---
@@ -216,7 +216,7 @@ High-risk:
 Four layers:
 
 1. **API loading** (`lib/api.ts`, `lib/summaries.ts`)
-2. **Shared data derivation** (`buildAdjacency`, `usePaperFilters`, `usePaperSummary`, `useRelatedPapers`)
+2. **Shared data derivation** (`buildAdjacency`, `useApiFilters`, `usePaperSummary`, `useRelatedPapers`)
 3. **View routing** (`App.tsx` media query split)
 4. **Renderer-specific UX** (`Graph.tsx`, `MobileView.tsx`, `StatsView.tsx`)
 

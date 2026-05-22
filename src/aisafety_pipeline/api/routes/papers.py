@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Optional
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from ..deps import get_conn
 
@@ -10,8 +10,8 @@ router = APIRouter(prefix="/api/papers", tags=["papers"])
 def list_papers(
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
-    cluster: Optional[int] = Query(None),
-    domain: Optional[str] = Query(None),
+    cluster: List[int] = Query(default=[]),
+    domain: List[str] = Query(default=[]),
     from_date: Optional[str] = Query(None, alias="from"),
     to_date: Optional[str] = Query(None, alias="to"),
     q: Optional[str] = Query(None),
@@ -21,12 +21,14 @@ def list_papers(
     where = ["ai_stage2_keep = TRUE"]
     params: list = []
 
-    if cluster is not None:
-        where.append("kmeans_cluster = %s")
-        params.append(cluster)
+    if cluster:
+        placeholders = ','.join(['%s'] * len(cluster))
+        where.append(f"kmeans_cluster IN ({placeholders})")
+        params.extend(cluster)
     if domain:
-        where.append("domain_tag = %s")
-        params.append(domain)
+        placeholders = ','.join(['%s'] * len(domain))
+        where.append(f"domain_tag IN ({placeholders})")
+        params.extend(domain)
     if from_date:
         where.append("published >= %s")
         params.append(from_date)
