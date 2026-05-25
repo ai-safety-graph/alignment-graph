@@ -416,8 +416,10 @@ export default function MobilePapers({
               paper={selected}
               clusters={clusters}
               neighbors={selectedNeighbors}
+              navHistory={[]}
               onClose={() => setSelectedId(null)}
               onSelectPaper={setSelectedId}
+              onNavigateTo={() => {}}
             />
           </div>
         </div>

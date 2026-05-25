@@ -11,6 +11,8 @@ interface Props {
   neighbors: NeighborEntry[]
   onClose: () => void
   onSelectPaper: (aid: string) => void
+  navHistory: { aid: string; title: string }[]
+  onNavigateTo: (aid: string, historyIndex: number) => void
 }
 
 export default function StatsPaperDetails({
@@ -18,6 +20,8 @@ export default function StatsPaperDetails({
   clusters,
   neighbors,
   onSelectPaper,
+  navHistory,
+  onNavigateTo,
 }: Props) {
   const urlKey = paper.ln || (paper as any).aid
   const { data: lazy, loading, error } = usePaperSummary(urlKey)
@@ -37,6 +41,36 @@ export default function StatsPaperDetails({
     >
       <div>
         <div className='py-3 sticky top-0 bg-neutral-950 px-3 lg:px-6'>
+          <div className='min-h-[1.25rem] pb-2'>
+          {navHistory.length > 0 && (
+            <div className='flex items-center gap-1 text-xs text-zinc-500 flex-wrap'>
+              {navHistory.slice(-3).map((entry, i) => {
+                const absoluteIndex =
+                  navHistory.length - Math.min(3, navHistory.length) + i
+                return (
+                  <span key={entry.aid} className='flex items-center gap-1'>
+                    <button
+                      onClick={() => onNavigateTo(entry.aid, absoluteIndex)}
+                      className='hover:text-zinc-200 underline underline-offset-2 truncate max-w-[160px] text-left'
+                      title={entry.title}
+                    >
+                      {entry.title.length > 35
+                        ? entry.title.slice(0, 35) + '…'
+                        : entry.title}
+                    </button>
+                    <span className='text-zinc-700'>›</span>
+                  </span>
+                )
+              })}
+              <span
+                className='text-zinc-400 truncate max-w-[160px]'
+                title={paper.t}
+              >
+                {paper.t.length > 35 ? paper.t.slice(0, 35) + '…' : paper.t}
+              </span>
+            </div>
+          )}
+          </div>
           <div className='flex items-center justify-between mb-2'>
             <div className='flex items-center gap-2 mb-0.5'>
               <span

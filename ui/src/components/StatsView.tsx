@@ -26,6 +26,9 @@ export default function StatsView({
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
 
+  type NavEntry = { aid: string; title: string }
+  const [navHistory, setNavHistory] = useState<NavEntry[]>([])
+
   const listRef = useRef<HTMLDivElement | null>(null)
   const hasLoadedRef = useRef(false)
   const isLoadingMoreRef = useRef(false)
@@ -160,6 +163,28 @@ export default function StatsView({
     }
   }, [selected])
 
+  const handleSelectFromList = (aid: string) => {
+    setNavHistory([])
+    setSelectedId(aid)
+  }
+
+  const handleSelectRelated = (aid: string) => {
+    if (fetchedPaper) {
+      setNavHistory(prev => [...prev, { aid: fetchedPaper.aid, title: fetchedPaper.t }])
+    }
+    setSelectedId(aid)
+  }
+
+  const handleNavigateTo = (aid: string, historyIndex: number) => {
+    setNavHistory(h => h.slice(0, historyIndex))
+    setSelectedId(aid)
+  }
+
+  const handleClose = () => {
+    setSelectedId(null)
+    setNavHistory([])
+  }
+
   return (
     <div className='fixed inset-0 bg-neutral-950 text-[#e5e5e5] flex flex-col'>
       {/* Top: full-width search bar, centered */}
@@ -249,7 +274,7 @@ export default function StatsView({
             <PaperList
               items={filtered}
               clusters={clusters}
-              onSelectId={setSelectedId}
+              onSelectId={handleSelectFromList}
               enableHover
               resetKey={`${debouncedQuery}|${fromDate ?? ''}|${[...activeCids].sort()}|${[...activeDomains].sort()}`}
               hasMore={hasMore}
@@ -264,8 +289,10 @@ export default function StatsView({
               paper={selected}
               clusters={clusters}
               neighbors={selectedNeighbors}
-              onClose={() => setSelectedId(null)}
-              onSelectPaper={setSelectedId}
+              navHistory={navHistory}
+              onClose={handleClose}
+              onSelectPaper={handleSelectRelated}
+              onNavigateTo={handleNavigateTo}
             />
           ) : (
             <div className='flex h-full items-center justify-center text-neutral-500 text-sm'>
@@ -278,7 +305,7 @@ export default function StatsView({
         <div className='md:hidden fixed inset-0 z-20 bg-black/70 flex items-center justify-center p-3'>
           <button
             aria-label='Close overlay'
-            onClick={() => setSelectedId(null)}
+            onClick={handleClose}
             className='absolute inset-0'
           />
           <div className='relative z-10 w-full max-w-[720px] h-[92dvh] rounded-2xl shadow-2xl overflow-hidden'>
@@ -286,8 +313,10 @@ export default function StatsView({
               paper={selected}
               clusters={clusters}
               neighbors={selectedNeighbors}
-              onClose={() => setSelectedId(null)}
-              onSelectPaper={setSelectedId}
+              navHistory={navHistory}
+              onClose={handleClose}
+              onSelectPaper={handleSelectRelated}
+              onNavigateTo={handleNavigateTo}
             />
           </div>
         </div>
