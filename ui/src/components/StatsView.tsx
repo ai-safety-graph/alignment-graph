@@ -136,10 +136,8 @@ export default function StatsView({
   }, [filtered])
 
   useEffect(() => {
-    if (!selectedId) {
-      setFetchedPaper(null)
-      return
-    }
+    setFetchedPaper(null)
+    if (!selectedId) return
     let cancelled = false
     import('../lib/api').then(({ fetchPaper }) => {
       fetchPaper(selectedId).then((p) => {
@@ -151,7 +149,7 @@ export default function StatsView({
 
   const selected = fetchedPaper
 
-  const selectedNeighbors = useRelatedPapers(selected)
+  const { neighbors: selectedNeighbors, loading: neighborsLoading } = useRelatedPapers(selectedId)
 
   useEffect(() => {
     if (selected) {
@@ -289,11 +287,26 @@ export default function StatsView({
               paper={selected}
               clusters={clusters}
               neighbors={selectedNeighbors}
+              neighborsLoading={neighborsLoading}
               navHistory={navHistory}
               onClose={handleClose}
               onSelectPaper={handleSelectRelated}
               onNavigateTo={handleNavigateTo}
             />
+          ) : selectedId ? (
+            <div className='p-6 space-y-3 animate-pulse'>
+              <div className='h-3 bg-neutral-800 rounded w-1/3' />
+              <div className='h-5 bg-neutral-800 rounded w-3/4' />
+              <div className='h-5 bg-neutral-800 rounded w-1/2' />
+              <div className='h-3 bg-neutral-800 rounded w-1/4 mt-2' />
+              <div className='h-3 bg-neutral-800 rounded w-1/4' />
+              <div className='space-y-2 mt-4'>
+                <div className='h-3 bg-neutral-800 rounded' />
+                <div className='h-3 bg-neutral-800 rounded' />
+                <div className='h-3 bg-neutral-800 rounded w-5/6' />
+                <div className='h-3 bg-neutral-800 rounded w-4/6' />
+              </div>
+            </div>
           ) : (
             <div className='flex h-full items-center justify-center text-neutral-500 text-sm'>
               Select a paper to load details
@@ -313,6 +326,7 @@ export default function StatsView({
               paper={selected}
               clusters={clusters}
               neighbors={selectedNeighbors}
+              neighborsLoading={neighborsLoading}
               navHistory={navHistory}
               onClose={handleClose}
               onSelectPaper={handleSelectRelated}

@@ -1,14 +1,15 @@
 import { cidToColor } from '../lib/colors'
 import type { ClustersLegend, NodeCompact } from '../lib/types'
-import { usePaperSummary } from '../hooks/usePaperSummary'
+import type { PaperDetail } from '../lib/api'
 import { useRef, useLayoutEffect } from 'react'
 
 type NeighborEntry = { n: NodeCompact; w: number }
 
 interface Props {
-  paper: NodeCompact
+  paper: PaperDetail
   clusters: ClustersLegend
   neighbors: NeighborEntry[]
+  neighborsLoading: boolean
   onClose: () => void
   onSelectPaper: (aid: string) => void
   navHistory: { aid: string; title: string }[]
@@ -19,14 +20,13 @@ export default function StatsPaperDetails({
   paper,
   clusters,
   neighbors,
+  neighborsLoading,
   onSelectPaper,
   navHistory,
   onNavigateTo,
 }: Props) {
-  const urlKey = paper.ln || (paper as any).aid
-  const { data: lazy, loading, error } = usePaperSummary(urlKey)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
-  const summaryText = lazy?.sm ?? paper.sm
+  const summaryText = paper.sm
 
   useLayoutEffect(() => {
     const el = scrollerRef.current
@@ -108,32 +108,32 @@ export default function StatsPaperDetails({
             </a>
           </div>
 
-          {loading && !summaryText && (
-            <div className='text-[13px] italic text-neutral-400'>
-              Loading summary…
-            </div>
-          )}
-          {error && !summaryText && (
-            <div className='text-[13px] text-red-400'>
-              Failed to load summary: {error}
-            </div>
-          )}
           {summaryText ? (
             <p className='whitespace-pre-wrap leading-relaxed text-neutral-300'>
               {summaryText}
             </p>
           ) : (
-            !loading &&
-            !error && (
-              <div className='text-[13px] text-neutral-400'>
-                No summary available.
-              </div>
-            )
+            <div className='text-[13px] text-neutral-400'>
+              No summary available.
+            </div>
           )}
 
           <div className='font-semibold my-2 text-neutral-200'>
             Aligned Papers
           </div>
+
+          {neighborsLoading ? (
+            <div className='space-y-3 animate-pulse'>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className='py-1.5 border-b border-neutral-800 space-y-1.5'>
+                  <div className='h-3 bg-neutral-800 rounded w-5/6' />
+                  <div className='h-3 bg-neutral-800 rounded w-3/6' />
+                  <div className='h-3 bg-neutral-800 rounded w-2/6' />
+                </div>
+              ))}
+            </div>
+          ) : (
+          <>
           <div className='text-[13px] text-neutral-400 mb-1.5'>
             Showing {neighbors.length} (sorted by similarity)
           </div>
@@ -171,6 +171,8 @@ export default function StatsPaperDetails({
               </li>
             ))}
           </ul>
+          </>
+          )}
         </div>
       </div>
     </aside>
