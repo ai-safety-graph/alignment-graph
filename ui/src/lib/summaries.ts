@@ -47,7 +47,9 @@ async function loadMap(): Promise<Map<string, Summary>> {
   return inflight
 }
 
-export async function getSummaryByUrl(url?: string | null): Promise<Summary | null> {
+export async function getSummaryByUrl(
+  url?: string | null,
+): Promise<Summary | null> {
   if (!url) return null
 
   // When API is configured, fetch the individual paper detail

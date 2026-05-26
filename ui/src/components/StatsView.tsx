@@ -31,6 +31,7 @@ export default function StatsView({
 
   const listRef = useRef<HTMLDivElement | null>(null)
   const hasLoadedRef = useRef(false)
+  const autoSelectedRef = useRef(false)
   const isLoadingMoreRef = useRef(false)
   const loadParamsRef = useRef({ query: '', fromDate: undefined as string | undefined, page: 1, hasMore: false, activeCids: new Set<number>(), activeDomains: new Set<string>() })
 
@@ -98,6 +99,13 @@ export default function StatsView({
     })()
     return () => { alive = false }
   }, [debouncedQuery, fromDate, activeCids, activeDomains])
+
+  useEffect(() => {
+    if (!autoSelectedRef.current && nodes && nodes.length > 0 && selectedId === null) {
+      autoSelectedRef.current = true
+      setSelectedId(nodes[0].aid)
+    }
+  }, [nodes, selectedId])
 
   async function loadMore() {
     const { query, fromDate: fd, page: p, hasMore: hm, activeCids: cids, activeDomains: dms } = loadParamsRef.current
@@ -277,6 +285,7 @@ export default function StatsView({
               resetKey={`${debouncedQuery}|${fromDate ?? ''}|${[...activeCids].sort()}|${[...activeDomains].sort()}`}
               hasMore={hasMore}
               onLoadMore={loadMore}
+              selectedId={selectedId ?? undefined}
             />
           </div>
         </div>
