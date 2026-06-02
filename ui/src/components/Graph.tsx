@@ -29,6 +29,19 @@ import GraphPaperDetails from './GraphPaperDetails'
 import SearchResultsOverlay from './SearchResultsOverlay'
 import ClusterLegendOverlay from './ClusterLegendOverlay'
 
+const DEMO_PAPER_IDS = [
+  'https://arxiv.org/abs/2401.02843', // Thousands of AI Authors on the Future of AI
+  'https://arxiv.org/abs/2510.05519', // Assessing Human Rights Risks in AI
+  'https://arxiv.org/abs/2510.08314', // To Ask or Not to Ask: Learning to Require Human Feedback
+  'https://arxiv.org/abs/2510.08211', // LLMs Learn to Deceive Unintentionally
+  'https://arxiv.org/abs/2510.09462', // Adaptive Attacks on Trusted Monitors Subvert AI Control Protocols
+  'https://arxiv.org/abs/2510.08792', // Assurance of Frontier AI Built for National Security
+  'https://arxiv.org/abs/2510.09090', // AI and Human Oversight: A Risk-Based Framework for Alignment
+  'https://arxiv.org/abs/2412.07727', // AI Expands Scientists' Impact but Contracts Science's Focus
+  'https://arxiv.org/abs/2505.18942', // Language Models Surface the Unwritten Code of Science and Society
+  'https://arxiv.org/abs/2510.06559', // The Algebra of Meaning: Why Machines Need Montague More Than Moore's Law
+]
+
 export default function ArxivGraph({
   src = '/graph.json',
   onToggleView,
@@ -43,6 +56,7 @@ export default function ArxivGraph({
 
   const [data, setData] = useState<GraphDataCompact | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [isDemo, setIsDemo] = useState(false)
 
   const [hoverId, setHoverId] = useState<number | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -70,14 +84,15 @@ export default function ArxivGraph({
 
   // Data fetch
   useEffect(() => {
-    if (!paperIds?.length) return
     let alive = true
     ;(async () => {
       try {
         const { fetchSubgraph } = await import('../lib/api')
-        const json = await fetchSubgraph(paperIds)
+        const ids = paperIds?.length ? paperIds : DEMO_PAPER_IDS
+        const json = await fetchSubgraph(ids)
         if (!alive) return
         setData(json)
+        setIsDemo(!paperIds?.length)
       } catch (e: any) {
         if (!alive) return
         setError(`Failed to load graph: ${e?.message ?? String(e)}`)
@@ -193,13 +208,13 @@ export default function ArxivGraph({
       if (matchSet) return matchSet.has(id) || !!neighborSet?.has(id)
       return true
     },
-    [lockedId, selectedId, matchSet, neighborSet]
+    [lockedId, selectedId, matchSet, neighborSet],
   )
 
   // Selection + neighbors
   const selected = useMemo(
-    () => (selectedId != null ? byId.get(selectedId) ?? null : null),
-    [selectedId, byId]
+    () => (selectedId != null ? (byId.get(selectedId) ?? null) : null),
+    [selectedId, byId],
   )
   const selectedNeighbors = useMemo(() => {
     if (selectedId == null) return []
@@ -277,7 +292,7 @@ export default function ArxivGraph({
   const hoverTimer = useRef<number | null>(null)
   const onNodeHover = (
     node: NodeObject | null,
-    prevNode?: NodeObject | null
+    prevNode?: NodeObject | null,
   ) => {
     if (node && !isInteractive((node as any).id)) {
       setPinned(prevNode as any, false)
@@ -320,7 +335,7 @@ export default function ArxivGraph({
   const nodeCanvasObject = (
     node: NodeObject,
     ctx: CanvasRenderingContext2D,
-    globalScale: number
+    globalScale: number,
   ) => {
     const n = node as unknown as NodeCompact
     const r = 4
@@ -441,6 +456,12 @@ export default function ArxivGraph({
           )}
         </div>
       </div>
+
+      {isDemo && (
+        <div className='fixed top-[52px] left-1/2 -translate-x-1/2 z-10 text-[12px] text-neutral-500 pointer-events-none select-none'>
+          Example subgraph — search to explore your own
+        </div>
+      )}
 
       {/* Overlays */}
       {query && searchResults.length > 0 && (
