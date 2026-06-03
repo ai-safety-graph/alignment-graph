@@ -12,7 +12,7 @@ import type {
   LinkObject,
   NodeObject,
 } from 'react-force-graph-2d'
-import { Trash, Search, Newspaper } from 'lucide-react'
+import { Trash, Search, Newspaper, ChevronDown } from 'lucide-react'
 
 import { useForceConfig } from '../hooks/useForceConfig'
 import { useGraphShortcuts } from '../hooks/useGraphShortcuts'
@@ -64,6 +64,8 @@ export default function ArxivGraph({
   const activeId = lockedId ?? hoverId
 
   const [query, setQuery] = useState('')
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement | null>(null)
   const [width, setWidth] = useState<number>(0)
   const [height, setHeight] = useState<number>(0)
 
@@ -232,33 +234,38 @@ export default function ArxivGraph({
   useEffect(() => {
     didAutoFit.current = false
   }, [src])
-  useEffect(() => {
-    const fg = fgRef.current as any
-    if (!fg || !data || didAutoFit.current) return
-    if (!width || !height) return
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        try {
-          fg.zoomToFit(500, 250)
-          didAutoFit.current = true
-        } catch {}
-      })
-    })
-  }, [data, width, height])
 
   // ESC unlock (global)
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (hoverId != null) setPinned(simById.get(hoverId) as any, false)
+        if (lockedId != null) setPinned(simById.get(lockedId) as any, false)
         setLockedId(null)
         setHoverId(null)
         setSelectedId(null)
-        fgRef.current?.zoomToFit(400, 40)
+        fgRef.current?.zoomToFit(400, fitPadding())
       }
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
+  }, [hoverId, lockedId, simById])
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target as Node)
+      ) {
+        setIsDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
   }, [])
+
+  const fitPadding = () => (simNodes.length === 1 ? 400 : 150)
 
   // Focus helpers
   function focusNode(simNode: any, zoomLevel = 1.1, duration = 600) {
@@ -320,7 +327,7 @@ export default function ArxivGraph({
   const onBackgroundClick = () => {
     if (hoverId != null) setPinned(simById.get(hoverId) as any, false)
     if (lockedId != null) setPinned(simById.get(lockedId) as any, false)
-    fgRef.current?.zoomToFit(400, 40)
+    fgRef.current?.zoomToFit(400, fitPadding())
     setLockedId(null)
     setHoverId(null)
     setSelectedId(null)
@@ -406,62 +413,64 @@ export default function ArxivGraph({
               l.t ?? (typeof l.target === 'object' ? l.target?.id : l.target)
             return s === activeId || t === activeId
           }}
+          onEngineStop={() => {
+            if (!didAutoFit.current) {
+              fgRef.current?.zoomToFit(500, fitPadding())
+              didAutoFit.current = true
+            }
+          }}
           onNodeHover={onNodeHover}
           onNodeClick={onNodeClick}
           onBackgroundClick={onBackgroundClick}
         />
       )}
 
-      {/* Search Bar */}
-      <div className='fixed top-3 left-1/2 -translate-x-1/2 z-10 bg-[#2a2a2a] backdrop-blur-xs rounded-3xl w-[min(550px,80vw)] border border-[#333333]'>
-        <div className='flex items-center gap-2'>
-          <div className='relative flex-1'>
-            <Search
-              className='absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none'
-              size={16}
-            />
-            <input
-              ref={searchInputRef}
-              placeholder='Search papers on AI safety & alignment'
-              value={query}
-              onChange={(e) => {
-                if (selectedId != null) onBackgroundClick()
-                setQuery(e.target.value)
-              }}
-              className='w-full pl-9 pr-20 py-2 rounded-3xl bg-neutral-900 border border-[#333333] text-[#e5e5e5] placeholder-[#666666] outline-none focus:ring-2 focus:ring-[#4ea8de]'
-            />
-            <div className='absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[11px] text-neutral-400 pointer-events-none select-none'>
-              <kbd className='px-1.5 py-0.5 rounded bg-transparent border border-neutral-600 text-[11px] font-mono'>
-                Ctrl
-              </kbd>
-              <kbd className='px-1.5 py-0.5 rounded bg-transparent border border-neutral-600 text-[11px] font-mono'>
-                K
-              </kbd>
+      {/* Search bar */}
+      <div className='fixed top-3 left-1/2 -translate-x-1/2 z-10'>
+        <div className='bg-[#2a2a2a] backdrop-blur-xs rounded-3xl w-[min(550px,80vw)] border border-[#333333]'>
+          <div className='flex items-center gap-2'>
+            <div className='relative flex-1'>
+              <Search
+                className='absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none'
+                size={16}
+              />
+              <input
+                ref={searchInputRef}
+                placeholder='Search papers on AI safety & alignment'
+                value={query}
+                onChange={(e) => {
+                  if (selectedId != null) onBackgroundClick()
+                  setQuery(e.target.value)
+                }}
+                className='w-full pl-9 pr-20 py-2 rounded-3xl bg-neutral-900 border border-[#333333] text-[#e5e5e5] placeholder-[#666666] outline-none focus:ring-2 focus:ring-[#4ea8de]'
+              />
+              <div className='absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[11px] text-neutral-400 pointer-events-none select-none'>
+                <kbd className='px-1.5 py-0.5 rounded bg-transparent border border-neutral-600 text-[11px] font-mono'>
+                  Ctrl
+                </kbd>
+                <kbd className='px-1.5 py-0.5 rounded bg-transparent border border-neutral-600 text-[11px] font-mono'>
+                  K
+                </kbd>
+              </div>
             </div>
+            {query && (
+              <button
+                aria-label='Clear search query'
+                onClick={() => setQuery('')}
+                className='p-2 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200 flex items-center gap-2'
+              >
+                <Trash size={19} />
+                <kbd className='px-1.5 py-0.5 rounded bg-transparent border border-neutral-600 text-[11px] font-mono'>
+                  Ctrl
+                </kbd>
+                <kbd className='px-1.5 py-0.5 rounded bg-transparent border border-neutral-600 text-[11px] font-mono'>
+                  Del
+                </kbd>
+              </button>
+            )}
           </div>
-          {query && (
-            <button
-              aria-label='Clear search query'
-              onClick={() => setQuery('')}
-              className='p-2 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200 flex items-center gap-2'
-            >
-              <Trash size={19} />
-              <kbd className='px-1.5 py-0.5 rounded bg-transparent border border-neutral-600 text-[11px] font-mono'>
-                Ctrl
-              </kbd>
-              <kbd className='px-1.5 py-0.5 rounded bg-transparent border border-neutral-600 text-[11px] font-mono'>
-                Del
-              </kbd>
-            </button>
-          )}
         </div>
       </div>
-
-      {isDemo && (
-        <div className='fixed top-[52px] left-1/2 -translate-x-1/2 z-10 text-[12px] text-neutral-500 pointer-events-none select-none'>
-          Example subgraph — search to explore your own
-        </div>
-      )}
 
       {/* Overlays */}
       {query && searchResults.length > 0 && (
@@ -486,8 +495,8 @@ export default function ArxivGraph({
         />
       )}
 
-      {/* Stats toggle */}
-      <div className='fixed top-4 left-4 z-10'>
+      {/* Stats toggle + subgraph dropdown */}
+      <div className='fixed top-4 left-4 z-10 flex items-center gap-2'>
         <button
           aria-label='Show stats'
           onClick={onToggleView}
@@ -495,6 +504,29 @@ export default function ArxivGraph({
         >
           <Newspaper size={18} />
         </button>
+
+        <div className='relative' ref={dropdownRef}>
+          <button
+            onClick={() => setIsDropdownOpen((o) => !o)}
+            className='flex items-center gap-1.5 px-3 py-[7px] rounded-full bg-[#2a2a2a] border border-[#333333] text-sm text-neutral-400 hover:text-neutral-200 whitespace-nowrap cursor-pointer'
+          >
+            {isDemo ? 'Demo subgraph' : 'Custom subgraph'}
+            <ChevronDown
+              size={13}
+              className={`transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
+          {isDropdownOpen && (
+            <div className='absolute top-full mt-1 left-0 bg-[#2a2a2a] border border-[#333333] rounded-xl overflow-hidden shadow-lg min-w-[160px]'>
+              <a
+                href='/stats'
+                className='block px-3 py-2 text-sm text-neutral-300 hover:bg-[#333333] hover:text-neutral-100'
+              >
+                Create a subgraph
+              </a>
+            </div>
+          )}
+        </div>
       </div>
 
       <ClusterLegendOverlay clusters={clusters} />
