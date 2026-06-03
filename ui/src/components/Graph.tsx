@@ -108,7 +108,13 @@ export default function ArxivGraph({
   // Prepare simulation nodes (mutable x/y)
   const simNodes = useMemo(() => {
     if (!data) return [] as (NodeCompact & { x: number; y: number })[]
-    return data.nodes.map((n) => ({ ...n, x: n.x ?? 0, y: n.y ?? 0 }))
+    const pin = data.meta.coords.included
+    return data.nodes.map((n) => ({
+      ...n,
+      x: n.x ?? 0,
+      y: n.y ?? 0,
+      ...(pin ? { fx: n.x ?? 0, fy: n.y ?? 0 } : {}),
+    }))
   }, [data])
 
   const simById = useMemo(() => {
@@ -393,7 +399,7 @@ export default function ArxivGraph({
           nodeId='id'
           linkSource='s'
           linkTarget='t'
-          cooldownTicks={90}
+          cooldownTicks={data.meta.coords.included ? 0 : 90}
           enableNodeDrag={false}
           nodeCanvasObject={nodeCanvasObject}
           nodeLabel={nodeLabel}
