@@ -8,12 +8,14 @@ export default function SearchResultsOverlay({
   results,
   onSelect,
   clusters,
+  isLoading,
 }: {
   results: Array<{ n: NodeCompact; score: number; deg: number }>
-  onSelect: (id: number) => void
+  onSelect: (aid: string) => void
   clusters: ClustersLegend
+  isLoading?: boolean
 }) {
-  if (!results?.length) return null
+  if (!isLoading && !results?.length) return null
 
   return (
     <aside className='scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent scrollbar-hover:scrollbar-thumb-[#666] fixed top-[72px] left-4 bottom-[208px] w-[360px] z-10 bg-[#262626] backdrop-blur-md border border-[#333333] rounded-xl p-3 overflow-auto text-[#e5e5e5]'>
@@ -24,16 +26,20 @@ export default function SearchResultsOverlay({
         <span className='text-[12px] text-neutral-400'>{results.length}</span>
       </div>
 
+      {isLoading && results.length === 0 && (
+        <p className='text-neutral-400 text-sm p-2'>Searching…</p>
+      )}
+
       <ul className='list-none p-0 m-0'>
         {results.map(({ n }) => (
-          <li key={n.id} className='py-2 border-b border-neutral-800'>
+          <li key={n.aid} className='py-2 border-b border-neutral-800'>
             <div className='flex items-start gap-2'>
               <div className='flex-1 min-w-0'>
                 <a
                   href='#'
                   onClick={(e) => {
                     e.preventDefault()
-                    onSelect(n.id)
+                    onSelect(n.aid)
                   }}
                   className='no-underline text-blue-400 hover:underline block'
                   title={n.t}

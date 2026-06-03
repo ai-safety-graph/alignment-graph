@@ -17,13 +17,14 @@ import { Trash, Search, Newspaper, ChevronDown } from 'lucide-react'
 import { useForceConfig } from '../hooks/useForceConfig'
 import { useGraphShortcuts } from '../hooks/useGraphShortcuts'
 import { cidToColor } from '../lib/colors'
-import { buildAdjacency, clamp, lc } from '../lib/graph'
+import { buildAdjacency, clamp } from '../lib/graph'
 import type {
   ClustersLegend,
   GraphDataCompact,
   LinkCompact,
   NodeCompact,
 } from '../lib/types'
+import type { SearchResult } from '../lib/api'
 
 import GraphPaperDetails from './GraphPaperDetails'
 import SearchResultsOverlay from './SearchResultsOverlay'
@@ -64,6 +65,11 @@ export default function ArxivGraph({
   const activeId = lockedId ?? hoverId
 
   const [query, setQuery] = useState('')
+  const [apiResults, setApiResults] = useState<SearchResult[]>([])
+  const [isSearching, setIsSearching] = useState(false)
+  const [ghostSimNodes, setGhostSimNodes] = useState<
+    Array<NodeCompact & { x: number; y: number }>
+  >([])
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement | null>(null)
   const [width, setWidth] = useState<number>(0)
@@ -117,11 +123,29 @@ export default function ArxivGraph({
     }))
   }, [data])
 
+  const simNodesRef = useRef(simNodes)
+  useEffect(() => {
+    simNodesRef.current = simNodes
+  }, [simNodes])
+
   const simById = useMemo(() => {
     const m = new Map<number, any>()
     for (const n of simNodes) m.set(n.id, n)
+    for (const n of ghostSimNodes) m.set(n.id, n)
     return m
-  }, [simNodes])
+  }, [simNodes, ghostSimNodes])
+
+  const aidToId = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const n of simNodes) m.set(n.aid, n.id)
+    for (const n of ghostSimNodes) m.set(n.aid, n.id)
+    return m
+  }, [simNodes, ghostSimNodes])
+
+  const ghostIds = useMemo(
+    () => new Set(ghostSimNodes.map((n) => n.id)),
+    [ghostSimNodes],
+  )
 
   const { byId, adj, clusters } = useMemo(() => {
     if (!data) {
@@ -132,73 +156,78 @@ export default function ArxivGraph({
       }
     }
     const { byId, adj } = buildAdjacency(data.nodes, data.links)
+    for (const n of ghostSimNodes) byId.set(n.id, n)
     return { byId, adj, clusters: data.clusters }
-  }, [data])
+  }, [data, ghostSimNodes])
 
-  // Search matching set (for dimming)
-  const matchSet = useMemo(() => {
-    const q = lc(query).trim()
-    if (!q || !data) return null
-    const s = new Set<number>()
-    for (const n of data.nodes) {
-      const hay = `${lc(n.t)}\n${lc(n.au)}\n${lc(n.dm)}\n${lc(n.sm)}`
-      if (hay.includes(q)) s.add(n.id)
+  // Debounced backend search
+  const searchTimerRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current)
+    setGhostSimNodes([])
+
+    if (!query.trim()) {
+      setApiResults([])
+      setIsSearching(false)
+      return
     }
-    return s
-  }, [query, data])
+    setIsSearching(true)
+    searchTimerRef.current = window.setTimeout(async () => {
+      try {
+        const { searchPapers, fetchSubgraph } = await import('../lib/api')
+        const res = await searchPapers(query, { limit: 50 })
+        setApiResults(res.results)
 
-  // Scored search results
+        const existingAids = new Set(simNodesRef.current.map((n) => n.aid))
+        const ghostAids = res.results
+          .map((r) => r.aid)
+          .filter((aid) => !existingAids.has(aid))
+        if (ghostAids.length > 0) {
+          const ghostData = await fetchSubgraph(ghostAids)
+          const maxId =
+            simNodesRef.current.reduce((m, n) => Math.max(m, n.id), 0) + 1
+          let nextId = maxId
+          const pin = ghostData.meta.coords.included
+          const ghosts = ghostData.nodes.map((n) => ({
+            ...n,
+            id: nextId++,
+            x: n.x ?? 0,
+            y: n.y ?? 0,
+            ...(pin ? { fx: n.x ?? 0, fy: n.y ?? 0 } : {}),
+          }))
+          setGhostSimNodes(ghosts as any)
+        }
+      } catch {
+        setApiResults([])
+      } finally {
+        setIsSearching(false)
+      }
+    }, 350)
+    return () => {
+      if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current)
+    }
+  }, [query])
+
+  // Search results for overlay
   const searchResults = useMemo(() => {
-    if (!data) return []
-    const q = lc(query).trim()
-    if (!q) return []
-    const terms = q.split(/\s+/).filter(Boolean)
-    if (!terms.length) return []
+    if (!apiResults.length) return []
+    return apiResults.map((r) => ({
+      n: { ...r, id: aidToId.get(r.aid) ?? 0 } as NodeCompact,
+      score: r.sim ?? 0,
+      deg: adj.get(aidToId.get(r.aid) ?? -1)?.length ?? 0,
+    }))
+  }, [apiResults, aidToId, adj])
 
-    const weight = { title: 3, authors: 2, domain: 1.5, summary: 1 }
-    const SEARCH_LIMIT = 100
-
-    function termCount(hay: string, term: string) {
-      let c = 0
-      let i = 0
-      while ((i = hay.indexOf(term, i)) !== -1) {
-        c++
-        i += term.length
-      }
-      return c
+  const onSearchPick = (aid: string) => {
+    const graphId = aidToId.get(aid)
+    if (graphId !== undefined) {
+      setSelectedId(graphId)
+      setLockedId(graphId)
+      focusNodeById(graphId)
+    } else {
+      const r = apiResults.find((r) => r.aid === aid)
+      if (r?.ln) window.open(r.ln, '_blank', 'noopener')
     }
-
-    function scoreNode(n: NodeCompact) {
-      const title = lc(n.t)
-      const authors = lc(n.au)
-      const domain = lc(n.dm)
-      const summary = lc(n.sm)
-
-      let base = 0
-      for (const t of terms) {
-        base += termCount(title, t) * weight.title
-        base += termCount(authors, t) * weight.authors
-        base += termCount(domain, t) * weight.domain
-        base += termCount(summary, t) * weight.summary
-      }
-
-      const matched = base > 0
-      const deg = adj.get(n.id)?.length ?? 0
-      const score = matched ? base + Math.min(deg, 50) * 0.02 : 0
-      return { n, score, deg }
-    }
-
-    return data.nodes
-      .map(scoreNode)
-      .filter((r) => r.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, SEARCH_LIMIT)
-  }, [query, data, adj])
-
-  const onSearchPick = (id: number) => {
-    setSelectedId(id)
-    setLockedId(id)
-    focusNodeById(id)
   }
 
   // Neighbor highlight
@@ -212,11 +241,11 @@ export default function ArxivGraph({
   // Interaction gating
   const isInteractive = useCallback(
     (id: number) => {
+      if (ghostIds.has(id)) return false
       if (lockedId != null || selectedId != null) return !!neighborSet?.has(id)
-      if (matchSet) return matchSet.has(id) || !!neighborSet?.has(id)
       return true
     },
-    [lockedId, selectedId, matchSet, neighborSet],
+    [lockedId, selectedId, neighborSet, ghostIds],
   )
 
   // Selection + neighbors
@@ -342,6 +371,11 @@ export default function ArxivGraph({
   // Keyboard shortcuts
   useGraphShortcuts({ query, setQuery, onBackgroundClick, searchInputRef })
 
+  const allSimNodes = useMemo(
+    () => [...simNodes, ...ghostSimNodes],
+    [simNodes, ghostSimNodes],
+  )
+
   if (error) return <div className='text-red-600 p-4'>{error}</div>
 
   // Rendering helpers
@@ -354,8 +388,9 @@ export default function ArxivGraph({
     const r = 4
     ctx.save()
     let alpha = 1
-    if (matchSet && !matchSet.has(n.id)) alpha = 0.15
-    if (neighborSet) alpha = neighborSet.has(n.id) ? 1 : 0.08
+    if (ghostIds.has(n.id)) alpha = 0.35
+    if (neighborSet)
+      alpha = neighborSet.has(n.id) ? 1 : ghostIds.has(n.id) ? 0.2 : 0.08
     ctx.globalAlpha = alpha
     ctx.beginPath()
     ctx.fillStyle = cidToColor(n.cid)
@@ -392,7 +427,7 @@ export default function ArxivGraph({
           width={width}
           height={height}
           graphData={{
-            nodes: simNodes as any[],
+            nodes: allSimNodes as any[],
             links: (data.links as any[]) ?? [],
           }}
           backgroundColor='#1a1a1a'
@@ -479,11 +514,12 @@ export default function ArxivGraph({
       </div>
 
       {/* Overlays */}
-      {query && searchResults.length > 0 && (
+      {query && (searchResults.length > 0 || isSearching) && (
         <SearchResultsOverlay
           results={searchResults}
           onSelect={onSearchPick}
           clusters={clusters}
+          isLoading={isSearching}
         />
       )}
 
