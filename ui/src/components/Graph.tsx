@@ -233,19 +233,21 @@ export default function ArxivGraph({
   // Neighbor highlight
   const neighborSet = useMemo(() => {
     if (activeId == null) return null
+    if (ghostIds.has(activeId)) return null
     const s = new Set<number>([activeId])
     for (const { id } of adj.get(activeId) ?? []) s.add(id)
     return s
-  }, [activeId, adj])
+  }, [activeId, adj, ghostIds])
 
   // Interaction gating
   const isInteractive = useCallback(
     (id: number) => {
-      if (ghostIds.has(id)) return false
+      if (ghostIds.has(id)) return true
+      if (activeId != null && ghostIds.has(activeId)) return true
       if (lockedId != null || selectedId != null) return !!neighborSet?.has(id)
       return true
     },
-    [lockedId, selectedId, neighborSet, ghostIds],
+    [lockedId, selectedId, neighborSet, ghostIds, activeId],
   )
 
   // Selection + neighbors
@@ -274,8 +276,8 @@ export default function ArxivGraph({
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (hoverId != null) setPinned(simById.get(hoverId) as any, false)
-        if (lockedId != null) setPinned(simById.get(lockedId) as any, false)
+        if (hoverId != null && !ghostIds.has(hoverId)) setPinned(simById.get(hoverId) as any, false)
+        if (lockedId != null && !ghostIds.has(lockedId)) setPinned(simById.get(lockedId) as any, false)
         setLockedId(null)
         setHoverId(null)
         setSelectedId(null)
@@ -352,6 +354,11 @@ export default function ArxivGraph({
 
   const onNodeClick = (node: NodeObject) => {
     const n = node as any
+    if (ghostIds.has(n.id)) {
+      setSelectedId(n.id)
+      setLockedId(n.id)
+      return
+    }
     if (!isInteractive(n.id)) return
     setSelectedId(n.id)
     setLockedId(n.id)
@@ -360,8 +367,8 @@ export default function ArxivGraph({
   }
 
   const onBackgroundClick = () => {
-    if (hoverId != null) setPinned(simById.get(hoverId) as any, false)
-    if (lockedId != null) setPinned(simById.get(lockedId) as any, false)
+    if (hoverId != null && !ghostIds.has(hoverId)) setPinned(simById.get(hoverId) as any, false)
+    if (lockedId != null && !ghostIds.has(lockedId)) setPinned(simById.get(lockedId) as any, false)
     fgRef.current?.zoomToFit(400, fitPadding())
     setLockedId(null)
     setHoverId(null)
@@ -388,7 +395,7 @@ export default function ArxivGraph({
     const r = 4
     ctx.save()
     let alpha = 1
-    if (ghostIds.has(n.id)) alpha = 0.35
+    if (ghostIds.has(n.id)) alpha = activeId === n.id ? 0.85 : 0.35
     if (neighborSet)
       alpha = neighborSet.has(n.id) ? 1 : ghostIds.has(n.id) ? 0.2 : 0.08
     ctx.globalAlpha = alpha
