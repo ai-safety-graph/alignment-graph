@@ -24,7 +24,7 @@ import type {
   LinkCompact,
   NodeCompact,
 } from '../lib/types'
-import type { SearchResult } from '../lib/api'
+import type { RelatedPaper, SearchResult } from '../lib/api'
 
 import GraphPaperDetails from './GraphPaperDetails'
 import SearchResultsOverlay from './SearchResultsOverlay'
@@ -42,6 +42,24 @@ const DEMO_PAPER_IDS = [
   'https://arxiv.org/abs/2505.18942', // Language Models Surface the Unwritten Code of Science and Society
   'https://arxiv.org/abs/2510.06559', // The Algebra of Meaning: Why Machines Need Montague More Than Moore's Law
 ]
+
+// Map a paper's raw global coords (rx, ry) into the main graph's canvas space,
+// mirroring the backend normalization in graph.py so ghost nodes land at the
+// correct position relative to the already-loaded nodes.
+function ghostCoord(
+  rx: number,
+  ry: number,
+  coords: GraphDataCompact['meta']['coords'],
+): { x: number; y: number } {
+  const b = coords.bounds!
+  const c = coords.canvas
+  const xr = Math.max(b.x_max - b.x_min, 1e-9)
+  const yr = Math.max(b.y_max - b.y_min, 1e-9)
+  return {
+    x: c.pad + ((rx - b.x_min) / xr) * (c.w - 2 * c.pad),
+    y: c.pad + ((ry - b.y_min) / yr) * (c.h - 2 * c.pad),
+  }
+}
 
 export default function ArxivGraph({
   src = '/graph.json',
@@ -70,6 +88,11 @@ export default function ArxivGraph({
   const [ghostSimNodes, setGhostSimNodes] = useState<
     Array<NodeCompact & { x: number; y: number }>
   >([])
+  const [relatedGhostNodes, setRelatedGhostNodes] = useState<
+    Array<NodeCompact & { x: number; y: number }>
+  >([])
+  const [related, setRelated] = useState<RelatedPaper[]>([])
+  const [relatedLoading, setRelatedLoading] = useState(false)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement | null>(null)
   const [width, setWidth] = useState<number>(0)
@@ -128,23 +151,39 @@ export default function ArxivGraph({
     simNodesRef.current = simNodes
   }, [simNodes])
 
+  const ghostSimNodesRef = useRef(ghostSimNodes)
+  useEffect(() => {
+    ghostSimNodesRef.current = ghostSimNodes
+  }, [ghostSimNodes])
+
+  const dataRef = useRef(data)
+  useEffect(() => {
+    dataRef.current = data
+  }, [data])
+
   const simById = useMemo(() => {
     const m = new Map<number, any>()
     for (const n of simNodes) m.set(n.id, n)
     for (const n of ghostSimNodes) m.set(n.id, n)
+    for (const n of relatedGhostNodes) m.set(n.id, n)
     return m
-  }, [simNodes, ghostSimNodes])
+  }, [simNodes, ghostSimNodes, relatedGhostNodes])
 
   const aidToId = useMemo(() => {
     const m = new Map<string, number>()
     for (const n of simNodes) m.set(n.aid, n.id)
     for (const n of ghostSimNodes) m.set(n.aid, n.id)
+    for (const n of relatedGhostNodes) m.set(n.aid, n.id)
     return m
-  }, [simNodes, ghostSimNodes])
+  }, [simNodes, ghostSimNodes, relatedGhostNodes])
 
   const ghostIds = useMemo(
-    () => new Set(ghostSimNodes.map((n) => n.id)),
-    [ghostSimNodes],
+    () =>
+      new Set([
+        ...ghostSimNodes.map((n) => n.id),
+        ...relatedGhostNodes.map((n) => n.id),
+      ]),
+    [ghostSimNodes, relatedGhostNodes],
   )
 
   const { byId, adj, clusters } = useMemo(() => {
@@ -157,8 +196,9 @@ export default function ArxivGraph({
     }
     const { byId, adj } = buildAdjacency(data.nodes, data.links)
     for (const n of ghostSimNodes) byId.set(n.id, n)
+    for (const n of relatedGhostNodes) byId.set(n.id, n)
     return { byId, adj, clusters: data.clusters }
-  }, [data, ghostSimNodes])
+  }, [data, ghostSimNodes, relatedGhostNodes])
 
   // Debounced backend search
   const searchTimerRef = useRef<number | null>(null)
@@ -187,14 +227,24 @@ export default function ArxivGraph({
           const maxId =
             simNodesRef.current.reduce((m, n) => Math.max(m, n.id), 0) + 1
           let nextId = maxId
-          const pin = ghostData.meta.coords.included
-          const ghosts = ghostData.nodes.map((n) => ({
-            ...n,
-            id: nextId++,
-            x: n.x ?? 0,
-            y: n.y ?? 0,
-            ...(pin ? { fx: n.x ?? 0, fy: n.y ?? 0 } : {}),
-          }))
+          // Position search ghosts in the MAIN graph's coordinate space (via its
+          // bounds), not the ghost subset's own normalization. Falls back to the
+          // fetched coords if the main graph has no stored bounds.
+          const coords = dataRef.current?.meta.coords
+          const pin = !!coords?.included
+          const ghosts = ghostData.nodes.map((n) => {
+            const pos =
+              coords?.bounds && n.rx != null && n.ry != null
+                ? ghostCoord(n.rx, n.ry, coords)
+                : { x: n.x ?? 0, y: n.y ?? 0 }
+            return {
+              ...n,
+              id: nextId++,
+              x: pos.x,
+              y: pos.y,
+              ...(pin ? { fx: pos.x, fy: pos.y } : {}),
+            }
+          })
           setGhostSimNodes(ghosts as any)
         }
       } catch {
@@ -255,13 +305,94 @@ export default function ArxivGraph({
     () => (selectedId != null ? (byId.get(selectedId) ?? null) : null),
     [selectedId, byId],
   )
-  const selectedNeighbors = useMemo(() => {
-    if (selectedId == null) return []
-    return (adj.get(selectedId) ?? [])
-      .map(({ id, w }) => ({ n: byId.get(id)!, w }))
-      .filter(({ n }) => !!n)
-      .sort((a, b) => b.w - a.w)
-  }, [selectedId, adj, byId])
+
+  // Build ghost nodes for a selected paper's related papers, positioned in the
+  // main graph's coordinate space. Replaces the previous related-ghost set,
+  // retaining the selected node itself if it is already a related ghost.
+  const buildRelatedGhosts = useCallback(
+    (sel: NodeCompact, results: RelatedPaper[]) => {
+      const coords = data?.meta.coords
+      if (!coords?.bounds) {
+        setRelatedGhostNodes([])
+        return
+      }
+      const sims = simNodesRef.current
+      const searchGhosts = ghostSimNodesRef.current
+      const existingAids = new Set<string>()
+      for (const n of sims) existingAids.add(n.aid)
+      for (const n of searchGhosts) existingAids.add(n.aid)
+      const pin = coords.included
+
+      setRelatedGhostNodes((prev) => {
+        const retained = prev.filter((n) => n.id === sel.id)
+        const seenAids = new Set(retained.map((n) => n.aid))
+        let nextId =
+          Math.max(
+            0,
+            ...sims.map((n) => n.id),
+            ...searchGhosts.map((n) => n.id),
+            ...retained.map((n) => n.id),
+          ) + 1
+        const built = retained.slice()
+        for (const r of results) {
+          if (r.rx == null || r.ry == null) continue
+          if (r.aid === sel.aid) continue
+          if (existingAids.has(r.aid) || seenAids.has(r.aid)) continue
+          seenAids.add(r.aid)
+          const { x, y } = ghostCoord(r.rx, r.ry, coords)
+          built.push({
+            id: nextId++,
+            aid: r.aid,
+            t: r.t,
+            au: r.au,
+            pd: r.pd,
+            dm: r.dm,
+            ln: r.ln,
+            cid: r.cid,
+            x,
+            y,
+            ...(pin ? { fx: x, fy: y } : {}),
+          } as NodeCompact & { x: number; y: number })
+        }
+        return built
+      })
+    },
+    [data],
+  )
+
+  // Fetch related papers for the selected node and build their ghost nodes.
+  useEffect(() => {
+    if (!selected) {
+      setRelated([])
+      setRelatedLoading(false)
+      setRelatedGhostNodes([])
+      return
+    }
+    const sel = selected
+    let alive = true
+    setRelated([])
+    setRelatedLoading(true)
+    ;(async () => {
+      try {
+        const { fetchRelated } = await import('../lib/api')
+        const results = await fetchRelated(sel.aid, 10)
+        if (!alive) return
+        setRelated(results)
+        buildRelatedGhosts(sel, results)
+      } catch {
+        if (alive) {
+          setRelated([])
+          setRelatedGhostNodes([])
+        }
+      } finally {
+        if (alive) setRelatedLoading(false)
+      }
+    })()
+    return () => {
+      alive = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.aid, buildRelatedGhosts])
 
   // Force configuration
   useForceConfig(fgRef, !!data)
@@ -379,8 +510,8 @@ export default function ArxivGraph({
   useGraphShortcuts({ query, setQuery, onBackgroundClick, searchInputRef })
 
   const allSimNodes = useMemo(
-    () => [...simNodes, ...ghostSimNodes],
-    [simNodes, ghostSimNodes],
+    () => [...simNodes, ...ghostSimNodes, ...relatedGhostNodes],
+    [simNodes, ghostSimNodes, relatedGhostNodes],
   )
 
   if (error) return <div className='text-red-600 p-4'>{error}</div>
@@ -395,9 +526,12 @@ export default function ArxivGraph({
     const r = 4
     ctx.save()
     let alpha = 1
-    if (ghostIds.has(n.id)) alpha = activeId === n.id ? 0.85 : 0.35
-    if (neighborSet)
-      alpha = neighborSet.has(n.id) ? 1 : ghostIds.has(n.id) ? 0.2 : 0.08
+    if (ghostIds.has(n.id)) {
+      // ghosts (search + related) keep their own alpha, never dimmed by neighborSet
+      alpha = activeId === n.id ? 0.85 : 0.35
+    } else if (neighborSet) {
+      alpha = neighborSet.has(n.id) ? 1 : 0.08
+    }
     ctx.globalAlpha = alpha
     ctx.beginPath()
     ctx.fillStyle = cidToColor(n.cid)
@@ -534,9 +668,12 @@ export default function ArxivGraph({
         <GraphPaperDetails
           paper={selected}
           clusters={clusters}
-          neighbors={selectedNeighbors}
+          related={related}
+          relatedLoading={relatedLoading}
           onClose={onBackgroundClick}
-          onSelectPaper={(id) => {
+          onSelectPaper={(aid) => {
+            const id = aidToId.get(aid)
+            if (id == null) return
             setSelectedId(id)
             setLockedId(id)
             focusNodeById(id)

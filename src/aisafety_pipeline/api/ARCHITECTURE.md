@@ -60,6 +60,10 @@ Implementation:
 - Re-normalises stored `graph_x/y` coordinates to fit the canvas bounds for the subset
 - Builds neighbor links using pgvector `<=>` cosine similarity (batch queries, threshold 0.85, top-5 per paper)
 
+Coordinate fields (used by the UI to align ghost nodes — see `ui/ARCHITECTURE.md`):
+- Each node carries both the canvas-normalised `x`/`y` **and** the raw stored `rx`/`ry` (= `graph_x`/`graph_y`, nullable)
+- `meta.coords.bounds` carries the subset's raw min/max (`x_min`, `x_max`, `y_min`, `y_max`) when coords are present, else `null`. This lets the frontend re-apply *this* subset's normalisation to papers fetched in later calls (search / related), so they land in the same coordinate space rather than each call's own normalisation
+
 ### `GET /api/papers`
 
 Paginated paper listing.
@@ -79,7 +83,7 @@ Implementation:
 - SQL: `ORDER BY embedding <=> %s LIMIT %s` — served by the HNSW index in ~1–5ms
 - No embedding inference at query time
 
-Returns: `NodeCompact[]` with an additional `sim: float` field (cosine similarity, 0–1).
+Returns: `NodeCompact[]` with `sim: float` (cosine similarity, 0–1) plus the raw stored coords `rx`/`ry` (= `graph_x`/`graph_y`, nullable). The UI uses `rx`/`ry` together with the main graph's `meta.coords.bounds` to place related papers as ghost nodes in the correct position.
 
 ### `GET /api/papers/{arxiv_id:path}`
 

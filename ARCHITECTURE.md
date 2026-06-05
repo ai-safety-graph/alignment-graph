@@ -201,6 +201,7 @@ AI should be careful around:
 3. **Identifier mismatch**: arXiv abs URL format must remain stable across pipeline and UI. The frontend assigns ephemeral numeric `id` values by index; `aid` (the arXiv URL) is the durable key.
 4. **Static artifact staleness**: in static mode, pipeline changes have no effect until fresh JSON is exported and redeployed.
 5. **API-only features in UI**: semantic search, related papers, and paper listing all require `VITE_API_URL`. MobileView and StatsView will not load papers without it.
+6. **Graph coordinate alignment**: the desktop graph places search/related "ghost" nodes by re-applying the loaded subset's normalisation to each paper's raw coords. This is a contract spanning `graph.py`/`papers.py` (which expose `meta.coords.bounds` and raw `rx`/`ry`) and `Graph.tsx`'s `ghostCoord()` (which mirrors the backend canvas-mapping formula). Changing the normalisation on either side without the other misplaces ghost nodes.
 
 ---
 

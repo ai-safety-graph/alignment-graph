@@ -62,15 +62,25 @@ This is a **view router**, not shared responsive styling.
 Uses `react-force-graph-2d`.
 
 Responsibilities:
-- Fetch subset graph via `fetchSubgraph(paperIds)` — only renders when `paperIds` is provided
-- Build adjacency from subset links for neighbor highlighting and side-panel
+- Fetch subset graph via `fetchSubgraph(paperIds)` — falls back to a built-in demo set when no `paperIds` are provided
+- Build adjacency from subset links for neighbor highlighting
 - Canvas rendering with hover/select/lock state
 - Neighborhood-only edge visibility
-- Client-side keyword search
+- Semantic search via `searchPapers` (debounced `POST /api/search`)
+- On-demand related papers per selection via `fetchRelated`
 - Cluster legend
 - Side-panel paper details (`GraphPaperDetails`)
 
-Related papers in the side panel come from the subset's adjacency (links pre-computed during subgraph build).
+### Ghost nodes
+
+Beyond the loaded subset, the graph renders two kinds of transient **ghost** nodes:
+
+- **Search ghosts** — `searchPapers` results not already in the subset
+- **Related ghosts** — the selected paper's `fetchRelated` results not already on the canvas
+
+Both are positioned by `ghostCoord()`, which re-applies the **main graph's** normalisation (`meta.coords.bounds` + `meta.coords.canvas`) to each paper's raw `rx`/`ry`. This places ghosts in the same coordinate space as the loaded nodes (e.g. related papers cluster near their source) rather than each fetch using its own min/max normalisation. Papers without raw coords, or when the main graph has no `bounds`, are skipped (related ghosts) or fall back to the fetched `x`/`y` (search ghosts).
+
+Related ghosts use **replace-each-time** semantics: selecting a new paper swaps the related-ghost set (retaining the selected node if it is itself a related ghost); clearing the selection removes them. Ghost ids are assigned past the max existing id, and the lookup maps (`aidToId`, `byId`, `simById`) merge subset + search + related ghosts so ghosts are selectable and reachable from the side-panel "Aligned Papers" links.
 
 Optimized for **local neighborhood exploration**, not full persistent edge display.
 
@@ -110,15 +120,17 @@ Responsibilities:
 
 ## Shared Detail Surface
 
-Three detail components share the same props interface (`paper`, `clusters`, `neighbors`, `onClose`, `onSelectPaper`):
+Three detail components share a common core props interface (`paper`, `clusters`, `onClose`, `onSelectPaper`), with per-renderer differences in how related papers are supplied:
 
 - `GraphPaperDetails.tsx` — fixed side panel for desktop graph view
 - `StatsPaperDetails.tsx` — right pane for stats view (desktop), modal on mobile
 - `MobilePaperDetails.tsx` — modal for mobile list view
 
-`neighbors` is typed as `{ n: NodeCompact; w: number }[]`. In `Graph.tsx` it comes from the subgraph adjacency. In `MobileView` and `StatsView` it comes from `useRelatedPapers`.
+`neighbors` is typed as `{ n: NodeCompact; w: number }[]`. In `MobileView` and `StatsView` it comes from `useRelatedPapers`.
 
-`onSelectPaper` takes `aid: string` in `StatsPaperDetails` and `MobilePaperDetails` (the paper's canonical arXiv URL). `GraphPaperDetails` still uses `onSelectPaper(id: number)` because the graph view selects by numeric node id.
+`GraphPaperDetails` diverges from the other two: it is **presentational**, receiving `related: RelatedPaper[]` and `relatedLoading: boolean` as props. `Graph.tsx` owns the `fetchRelated` call (so it can also build related ghost nodes from the result) and passes the list down. Its `onSelectPaper(aid: string)` is resolved to a numeric node id via the `aidToId` map in `Graph.tsx`; because that map includes related ghosts, clicking a related paper navigates to its on-canvas ghost.
+
+`onSelectPaper` takes `aid: string` (the paper's canonical arXiv URL) in all three detail components.
 
 Lazy summary hydration via `lib/summaries.ts` → `usePaperSummary` hook.
 In API mode, `getSummaryByUrl()` calls `fetchPaper()` and adapts the result to the `Summary` shape.
@@ -133,15 +145,17 @@ In static mode, it fetches `/summaries.json` and caches in module scope.
 ### `NodeCompact`
 
 Required fields: `id`, `aid`, `t`, `au`, `pd`, `dm`, `ln`, `cid`
-Optional: `sm`, `x`, `y`
+Optional: `sm`, `x`, `y` (canvas-normalised coords), `rx`, `ry` (raw stored `graph_x`/`graph_y`, nullable — used to place ghost nodes)
 
-### `SearchResult` (from `api.ts`)
+### `SearchResult` / `RelatedPaper` (from `api.ts`)
 
-Extends the `NodeCompact`-compatible shape with `sim: number` (cosine similarity, 0–1).
+`SearchResult` extends `NodeCompact` with `sim: number` (cosine similarity, 0–1). `RelatedPaper` extends it further with `rx`/`ry` raw coords for ghost placement.
 
 ### `GraphDataCompact`
 
 Top-level artifact shape: `{ meta, clusters, nodes: NodeCompact[], links: LinkCompact[] }`
+
+`meta.coords` carries `included`, `method`, `canvas` (`w`/`h`/`pad`), and `bounds` (raw `x_min`/`x_max`/`y_min`/`y_max`, or `null`). `bounds` is what `ghostCoord()` uses to align ghost nodes to the loaded subset's coordinate space.
 
 ---
 
@@ -154,7 +168,7 @@ Central API client. Key exports:
 - `fetchAllPapers()` — paginates `GET /api/papers` at 200/page, assigns `id: i` by index, returns full `NodeCompact[]`; used by the desktop graph loader only
 - `fetchClusters()` — hits `GET /api/clusters`, returns `ClustersLegend`
 - `fetchSubgraph(ids)` — hits `POST /api/graph/subset`, returns `GraphDataCompact`
-- `fetchRelated(arxivId, limit?)` — hits `GET /api/papers/related`, returns `RelatedPaper[]` (NodeCompact + `sim`)
+- `fetchRelated(arxivId, limit?)` — hits `GET /api/papers/related`, returns `RelatedPaper[]` (NodeCompact + `sim` + raw coords `rx`/`ry`)
 - `fetchPaper(arxivUrl)` — hits `/api/papers/{id}`, returns `PaperDetail | null`
 - `searchPapers(query, opts)` — hits `POST /api/search`, returns `SearchResponse`
 - `fetchPapers(params)` — hits `GET /api/papers` with optional `q`, `from`, `clusters: number[]`, `domains: string[]`, `page`, `limit`; returns `PaginatedPapers`; used by MobileView and StatsView for server-side filtered pagination
@@ -170,6 +184,10 @@ Do not rename compact fields without updating `export_graph.py` and API route re
 ### `cid` means k-means cluster id
 
 Inherited from the backend exporter. Changing this requires coordinated backend and frontend changes.
+
+### `ghostCoord()` must mirror the backend subset normalisation
+
+`ghostCoord()` in `Graph.tsx` replicates the canvas-mapping formula in `graph.py`'s `_build_subgraph` (`PAD + (raw - min) / range * (CANVAS - 2*PAD)`). If the backend changes how it normalises `graph_x/y`, or the meaning of `meta.coords.bounds` / `canvas`, this helper must change in lockstep or ghost nodes will be misplaced relative to the loaded subset.
 
 ### Numeric `id` is assigned by index, not the database
 

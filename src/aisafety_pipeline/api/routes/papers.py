@@ -93,7 +93,7 @@ def get_related_papers(
     rows = conn.execute(
         """
         SELECT id, title, authors, published, link, domain_tag, kmeans_cluster,
-               1 - (embedding <=> %s) AS sim
+               graph_x, graph_y, 1 - (embedding <=> %s) AS sim
         FROM papers
         WHERE id != %s
           AND ai_stage2_keep = TRUE
@@ -113,7 +113,9 @@ def get_related_papers(
             "ln": r[4] or r[0],
             "dm": r[5] or "unknown",
             "cid": r[6],
-            "sim": float(r[7]),
+            "rx": float(r[7]) if r[7] is not None else None,
+            "ry": float(r[8]) if r[8] is not None else None,
+            "sim": float(r[9]),
         }
         for r in rows
     ]

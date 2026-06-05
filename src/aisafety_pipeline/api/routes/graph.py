@@ -91,7 +91,7 @@ def _build_subgraph(conn, paper_ids: List[str]) -> dict:
     nodes = [
         {"id": i, "aid": p["aid"], "t": p["t"], "au": p["au"],
          "pd": p["pd"], "dm": p["dm"], "ln": p["ln"], "cid": p["cid"],
-         "x": p["x"], "y": p["y"]}
+         "x": p["x"], "y": p["y"], "rx": p["raw_x"], "ry": p["raw_y"]}
         for i, p in enumerate(papers)
     ]
 
@@ -141,6 +141,10 @@ def _build_subgraph(conn, paper_ids: List[str]) -> dict:
                 "included": has_coords,
                 "method": "stored-subset" if has_coords else "none",
                 "canvas": {"w": CANVAS_W, "h": CANVAS_H, "pad": PAD},
+                "bounds": (
+                    {"x_min": x_min, "x_max": x_max, "y_min": y_min, "y_max": y_max}
+                    if has_coords else None
+                ),
             },
             "compact": True,
         },

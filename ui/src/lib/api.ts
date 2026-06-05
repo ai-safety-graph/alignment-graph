@@ -108,7 +108,11 @@ export async function fetchAllPapers(): Promise<NodeCompact[]> {
   return allItems.map((item, i) => ({ ...item, id: i }))
 }
 
-export type RelatedPaper = NodeCompact & { sim: number }
+export type RelatedPaper = NodeCompact & {
+  sim: number
+  rx: number | null
+  ry: number | null
+}
 
 export async function fetchRelated(arxivId: string, limit = 10): Promise<RelatedPaper[]> {
   return apiFetch<RelatedPaper[]>(
