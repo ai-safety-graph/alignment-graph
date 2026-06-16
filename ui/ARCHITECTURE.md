@@ -91,9 +91,9 @@ Optimized for **local neighborhood exploration**, not full persistent edge displ
 Renders a paper list UX backed by the live API.
 
 Responsibilities:
-- Paginated fetch via `fetchPapers()` — server-side keyword (`q`), date (`from`), cluster (`clusters`), and domain (`domains`) filtering; infinite scroll via `loadMore`
-- Clusters via `fetchClusters()` on mount
-- Filter state managed by `useApiFilters` hook — changing any filter triggers a fresh `fetchPapers` call
+- Paginated, server-side filtered keyword loading via the shared `usePaperBrowser` hook (`q`/`from`/`clusters`/`domains`; infinite scroll via its `loadMore`). `enabled: searchMode === 'keyword'` pauses it during semantic search.
+- Cluster legend + domains via `useClusterCatalog`; query debounce via `useDebouncedValue`
+- Filter state managed by `useApiFilters` hook — changing any filter triggers a fresh fetch inside `usePaperBrowser`
 - **Semantic search** (API mode only) — debounced `POST /api/search` (400ms), toggled by Sparkles button; cluster/domain filters applied client-side on semantic results
 - Modal paper details with related papers via `useRelatedPapers`
 
@@ -110,11 +110,17 @@ Mobile is intentionally **list-first, search-first, detail-first**.
 Desktop paper browser shown at `/stats`.
 
 Responsibilities:
-- Paginated fetch via `fetchPapers()` — server-side keyword, date, cluster, and domain filtering; infinite scroll via `loadMore`
-- Clusters via `fetchClusters()` on mount
+- Paginated, server-side filtered loading via the shared `usePaperBrowser` hook (keyword/date/cluster/domain filters; infinite scroll via its `loadMore`)
+- Cluster legend + available domains via the shared `useClusterCatalog` hook (one mount fetch of `fetchClusters` + `fetchStats`)
+- Query debounce via `useDebouncedValue`
 - Filter state managed by `useApiFilters` hook
 - Split-pane layout: paper list left, detail panel right (modal on mobile)
-- Related papers in detail panel via `useRelatedPapers`
+- Selected-paper detail via `usePaperDetail`; related papers via `useRelatedPapers`
+- Breadcrumb navigation through related-paper links via `useNavHistory`
+
+`StatsView` and `MobileView` share their entire keyword data layer through
+`useClusterCatalog` / `useDebouncedValue` / `usePaperBrowser`; the views differ
+only in layout and (for Mobile) the semantic-search overlay.
 
 ---
 
@@ -234,7 +240,7 @@ High-risk:
 Four layers:
 
 1. **API loading** (`lib/api.ts`, `lib/summaries.ts`)
-2. **Shared data derivation** (`buildAdjacency`, `useApiFilters`, `usePaperSummary`, `useRelatedPapers`)
+2. **Shared data derivation** (`buildAdjacency`, `useApiFilters`, `usePaperSummary`, `useRelatedPapers`, `useClusterCatalog`, `useDebouncedValue`, `usePaperBrowser`, `usePaperDetail`, `useNavHistory`)
 3. **View routing** (`App.tsx` media query split)
 4. **Renderer-specific UX** (`Graph.tsx`, `MobileView.tsx`, `StatsView.tsx`)
 

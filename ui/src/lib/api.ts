@@ -22,7 +22,9 @@ export type PaginatedPapers = {
   items: NodeCompact[]
 }
 
-export async function fetchSubgraph(paperIds: string[]): Promise<GraphDataCompact> {
+export async function fetchSubgraph(
+  paperIds: string[],
+): Promise<GraphDataCompact> {
   return apiFetch<GraphDataCompact>('/api/graph/subset', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -32,11 +34,15 @@ export async function fetchSubgraph(paperIds: string[]): Promise<GraphDataCompac
 
 const paperCache = new Map<string, PaperDetail>()
 
-export async function fetchPaper(arxivUrl: string): Promise<PaperDetail | null> {
+export async function fetchPaper(
+  arxivUrl: string,
+): Promise<PaperDetail | null> {
   try {
     const id = new URL(arxivUrl).pathname.replace(/^\/abs\//, '')
     if (paperCache.has(id)) return paperCache.get(id)!
-    const paper = await apiFetch<PaperDetail>(`/api/papers/${encodeURIComponent(id)}`)
+    const paper = await apiFetch<PaperDetail>(
+      `/api/papers/${encodeURIComponent(id)}`,
+    )
     paperCache.set(id, paper)
     return paper
   } catch {
@@ -55,15 +61,17 @@ export async function searchPapers(
   })
 }
 
-export async function fetchPapers(params: {
-  page?: number
-  limit?: number
-  clusters?: number[]
-  domains?: string[]
-  from?: string
-  to?: string
-  q?: string
-} = {}): Promise<PaginatedPapers> {
+export async function fetchPapers(
+  params: {
+    page?: number
+    limit?: number
+    clusters?: number[]
+    domains?: string[]
+    from?: string
+    to?: string
+    q?: string
+  } = {},
+): Promise<PaginatedPapers> {
   const qs = new URLSearchParams()
   if (params.page != null) qs.set('page', String(params.page))
   if (params.limit != null) qs.set('limit', String(params.limit))
@@ -98,13 +106,17 @@ export async function fetchAllPapers(): Promise<NodeCompact[]> {
   const PAGE_SIZE = 200
   const first = await fetchPapers({ page: 1, limit: PAGE_SIZE })
   const totalPages = Math.ceil(first.total / PAGE_SIZE)
-  const allItems = totalPages <= 1
-    ? first.items
-    : [...first.items, ...await Promise.all(
-        Array.from({ length: totalPages - 1 }, (_, i) =>
-          fetchPapers({ page: i + 2, limit: PAGE_SIZE }),
-        ),
-      ).then((pages) => pages.flatMap((r) => r.items))]
+  const allItems =
+    totalPages <= 1
+      ? first.items
+      : [
+          ...first.items,
+          ...(await Promise.all(
+            Array.from({ length: totalPages - 1 }, (_, i) =>
+              fetchPapers({ page: i + 2, limit: PAGE_SIZE }),
+            ),
+          ).then((pages) => pages.flatMap((r) => r.items))),
+        ]
   return allItems.map((item, i) => ({ ...item, id: i }))
 }
 
@@ -114,7 +126,10 @@ export type RelatedPaper = NodeCompact & {
   ry: number | null
 }
 
-export async function fetchRelated(arxivId: string, limit = 10): Promise<RelatedPaper[]> {
+export async function fetchRelated(
+  arxivId: string,
+  limit = 10,
+): Promise<RelatedPaper[]> {
   return apiFetch<RelatedPaper[]>(
     `/api/papers/related?id=${encodeURIComponent(arxivId)}&limit=${limit}`,
   )

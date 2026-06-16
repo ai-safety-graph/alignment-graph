@@ -1,13 +1,13 @@
 import { CircleX } from 'lucide-react'
 import { cidToColor } from '../lib/colors'
 import type { ClustersLegend, NodeCompact } from '../lib/types'
-import type { PaperDetail } from '../lib/api'
 import { useRef, useLayoutEffect } from 'react'
 
 type NeighborEntry = { n: NodeCompact; w: number }
 
 interface Props {
-  paper: PaperDetail
+  // Accepts any compact node; `sm` (summary) is optional and rendered when present.
+  paper: NodeCompact
   clusters: ClustersLegend
   neighbors: NeighborEntry[]
   neighborsLoading: boolean

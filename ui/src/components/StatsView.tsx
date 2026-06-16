@@ -1,60 +1,25 @@
-import { useEffect, useMemo, useState, useRef, useLayoutEffect } from 'react'
-import type { PaperDetail } from '../lib/api'
+import { useEffect, useMemo, useRef, useState, useLayoutEffect } from 'react'
 import { Share2, Search, Trash } from 'lucide-react'
-import type { ClustersLegend, NodeCompact } from '../lib/types'
 import StatsPaperDetails from './StatsPaperDetails'
 import MobilePaperDetails from './MobilePaperDetails'
 import PaperList from './PaperList'
 import FilterBar from './FilterBar'
 import { useApiFilters } from '../hooks/useApiFilters'
 import { useRelatedPapers } from '../hooks/useRelatedPapers'
+import { useClusterCatalog } from '../hooks/useClusterCatalog'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
+import { usePaperBrowser } from '../hooks/usePaperBrowser'
+import { usePaperDetail } from '../hooks/usePaperDetail'
+import { useNavHistory } from '../hooks/useNavHistory'
 
 export default function StatsView({
   onToggleView,
 }: {
   onToggleView: () => void
 }) {
-  const [nodes, setNodes] = useState<NodeCompact[] | null>(null)
-  const [clusters, setClusters] = useState<ClustersLegend>({})
-  const [availableDomains, setAvailableDomains] = useState<string[]>([])
-  const [error, setError] = useState<string | null>(null)
+  const { clusters, availableDomains } = useClusterCatalog()
   const [query, setQuery] = useState('')
-  const [debouncedQuery, setDebouncedQuery] = useState('')
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [fetchedPaper, setFetchedPaper] = useState<PaperDetail | null>(null)
-  const [hasMore, setHasMore] = useState(false)
-  const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-
-  type NavEntry = { aid: string; title: string }
-  const [navHistory, setNavHistory] = useState<NavEntry[]>([])
-
-  const listRef = useRef<HTMLDivElement | null>(null)
-  const hasLoadedRef = useRef(false)
-  const autoSelectedRef = useRef(false)
-  const isLoadingMoreRef = useRef(false)
-  const loadParamsRef = useRef({ query: '', fromDate: undefined as string | undefined, page: 1, hasMore: false, activeCids: new Set<number>(), activeDomains: new Set<string>() })
-
-  // Fetch clusters + available domains once on mount
-  useEffect(() => {
-    let alive = true
-    ;(async () => {
-      try {
-        const { fetchClusters, fetchStats } = await import('../lib/api')
-        const [allClusters, stats] = await Promise.all([fetchClusters(), fetchStats()])
-        if (!alive) return
-        setClusters(allClusters)
-        setAvailableDomains(Object.keys(stats.domains).filter(Boolean).sort())
-      } catch {}
-    })()
-    return () => { alive = false }
-  }, [])
-
-  // Debounce the search query
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedQuery(query), 300)
-    return () => clearTimeout(timer)
-  }, [query])
+  const debouncedQuery = useDebouncedValue(query, 300)
 
   const {
     fromDate,
@@ -69,127 +34,49 @@ export default function StatsView({
     toggleDomain,
   } = useApiFilters(clusters)
 
-  // Keep loadParamsRef in sync so loadMore always reads fresh values
-  loadParamsRef.current = { query: debouncedQuery, fromDate, page, hasMore, activeCids, activeDomains }
+  const { papers, total, hasMore, error, loadMore } = usePaperBrowser({
+    query: debouncedQuery,
+    fromDate,
+    activeCids,
+    activeDomains,
+  })
 
-  // Reload papers whenever debounced query, date, or cluster/domain filters change
-  useEffect(() => {
-    let alive = true
-    isLoadingMoreRef.current = false
-    ;(async () => {
-      try {
-        const { fetchPapers } = await import('../lib/api')
-        const result = await fetchPapers({
-          q: debouncedQuery || undefined,
-          from: fromDate,
-          clusters: activeCids.size > 0 ? [...activeCids] : undefined,
-          domains: activeDomains.size > 0 ? [...activeDomains] : undefined,
-          limit: 50,
-        })
-        if (!alive) return
-        setNodes(result.items.map((item, i) => ({ ...item, id: i })))
-        setPage(1)
-        setTotal(result.total)
-        setHasMore(result.items.length < result.total)
-        hasLoadedRef.current = true
-      } catch (e: any) {
-        if (!alive) return
-        if (!hasLoadedRef.current) setError(`Failed to load papers: ${e?.message ?? String(e)}`)
-      }
-    })()
-    return () => { alive = false }
-  }, [debouncedQuery, fromDate, activeCids, activeDomains])
+  const { selectedId, navHistory, selectFromList, selectRelated, navigateTo, close } = useNavHistory()
+  const selected = usePaperDetail(selectedId)
+  const { neighbors, loading: neighborsLoading } = useRelatedPapers(selectedId)
 
+  const listRef = useRef<HTMLDivElement | null>(null)
+  const autoSelectedRef = useRef(false)
+
+  // Auto-select the first paper once results first arrive.
   useEffect(() => {
-    if (!autoSelectedRef.current && nodes && nodes.length > 0 && selectedId === null) {
+    if (!autoSelectedRef.current && papers && papers.length > 0 && selectedId === null) {
       autoSelectedRef.current = true
-      setSelectedId(nodes[0].aid)
+      selectFromList(papers[0].aid)
     }
-  }, [nodes, selectedId])
+  }, [papers, selectedId, selectFromList])
 
-  async function loadMore() {
-    const { query, fromDate: fd, page: p, hasMore: hm, activeCids: cids, activeDomains: dms } = loadParamsRef.current
-    if (!hm || isLoadingMoreRef.current) return
-    isLoadingMoreRef.current = true
-    try {
-      const { fetchPapers } = await import('../lib/api')
-      const result = await fetchPapers({
-        q: query || undefined,
-        from: fd,
-        clusters: cids.size > 0 ? [...cids] : undefined,
-        domains: dms.size > 0 ? [...dms] : undefined,
-        limit: 50,
-        page: p + 1,
-      })
-      setNodes((prev) => {
-        const prevLen = prev?.length ?? 0
-        return [...(prev ?? []), ...result.items.map((item, i) => ({ ...item, id: prevLen + i }))]
-      })
-      setPage(p + 1)
-      setTotal(result.total)
-      setHasMore((p + 1) * 50 < result.total)
-    } catch {}
-    isLoadingMoreRef.current = false
-  }
+  const items = useMemo(() => (papers ?? []).map((n) => ({ n })), [papers])
 
-  const filtered = useMemo(
-    () => (nodes ?? []).map((n) => ({ n, deg: 0 })),
-    [nodes],
-  )
-
+  // Reset list scroll when the result set changes.
   useLayoutEffect(() => {
-    const el = listRef.current
-    if (!el) return
-    el.scrollTop = 0
-  }, [filtered])
+    if (listRef.current) listRef.current.scrollTop = 0
+  }, [items])
 
+  // Lock background scroll while the mobile detail modal is open.
   useEffect(() => {
-    setFetchedPaper(null)
-    if (!selectedId) return
-    let cancelled = false
-    import('../lib/api').then(({ fetchPaper }) => {
-      fetchPaper(selectedId).then((p) => {
-        if (!cancelled) setFetchedPaper(p)
-      })
-    })
-    return () => { cancelled = true }
-  }, [selectedId])
-
-  const selected = fetchedPaper
-
-  const { neighbors: selectedNeighbors, loading: neighborsLoading } = useRelatedPapers(selectedId)
-
-  useEffect(() => {
-    if (selected) {
-      const prev = document.body.style.overflow
-      document.body.style.overflow = 'hidden'
-      return () => {
-        document.body.style.overflow = prev
-      }
+    if (!selected) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
     }
   }, [selected])
 
-  const handleSelectFromList = (aid: string) => {
-    setNavHistory([])
-    setSelectedId(aid)
-  }
+  const handleSelectRelated = (aid: string) =>
+    selectRelated(selected ? { aid: selected.aid, title: selected.t } : null, aid)
 
-  const handleSelectRelated = (aid: string) => {
-    if (fetchedPaper) {
-      setNavHistory(prev => [...prev, { aid: fetchedPaper.aid, title: fetchedPaper.t }])
-    }
-    setSelectedId(aid)
-  }
-
-  const handleNavigateTo = (aid: string, historyIndex: number) => {
-    setNavHistory(h => h.slice(0, historyIndex))
-    setSelectedId(aid)
-  }
-
-  const handleClose = () => {
-    setSelectedId(null)
-    setNavHistory([])
-  }
+  const resetKey = `${debouncedQuery}|${fromDate ?? ''}|${[...activeCids].sort()}|${[...activeDomains].sort()}`
 
   return (
     <div className='fixed inset-0 bg-neutral-950 text-[#e5e5e5] flex flex-col'>
@@ -235,7 +122,7 @@ export default function StatsView({
       <div className='flex flex-row flex-1 overflow-hidden'>
         <div className='flex flex-col flex-1 overflow-hidden min-w-0'>
           {/* Filters */}
-          {nodes && (
+          {papers && (
             <div className='shrink-0 border-b border-neutral-900'>
               <FilterBar
                 clusterEntries={clusterEntries}
@@ -257,32 +144,32 @@ export default function StatsView({
             ref={listRef}
             className='flex-1 overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent'
           >
-            {nodes && total > 0 && (
+            {papers && total > 0 && (
               <div className='px-4 py-1.5 text-xs text-neutral-500'>
-                Showing {nodes.length} of {total.toLocaleString()} papers
+                Showing {papers.length} of {total.toLocaleString()} papers
               </div>
             )}
 
             {error && <p className='p-4 text-red-400'>{error}</p>}
 
-            {!nodes && (
+            {!papers && (
               <div className='flex h-[60vh] items-center justify-center text-neutral-400'>
                 Loading…
               </div>
             )}
 
-            {nodes && filtered.length === 0 && (
+            {papers && items.length === 0 && (
               <div className='p-6 text-center text-neutral-400'>
                 No matches.
               </div>
             )}
 
             <PaperList
-              items={filtered}
+              items={items}
               clusters={clusters}
-              onSelectId={handleSelectFromList}
+              onSelectId={selectFromList}
               enableHover
-              resetKey={`${debouncedQuery}|${fromDate ?? ''}|${[...activeCids].sort()}|${[...activeDomains].sort()}`}
+              resetKey={resetKey}
               hasMore={hasMore}
               onLoadMore={loadMore}
               selectedId={selectedId ?? undefined}
@@ -295,12 +182,12 @@ export default function StatsView({
             <StatsPaperDetails
               paper={selected}
               clusters={clusters}
-              neighbors={selectedNeighbors}
+              neighbors={neighbors}
               neighborsLoading={neighborsLoading}
               navHistory={navHistory}
-              onClose={handleClose}
+              onClose={close}
               onSelectPaper={handleSelectRelated}
-              onNavigateTo={handleNavigateTo}
+              onNavigateTo={navigateTo}
             />
           ) : selectedId ? (
             <div className='p-6 space-y-3 animate-pulse'>
@@ -327,19 +214,19 @@ export default function StatsView({
         <div className='md:hidden fixed inset-0 z-20 bg-black/70 flex items-center justify-center p-3'>
           <button
             aria-label='Close overlay'
-            onClick={handleClose}
+            onClick={close}
             className='absolute inset-0'
           />
           <div className='relative z-10 w-full max-w-[720px] h-[92dvh] rounded-2xl shadow-2xl overflow-hidden'>
             <MobilePaperDetails
               paper={selected}
               clusters={clusters}
-              neighbors={selectedNeighbors}
+              neighbors={neighbors}
               neighborsLoading={neighborsLoading}
               navHistory={navHistory}
-              onClose={handleClose}
+              onClose={close}
               onSelectPaper={handleSelectRelated}
-              onNavigateTo={handleNavigateTo}
+              onNavigateTo={navigateTo}
             />
           </div>
         </div>

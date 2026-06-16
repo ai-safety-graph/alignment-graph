@@ -3,7 +3,7 @@ import type { NodeCompact, ClustersLegend } from '../lib/types'
 import { cidToColor } from '../lib/colors'
 
 interface PaperListProps {
-  items: Array<{ n: NodeCompact; deg: number }>
+  items: Array<{ n: NodeCompact }>
   clusters: ClustersLegend
   onSelectId: (aid: string) => void
   enableHover?: boolean

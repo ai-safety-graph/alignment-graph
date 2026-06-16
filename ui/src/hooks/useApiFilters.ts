@@ -25,13 +25,17 @@ export function useApiFilters(clusters: ClustersLegend) {
   const [datePreset, setDatePreset] = useState<DatePreset>('3m')
 
   const clusterEntries = useMemo(
-    () => Object.entries(clusters) as Array<[string, { label?: string | null; size: number }]>,
+    () =>
+      Object.entries(clusters) as Array<
+        [string, { label?: string | null; size: number }]
+      >,
     [clusters],
   )
 
   const fromDate = useMemo(() => presetToFromDate(datePreset), [datePreset])
 
-  const hasActiveFilters = activeCids.size > 0 || activeDomains.size > 0 || datePreset !== '3m'
+  const hasActiveFilters =
+    activeCids.size > 0 || activeDomains.size > 0 || datePreset !== '3m'
 
   function clearAllFilters() {
     setActiveCids(new Set())
