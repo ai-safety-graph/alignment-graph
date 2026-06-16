@@ -102,24 +102,6 @@ export async function fetchClusters(): Promise<ClustersLegend> {
   return legend
 }
 
-export async function fetchAllPapers(): Promise<NodeCompact[]> {
-  const PAGE_SIZE = 200
-  const first = await fetchPapers({ page: 1, limit: PAGE_SIZE })
-  const totalPages = Math.ceil(first.total / PAGE_SIZE)
-  const allItems =
-    totalPages <= 1
-      ? first.items
-      : [
-          ...first.items,
-          ...(await Promise.all(
-            Array.from({ length: totalPages - 1 }, (_, i) =>
-              fetchPapers({ page: i + 2, limit: PAGE_SIZE }),
-            ),
-          ).then((pages) => pages.flatMap((r) => r.items))),
-        ]
-  return allItems.map((item, i) => ({ ...item, id: i }))
-}
-
 export type RelatedPaper = NodeCompact & {
   sim: number
   rx: number | null
