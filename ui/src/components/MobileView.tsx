@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useRef, useLayoutEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { Trash, Search, Newspaper, Sparkles } from 'lucide-react'
 
 import MobilePaperDetails from './MobilePaperDetails'
@@ -13,12 +14,7 @@ import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { usePaperBrowser } from '../hooks/usePaperBrowser'
 import { hasApi, searchPapers } from '../lib/api'
 
-export default function MobilePapers({
-  onToggleView,
-}: {
-  src?: string
-  onToggleView?: () => void
-}) {
+export default function MobilePapers() {
   const { clusters, availableDomains } = useClusterCatalog()
   const [query, setQuery] = useState('')
   const debouncedQuery = useDebouncedValue(query, 300)
@@ -178,13 +174,13 @@ export default function MobilePapers({
           ref={searchBarRef}
           className='sticky top-0 z-10 p-3 bg-neutral-950/90 backdrop-blur border-b border-neutral-800 items-center flex gap-3'
         >
-          <button
-            onClick={onToggleView}
+          <Link
+            to='/stats'
             className='shrink-0 p-2 rounded-full cursor-pointer bg-[#2a2a2a] border border-[#333333] text-neutral-400 hover:text-neutral-200'
             aria-label='Show stats'
           >
             <Newspaper size={18} />
-          </button>
+          </Link>
           <div className='flex items-center gap-2 flex-1'>
             <div className='relative flex-1'>
               {semanticLoading ? (

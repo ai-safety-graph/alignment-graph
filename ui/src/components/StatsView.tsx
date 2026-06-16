@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useLayoutEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { Share2, Search, Trash } from 'lucide-react'
 import StatsPaperDetails from './StatsPaperDetails'
 import MobilePaperDetails from './MobilePaperDetails'
@@ -12,11 +13,7 @@ import { usePaperBrowser } from '../hooks/usePaperBrowser'
 import { usePaperDetail } from '../hooks/usePaperDetail'
 import { useNavHistory } from '../hooks/useNavHistory'
 
-export default function StatsView({
-  onToggleView,
-}: {
-  onToggleView: () => void
-}) {
+export default function StatsView() {
   const { clusters, availableDomains } = useClusterCatalog()
   const [query, setQuery] = useState('')
   const debouncedQuery = useDebouncedValue(query, 300)
@@ -82,13 +79,13 @@ export default function StatsView({
     <div className='fixed inset-0 bg-neutral-950 text-[#e5e5e5] flex flex-col'>
       {/* Top: full-width search bar, centered */}
       <div className='shrink-0 border-b border-neutral-800 bg-neutral-950/90 backdrop-blur px-3 py-3 flex items-center gap-3'>
-        <button
-          onClick={onToggleView}
+        <Link
+          to='/'
           className='shrink-0 p-2 rounded-full cursor-pointer bg-[#2a2a2a] border border-[#333333] text-neutral-400 hover:text-neutral-200'
           aria-label='Back to graph'
         >
           <Share2 size={18} />
-        </button>
+        </Link>
         <div className='flex-1 flex justify-center'>
           <div className='relative w-full max-w-xl flex items-center gap-2'>
             <div className='relative flex-1'>

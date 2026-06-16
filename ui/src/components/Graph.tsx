@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { Link } from 'react-router-dom'
 import ForceGraph2D from 'react-force-graph-2d'
 import type {
   ForceGraphMethods,
@@ -63,11 +64,9 @@ function ghostCoord(
 
 export default function ArxivGraph({
   src = '/graph.json',
-  onToggleView,
   paperIds,
 }: {
   src?: string
-  onToggleView?: () => void
   paperIds?: string[]
 }) {
   const fgRef = useRef<ForceGraphMethods | null>(null)
@@ -683,13 +682,13 @@ export default function ArxivGraph({
 
       {/* Stats toggle + subgraph dropdown */}
       <div className='fixed top-4 left-4 z-10 flex items-center gap-2'>
-        <button
+        <Link
+          to='/stats'
           aria-label='Show stats'
-          onClick={onToggleView}
           className='p-2 rounded-full cursor-pointer bg-[#2a2a2a] border border-[#333333] text-neutral-400 hover:text-neutral-200'
         >
           <Newspaper size={18} />
-        </button>
+        </Link>
 
         <div className='relative' ref={dropdownRef}>
           <button
