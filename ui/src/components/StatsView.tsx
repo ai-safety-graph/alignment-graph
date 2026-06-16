@@ -5,7 +5,7 @@ import StatsPaperDetails from './StatsPaperDetails'
 import MobilePaperDetails from './MobilePaperDetails'
 import PaperList from './PaperList'
 import FilterBar from './FilterBar'
-import { useApiFilters } from '../hooks/useApiFilters'
+import { useServerFilters } from '../hooks/useServerFilters'
 import { useRelatedPapers } from '../hooks/useRelatedPapers'
 import { useClusterCatalog } from '../hooks/useClusterCatalog'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
@@ -29,7 +29,7 @@ export default function StatsView() {
     clearAllFilters,
     toggleCluster,
     toggleDomain,
-  } = useApiFilters(clusters)
+  } = useServerFilters(clusters)
 
   const { papers, total, hasMore, error, loadMore } = usePaperBrowser({
     query: debouncedQuery,

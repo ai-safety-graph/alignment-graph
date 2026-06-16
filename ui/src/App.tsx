@@ -2,7 +2,7 @@ import { Suspense, lazy } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import { useMediaQuery } from './hooks/useMediaQuery'
 
-const ArxivGraph = lazy(() => import('./components/Graph'))
+const ArxivGraph = lazy(() => import('./components/GraphView'))
 const MobilePapers = lazy(() => import('./components/MobileView'))
 const StatsPage = lazy(() => import('./components/StatsView'))
 

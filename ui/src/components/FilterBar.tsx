@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { cidToColor } from '../lib/colors'
-import { DATE_PRESETS } from '../hooks/useApiFilters'
-import type { DatePreset } from '../hooks/useApiFilters'
+import { DATE_PRESETS } from '../hooks/useServerFilters'
+import type { DatePreset } from '../hooks/useServerFilters'
 
 interface FilterBarProps {
   clusterEntries: Array<[string, { label?: string | null; size: number }]>

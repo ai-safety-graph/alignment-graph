@@ -7,7 +7,7 @@ import PaperList from './PaperList'
 import type { NodeCompact } from '../lib/types'
 import type { SearchResult } from '../lib/api'
 import FilterBar from './FilterBar'
-import { useApiFilters } from '../hooks/useApiFilters'
+import { useServerFilters } from '../hooks/useServerFilters'
 import { useRelatedPapers } from '../hooks/useRelatedPapers'
 import { useClusterCatalog } from '../hooks/useClusterCatalog'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
@@ -39,7 +39,7 @@ export default function MobilePapers() {
     clearAllFilters,
     toggleCluster,
     toggleDomain,
-  } = useApiFilters(clusters)
+  } = useServerFilters(clusters)
 
   // Keyword pagination is delegated to the shared browser; it pauses while
   // semantic search is active.

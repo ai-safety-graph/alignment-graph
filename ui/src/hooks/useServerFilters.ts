@@ -19,7 +19,7 @@ function presetToFromDate(preset: DatePreset): string | undefined {
   return d.toISOString().split('T')[0]
 }
 
-export function useApiFilters(clusters: ClustersLegend) {
+export function useServerFilters(clusters: ClustersLegend) {
   const [activeCids, setActiveCids] = useState<Set<number>>(new Set())
   const [activeDomains, setActiveDomains] = useState<Set<string>>(new Set())
   const [datePreset, setDatePreset] = useState<DatePreset>('3m')
