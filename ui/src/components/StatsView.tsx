@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useLayoutEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { Share2, Search, Trash } from 'lucide-react'
 import StatsPaperDetails from './StatsPaperDetails'
 import MobilePaperDetails from './MobilePaperDetails'
@@ -38,7 +38,14 @@ export default function StatsView() {
     activeDomains,
   })
 
-  const { selectedId, navHistory, selectFromList, selectRelated, navigateTo, close } = useNavHistory()
+  const {
+    selectedId,
+    navHistory,
+    selectFromList,
+    selectRelated,
+    navigateTo,
+    close,
+  } = useNavHistory()
   const selected = usePaperDetail(selectedId)
   const { neighbors, loading: neighborsLoading } = useRelatedPapers(selectedId)
 
@@ -51,7 +58,12 @@ export default function StatsView() {
   // it fills the side detail pane. On mobile this would pop the detail modal
   // open unprompted, so it's skipped below the md breakpoint (768px).
   useEffect(() => {
-    if (!autoSelectedRef.current && papers && papers.length > 0 && selectedId === null) {
+    if (
+      !autoSelectedRef.current &&
+      papers &&
+      papers.length > 0 &&
+      selectedId === null
+    ) {
       if (!window.matchMedia('(min-width: 768px)').matches) return
       autoSelectedRef.current = true
       selectFromList(papers[0].aid)
@@ -76,7 +88,10 @@ export default function StatsView() {
   }, [selected])
 
   const handleSelectRelated = (aid: string) =>
-    selectRelated(selected ? { aid: selected.aid, title: selected.t } : null, aid)
+    selectRelated(
+      selected ? { aid: selected.aid, title: selected.t } : null,
+      aid,
+    )
 
   const resetKey = `${debouncedQuery}|${fromDate ?? ''}|${[...activeCids].sort()}|${[...activeDomains].sort()}`
 
@@ -92,7 +107,10 @@ export default function StatsView() {
   }, [])
 
   // Shared bits reused across the desktop header and the mobile sticky bar.
-  const backLink = (
+  // On the home route StatsView *is* the / view (mobile), so a "back to graph"
+  // link pointing at / would be self-referential — hide it there.
+  const onHome = useLocation().pathname === '/'
+  const backLink = onHome ? null : (
     <Link
       to='/'
       className='shrink-0 p-2 rounded-full cursor-pointer bg-[#2a2a2a] border border-[#333333] text-neutral-400 hover:text-neutral-200'
@@ -194,7 +212,9 @@ export default function StatsView() {
               className='md:hidden sticky top-0 z-10 p-3 bg-neutral-950/90 backdrop-blur border-b border-neutral-800 flex items-center gap-3'
             >
               {backLink}
-              <div className='flex items-center gap-2 flex-1'>{searchControls}</div>
+              <div className='flex items-center gap-2 flex-1'>
+                {searchControls}
+              </div>
             </div>
 
             {/* Mobile-only sticky filters, offset beneath the search bar */}
