@@ -44,10 +44,15 @@ export default function StatsView() {
 
   const listRef = useRef<HTMLDivElement | null>(null)
   const autoSelectedRef = useRef(false)
+  const searchBarRef = useRef<HTMLDivElement | null>(null)
+  const [searchHeight, setSearchHeight] = useState(0)
 
-  // Auto-select the first paper once results first arrive.
+  // Auto-select the first paper once results first arrive — desktop only, where
+  // it fills the side detail pane. On mobile this would pop the detail modal
+  // open unprompted, so it's skipped below the md breakpoint (768px).
   useEffect(() => {
     if (!autoSelectedRef.current && papers && papers.length > 0 && selectedId === null) {
+      if (!window.matchMedia('(min-width: 768px)').matches) return
       autoSelectedRef.current = true
       selectFromList(papers[0].aid)
     }
@@ -75,40 +80,78 @@ export default function StatsView() {
 
   const resetKey = `${debouncedQuery}|${fromDate ?? ''}|${[...activeCids].sort()}|${[...activeDomains].sort()}`
 
+  // Measure the mobile sticky search bar so the filter bar can stick beneath it.
+  useLayoutEffect(() => {
+    const el = searchBarRef.current
+    if (!el) return
+    const measure = () => setSearchHeight(el.getBoundingClientRect().height)
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  // Shared bits reused across the desktop header and the mobile sticky bar.
+  const backLink = (
+    <Link
+      to='/'
+      className='shrink-0 p-2 rounded-full cursor-pointer bg-[#2a2a2a] border border-[#333333] text-neutral-400 hover:text-neutral-200'
+      aria-label='Back to graph'
+    >
+      <Share2 size={18} />
+    </Link>
+  )
+
+  const searchControls = (
+    <>
+      <div className='relative flex-1'>
+        <Search
+          className='absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400'
+          size={16}
+        />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder='Search papers on AI safety & alignment'
+          className='w-full pl-9 pr-3 py-2 rounded-xl bg-neutral-900 border border-[#333333] text-[#e5e5e5] placeholder-[#666666] outline-none focus:ring-2 focus:ring-[#4ea8de]'
+        />
+      </div>
+      {query && (
+        <button
+          aria-label='Clear'
+          onClick={() => setQuery('')}
+          className='p-2 rounded-lg text-neutral-400 hover:text-neutral-200'
+        >
+          <Trash size={18} />
+        </button>
+      )}
+    </>
+  )
+
+  const filterBar = papers ? (
+    <FilterBar
+      clusterEntries={clusterEntries}
+      availableDomains={availableDomains}
+      activeCids={activeCids}
+      activeDomains={activeDomains}
+      datePreset={datePreset}
+      hasActiveFilters={hasActiveFilters}
+      onToggleCluster={toggleCluster}
+      onToggleDomain={toggleDomain}
+      onSetDatePreset={setDatePreset}
+      onClearAll={clearAllFilters}
+    />
+  ) : null
+
   return (
     <div className='fixed inset-0 bg-neutral-950 text-[#e5e5e5] flex flex-col'>
-      {/* Top: full-width search bar, centered */}
-      <div className='shrink-0 border-b border-neutral-800 bg-neutral-950/90 backdrop-blur px-3 py-3 flex items-center gap-3'>
-        <Link
-          to='/'
-          className='shrink-0 p-2 rounded-full cursor-pointer bg-[#2a2a2a] border border-[#333333] text-neutral-400 hover:text-neutral-200'
-          aria-label='Back to graph'
-        >
-          <Share2 size={18} />
-        </Link>
+      {/* Desktop: full-width search bar, centered. Hidden on mobile, where the
+          search bar lives inside the scroll container below the scrolling logo. */}
+      <div className='hidden md:flex shrink-0 border-b border-neutral-800 bg-neutral-950/90 backdrop-blur px-3 py-3 items-center gap-3'>
+        {backLink}
         <div className='flex-1 flex justify-center'>
           <div className='relative w-full max-w-xl flex items-center gap-2'>
-            <div className='relative flex-1'>
-              <Search
-                className='absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400'
-                size={16}
-              />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder='Search papers on AI safety & alignment'
-                className='w-full pl-9 pr-3 py-2 rounded-xl bg-neutral-900 border border-[#333333] text-[#e5e5e5] placeholder-[#666666] outline-none focus:ring-2 focus:ring-[#4ea8de]'
-              />
-            </div>
-            {query && (
-              <button
-                aria-label='Clear'
-                onClick={() => setQuery('')}
-                className='p-2 rounded-lg text-neutral-400 hover:text-neutral-200'
-              >
-                <Trash size={18} />
-              </button>
-            )}
+            {searchControls}
           </div>
         </div>
         {/* Spacer balances the back arrow so the input stays visually centred */}
@@ -118,21 +161,10 @@ export default function StatsView() {
       {/* Body */}
       <div className='flex flex-row flex-1 overflow-hidden'>
         <div className='flex flex-col flex-1 overflow-hidden min-w-0'>
-          {/* Filters */}
-          {papers && (
-            <div className='shrink-0 border-b border-neutral-900'>
-              <FilterBar
-                clusterEntries={clusterEntries}
-                availableDomains={availableDomains}
-                activeCids={activeCids}
-                activeDomains={activeDomains}
-                datePreset={datePreset}
-                hasActiveFilters={hasActiveFilters}
-                onToggleCluster={toggleCluster}
-                onToggleDomain={toggleDomain}
-                onSetDatePreset={setDatePreset}
-                onClearAll={clearAllFilters}
-              />
+          {/* Desktop filters sit above the scroll area. */}
+          {filterBar && (
+            <div className='hidden md:block shrink-0 border-b border-neutral-900'>
+              {filterBar}
             </div>
           )}
 
@@ -141,6 +173,40 @@ export default function StatsView() {
             ref={listRef}
             className='flex-1 overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent'
           >
+            {/* Mobile-only logo that scrolls away above the sticky search bar */}
+            <div className='md:hidden px-4 pt-4 pb-2'>
+              <a
+                target='_blank'
+                href='https://github.com/ai-safety-graph/alignment-graph'
+                className='flex items-center justify-center'
+              >
+                <img
+                  src='/ag-logo.svg'
+                  alt='Alignment Graph Logo'
+                  className='h-10 w-auto opacity-50 saturate-70'
+                />
+              </a>
+            </div>
+
+            {/* Mobile-only sticky search bar */}
+            <div
+              ref={searchBarRef}
+              className='md:hidden sticky top-0 z-10 p-3 bg-neutral-950/90 backdrop-blur border-b border-neutral-800 flex items-center gap-3'
+            >
+              {backLink}
+              <div className='flex items-center gap-2 flex-1'>{searchControls}</div>
+            </div>
+
+            {/* Mobile-only sticky filters, offset beneath the search bar */}
+            {filterBar && (
+              <div
+                className='md:hidden sticky z-10 bg-neutral-950/90 backdrop-blur border-b border-neutral-900'
+                style={{ top: searchHeight }}
+              >
+                {filterBar}
+              </div>
+            )}
+
             {papers && total > 0 && (
               <div className='px-4 py-1.5 text-xs text-neutral-500'>
                 Showing {papers.length} of {total.toLocaleString()} papers
