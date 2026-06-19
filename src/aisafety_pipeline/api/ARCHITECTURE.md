@@ -27,7 +27,7 @@ src/aisafety_pipeline/api/
 
 ## Startup / Lifespan
 
-`main.py` uses FastAPI's `lifespan` context manager to verify the DB connection on startup. If `DATABASE_URL` is unset the process exits at startup.
+`main.py` uses FastAPI's `lifespan` context manager to **warm the search embedding generator** on startup (calls `_get_generator()`), so the first `/api/search` request isn't slowed by model load. The warm-up is best-effort — failures are swallowed and the model loads lazily on first request instead. The lifespan does **not** validate `DATABASE_URL`; that check happens per-request in `get_conn()`.
 
 CORS origins are configured from `config.API_CORS_ORIGINS` (includes `https://alignment-graph.netlify.app` and `http://localhost:5173`).
 
@@ -36,11 +36,12 @@ CORS origins are configured from `config.API_CORS_ORIGINS` (includes `https://al
 ## Dependency
 
 `deps.py` defines `get_conn()`:
+- Raises `RuntimeError` if `DATABASE_URL` is unset (the API requires PostgreSQL)
 - Opens a fresh `PgConnection(DATABASE_URL)` per request
 - Yields the connection
 - Closes it in `finally`
 
-All route handlers declare `conn: PgConnection = Depends(get_conn)`.
+Route handlers declare `conn=Depends(get_conn)`.
 
 ---
 
@@ -66,11 +67,16 @@ Coordinate fields (used by the UI to align ghost nodes — see `ui/ARCHITECTURE.
 
 ### `GET /api/papers`
 
-Paginated paper listing.
+Paginated paper listing with server-side filtering.
 
-Query params: `page` (default 1), `limit` (default 50, max 200), `cluster` (kmeans_cluster), `domain`, `from` (date), `to` (date)
+Query params:
+- `page` (default 1), `limit` (default 50, max 200)
+- `cluster` — repeatable; multiple values are OR-ed (`kmeans_cluster IN (...)`)
+- `domain` — repeatable; multiple values are OR-ed (`domain_tag IN (...)`)
+- `from` / `to` — `published` date bounds
+- `q` — keyword substring match on `title`/`authors` (`ILIKE`)
 
-Returns: `{ total, page, limit, items: NodeCompact[] }`
+Ordered by `published DESC`. Returns: `{ total, page, limit, items: NodeCompact[] }`. Items carry no `sm` (summary) — fetch a single paper for that.
 
 ### `GET /api/papers/related`
 
@@ -95,7 +101,7 @@ Returns full paper record including `summary`.
 
 Semantic search using pgvector ANN.
 
-Request body: `{ query: str, limit: int = 10, domain?: str, cluster?: int }`
+Request body: `{ query: str, limit: int = 20 (max 100), domain?: str, cluster?: int }`
 
 Implementation:
 - Embeds `query` using a lazily-initialized `EmbeddingGenerator` singleton (`_generator`)
@@ -112,13 +118,15 @@ Returns: array of `{ cid, label, confidence, terms, size }`.
 
 ### `GET /api/stats`
 
-Aggregate statistics:
-- Total papers
-- Domain breakdown (tech / gov / both / unknown)
-- Cluster sizes
-- Monthly histogram via `DATE_TRUNC('month', published)`
+Aggregate statistics over `ai_stage2_keep = TRUE` papers (plus raw/embedded totals):
+- `total_harvested` — `COUNT(*)` of `papers_raw`
+- `total_filtered` — kept papers
+- `total_embedded` — kept papers with a non-null `embedding`
+- `domains` — counts keyed by `domain_tag` (null → `"unknown"`)
+- `clusters` — counts keyed by `kmeans_cluster`
+- `by_month` — monthly histogram keyed `YYYY-MM` via `DATE_TRUNC('month', published::date)`
 
-Returns: `{ total, by_domain, by_cluster, by_month }`
+Returns: `{ total_harvested, total_filtered, total_embedded, domains, clusters, by_month }`
 
 ### `GET /health`
 

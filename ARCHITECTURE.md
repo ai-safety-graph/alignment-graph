@@ -4,13 +4,13 @@
 
 This repository builds an AI-safety literature exploration system with two major parts:
 
-1. A **Python pipeline** that harvests arXiv metadata, stores it in SQLite or PostgreSQL, computes embeddings, filters papers, clusters them, labels clusters, and optionally exports JSON artifacts.
-2. A **React/Vite UI** that loads data either from a live FastAPI backend or from exported static JSON artifacts (fallback / legacy mode).
+1. A **Python pipeline** that harvests arXiv metadata, stores it in SQLite or PostgreSQL, computes embeddings, filters papers, clusters them, labels clusters, and (in legacy mode) exports JSON artifacts.
+2. A **React/Vite UI** that loads all data from a live FastAPI backend.
 
-The system supports two deployment modes:
+The active deployment mode is **API mode**:
 
-- **API mode** (production): pipeline → PostgreSQL + pgvector → FastAPI → frontend
-- **Static mode** (legacy/dev): pipeline → SQLite → JSON artifacts → frontend (limited — MobileView and StatsView require the API)
+- **API mode** (production / active target): pipeline → PostgreSQL + pgvector → FastAPI → frontend
+- **Static mode** (legacy): pipeline → SQLite → JSON artifacts → frontend. The pipeline still exports `graph.json` / `summaries.json`, but the UI no longer targets them — only `lib/summaries.ts` retains a `summaries.json` fallback. New work assumes the API (see top-level `CLAUDE.md`).
 
 ---
 
@@ -77,13 +77,12 @@ See `src/aisafety_pipeline/api/ARCHITECTURE.md` for route-level details.
 
 Frontend application built with Vite/React. Owns:
 
-- Choosing desktop vs mobile rendering
-- Fetching all papers and clusters from the API on mount
-- Subset graph rendering for desktop (`POST /api/graph/subset`)
+- Choosing desktop (`GraphView`) vs mobile (`StatsView`) rendering at `/`; `/stats` always renders `StatsView`
+- Subset graph rendering for desktop (`POST /api/graph/subset`) with semantic search and ghost nodes
+- Server-side filtered, paginated paper browsing for the list view (`GET /api/papers`)
 - On-demand related papers per paper selection (`GET /api/papers/related`)
-- Keyword search and semantic search (API mode only)
 
-See `ui/ARCHITECTURE.md` for frontend details.
+(`MobileView` was removed; mobile now uses `StatsView`.) See `ui/ARCHITECTURE.md` for frontend details.
 
 ### `migrations/`
 
@@ -151,11 +150,11 @@ These are produced by `export-graph` and `export-summaries` respectively.
 
 ## Deployment Model
 
-| Component | Service | Notes |
-|-----------|---------|-------|
-| PostgreSQL + pgvector | Supabase | Native pgvector, connection pooling |
-| FastAPI API | Render / Railway | `DATABASE_URL` env var required; `aisafety-pipeline serve` entrypoint |
-| Frontend | Netlify | Set `VITE_API_URL` to API URL; falls back to static JSON if unset |
+| Component             | Service          | Notes                                                                 |
+| --------------------- | ---------------- | --------------------------------------------------------------------- |
+| PostgreSQL + pgvector | Supabase         | Native pgvector, connection pooling                                   |
+| FastAPI API           | Render / Railway | `DATABASE_URL` env var required; `aisafety-pipeline serve` entrypoint |
+| Frontend              | Netlify          | Set `VITE_API_URL` to API URL; falls back to static JSON if unset     |
 
 ---
 
@@ -178,6 +177,7 @@ Paper ids are canonical arXiv abs URLs, e.g. `https://arxiv.org/abs/2401.01234`.
 ## Safe Edit Zones
 
 AI may safely modify:
+
 - Documentation
 - UI rendering logic
 - Export formatting (coordinated with UI)
@@ -185,6 +185,7 @@ AI may safely modify:
 - CLI help text
 
 AI should be careful around:
+
 - PostgreSQL/SQLite schema changes
 - Paper id normalization
 - Compact graph field names (`id`, `aid`, `t`, `au`, `pd`, `dm`, `ln`, `cid`)
@@ -200,8 +201,8 @@ AI should be careful around:
 2. **Cluster-method mismatch**: API and static export both assume k-means; changing this requires coordinated updates.
 3. **Identifier mismatch**: arXiv abs URL format must remain stable across pipeline and UI. The frontend assigns ephemeral numeric `id` values by index; `aid` (the arXiv URL) is the durable key.
 4. **Static artifact staleness**: in static mode, pipeline changes have no effect until fresh JSON is exported and redeployed.
-5. **API-only features in UI**: semantic search, related papers, and paper listing all require `VITE_API_URL`. MobileView and StatsView will not load papers without it.
-6. **Graph coordinate alignment**: the desktop graph places search/related "ghost" nodes by re-applying the loaded subset's normalisation to each paper's raw coords. This is a contract spanning `graph.py`/`papers.py` (which expose `meta.coords.bounds` and raw `rx`/`ry`) and `Graph.tsx`'s `ghostCoord()` (which mirrors the backend canvas-mapping formula). Changing the normalisation on either side without the other misplaces ghost nodes.
+5. **API dependency in UI**: semantic search, related papers, subset graph, and paper listing all require `VITE_API_URL`. `GraphView` and `StatsView` will not load without it; only the `summaries.json` fallback survives offline.
+6. **Graph coordinate alignment**: the desktop graph places search/related "ghost" nodes by re-applying the loaded subset's normalisation to each paper's raw coords. This is a contract spanning `graph.py`/`papers.py` (which expose `meta.coords.bounds` and raw `rx`/`ry`) and `GraphView.tsx`'s `ghostCoord()` (which mirrors the backend canvas-mapping formula). Changing the normalisation on either side without the other misplaces ghost nodes.
 
 ---
 
