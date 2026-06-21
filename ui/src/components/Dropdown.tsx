@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Children, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { ChevronDown } from 'lucide-react'
 
@@ -7,10 +7,11 @@ export default function Dropdown({
   children,
 }: {
   label: ReactNode
-  children: ReactNode
+  children?: ReactNode
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const ref = useRef<HTMLDivElement | null>(null)
+  const canOpen = Children.count(children) > 1
 
   useEffect(() => {
     const h = (e: MouseEvent) => {
@@ -25,16 +26,18 @@ export default function Dropdown({
   return (
     <div className='relative' ref={ref}>
       <button
-        onClick={() => setIsOpen((o) => !o)}
-        className='flex items-center gap-1.5 px-3 py-[7px] rounded-full bg-[#2a2a2a] border border-[#333333] text-sm text-neutral-400 hover:text-neutral-200 whitespace-nowrap cursor-pointer'
+        onClick={() => canOpen && setIsOpen((o) => !o)}
+        className={`flex items-center gap-1.5 px-3 py-[7px] rounded-full bg-[#2a2a2a] border border-[#333333] text-sm text-neutral-400 whitespace-nowrap${canOpen ? ' hover:text-neutral-200 cursor-pointer' : ' cursor-default'}`}
       >
         {label}
-        <ChevronDown
-          size={13}
-          className={`transition-transform ${isOpen ? 'rotate-180' : ''}`}
-        />
+        {canOpen && (
+          <ChevronDown
+            size={13}
+            className={`transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          />
+        )}
       </button>
-      {isOpen && (
+      {canOpen && isOpen && (
         <div
           onClick={() => setIsOpen(false)}
           className='absolute top-full mt-1 left-0 bg-[#2a2a2a] border border-[#333333] rounded-xl overflow-hidden shadow-lg min-w-[160px]'

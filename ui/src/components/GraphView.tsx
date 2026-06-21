@@ -13,7 +13,7 @@ import type {
   LinkObject,
   NodeObject,
 } from 'react-force-graph-2d'
-import { Trash, Search, Newspaper } from 'lucide-react'
+import { Trash, Search, Newspaper, Plus } from 'lucide-react'
 
 import { useForceConfig } from '../hooks/useForceConfig'
 import { useGraphShortcuts } from '../hooks/useGraphShortcuts'
@@ -679,14 +679,15 @@ export default function ArxivGraph({
           <Newspaper size={18} />
         </Link>
 
-        <Dropdown label={isDemo ? 'Demo subgraph' : 'Custom subgraph'}>
-          <a
-            href='/stats'
-            className='block px-3 py-2 text-sm text-neutral-300 hover:bg-[#333333] hover:text-neutral-100'
-          >
-            Create a subgraph
-          </a>
-        </Dropdown>
+        <Dropdown label={isDemo ? 'Demo subgraph' : 'Custom subgraph'} />
+
+        <button
+          type='button'
+          className='shrink-0 flex items-center gap-1.5 px-3 py-[7px] rounded-full bg-[#2a2a2a] border border-[#333333] text-sm text-neutral-400 hover:text-neutral-200 whitespace-nowrap cursor-pointer'
+        >
+          New Graph
+          <Plus size={13} />
+        </button>
       </div>
 
       <ClusterLegendOverlay clusters={clusters} />

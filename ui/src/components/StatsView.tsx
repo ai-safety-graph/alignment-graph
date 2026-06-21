@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useLayoutEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Share2, Search, Trash } from 'lucide-react'
+import { Share2, Search, Trash, Plus } from 'lucide-react'
 import StatsPaperDetails from './StatsPaperDetails'
 import MobilePaperDetails from './MobilePaperDetails'
 import PaperList from './PaperList'
@@ -14,10 +14,29 @@ import { usePaperBrowser } from '../hooks/usePaperBrowser'
 import { usePaperDetail } from '../hooks/usePaperDetail'
 import { useNavHistory } from '../hooks/useNavHistory'
 
+type SubGraph = {
+  id: string
+  name: string
+}
+
 export default function StatsView() {
   const { clusters, availableDomains } = useClusterCatalog()
   const [query, setQuery] = useState('')
   const debouncedQuery = useDebouncedValue(query, 300)
+  const [subgraphs, setSubgraphs] = useState<SubGraph[]>([])
+  const [selectedSubgraphId, setSelectedSubgraphId] = useState<string | null>(
+    null,
+  )
+
+  const createSubgraph = () => {
+    const subgraph: SubGraph = {
+      id: crypto.randomUUID(),
+      name: `New Graph ${subgraphs.length + 1}`,
+    }
+
+    setSubgraphs((prev) => [...prev, subgraph])
+    setSelectedSubgraphId(subgraph.id)
+  }
 
   const {
     fromDate,
@@ -47,6 +66,7 @@ export default function StatsView() {
     navigateTo,
     close,
   } = useNavHistory()
+
   const selected = usePaperDetail(selectedId)
   const { neighbors, loading: neighborsLoading } = useRelatedPapers(selectedId)
 
@@ -55,9 +75,6 @@ export default function StatsView() {
   const searchBarRef = useRef<HTMLDivElement | null>(null)
   const [searchHeight, setSearchHeight] = useState(0)
 
-  // Auto-select the first paper once results first arrive — desktop only, where
-  // it fills the side detail pane. On mobile this would pop the detail modal
-  // open unprompted, so it's skipped below the md breakpoint (768px).
   useEffect(() => {
     if (
       !autoSelectedRef.current &&
@@ -73,12 +90,10 @@ export default function StatsView() {
 
   const items = useMemo(() => (papers ?? []).map((n) => ({ n })), [papers])
 
-  // Reset list scroll when the result set changes.
   useLayoutEffect(() => {
     if (listRef.current) listRef.current.scrollTop = 0
   }, [items])
 
-  // Lock background scroll while the mobile detail modal is open.
   useEffect(() => {
     if (!selected) return
     const prev = document.body.style.overflow
@@ -96,7 +111,6 @@ export default function StatsView() {
 
   const resetKey = `${debouncedQuery}|${fromDate ?? ''}|${[...activeCids].sort()}|${[...activeDomains].sort()}`
 
-  // Measure the mobile sticky search bar so the filter bar can stick beneath it.
   useLayoutEffect(() => {
     const el = searchBarRef.current
     if (!el) return
@@ -107,9 +121,6 @@ export default function StatsView() {
     return () => ro.disconnect()
   }, [])
 
-  // Shared bits reused across the desktop header and the mobile sticky bar.
-  // On the home route StatsView *is* the / view (mobile), so a "back to graph"
-  // link pointing at / would be self-referential — hide it there.
   const onHome = useLocation().pathname === '/'
   const backLink = onHome ? null : (
     <Link
@@ -121,16 +132,43 @@ export default function StatsView() {
     </Link>
   )
 
-  const subgraphDropdown = (
-    <Dropdown label='No graph selected'>
-      <a
-        href=''
-        className='block px-3 py-2 text-sm text-neutral-300 hover:bg-[#333333] hover:text-neutral-100'
-      >
-        Create a graph
-      </a>
-    </Dropdown>
+  const selectedSubgraph = subgraphs.find(
+    (subgraph) => subgraph.id === selectedSubgraphId,
   )
+
+  const subgraphControl =
+    subgraphs.length === 0 ? (
+      <button
+        type='button'
+        onClick={createSubgraph}
+        className='shrink-0 flex items-center gap-1.5 px-3 py-[7px] rounded-full bg-[#2a2a2a] border border-[#333333] text-sm text-neutral-400 hover:text-neutral-200 whitespace-nowrap cursor-pointer'
+      >
+        New Graph
+        <Plus size={13} />
+      </button>
+    ) : (
+      <Dropdown label={selectedSubgraph?.name ?? 'Select graph'}>
+        {subgraphs.map((subgraph) => (
+          <button
+            key={subgraph.id}
+            type='button'
+            onClick={() => setSelectedSubgraphId(subgraph.id)}
+            className='block w-full text-left px-3 py-2 text-sm text-neutral-300 hover:bg-[#333333] hover:text-neutral-100'
+          >
+            {subgraph.name}
+          </button>
+        ))}
+
+        <button
+          type='button'
+          onClick={createSubgraph}
+          className='flex items-center gap-1.5 w-full text-left px-3 py-2 text-sm text-neutral-300 hover:bg-[#333333] hover:text-neutral-100 border-t border-neutral-800'
+        >
+          New Graph
+          <Plus size={13} />
+        </button>
+      </Dropdown>
+    )
 
   const searchControls = (
     <>
@@ -175,36 +213,29 @@ export default function StatsView() {
 
   return (
     <div className='fixed inset-0 bg-neutral-950 text-[#e5e5e5] flex flex-col'>
-      {/* Desktop: full-width search bar, centered. Hidden on mobile, where the
-          search bar lives inside the scroll container below the scrolling logo. */}
       <div className='hidden md:flex shrink-0 border-b border-neutral-800 bg-neutral-950/90 backdrop-blur px-3 py-3 items-center gap-3'>
         {backLink}
-        {subgraphDropdown}
+        {subgraphControl}
         <div className='flex-1 flex justify-center'>
           <div className='relative w-full max-w-xl flex items-center gap-2'>
             {searchControls}
           </div>
         </div>
-        {/* Spacer balances the back arrow + dropdown so the input stays visually centred */}
         <div className='shrink-0 w-[190px]' />
       </div>
 
-      {/* Body */}
       <div className='flex flex-row flex-1 overflow-hidden'>
         <div className='flex flex-col flex-1 overflow-hidden min-w-0'>
-          {/* Desktop filters sit above the scroll area. */}
           {filterBar && (
             <div className='hidden md:block shrink-0 border-b border-neutral-900'>
               {filterBar}
             </div>
           )}
 
-          {/* Paper list */}
           <div
             ref={listRef}
             className='flex-1 overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent'
           >
-            {/* Mobile-only logo that scrolls away above the sticky search bar */}
             <div className='md:hidden px-4 pt-4 pb-2'>
               <a
                 target='_blank'
@@ -219,19 +250,17 @@ export default function StatsView() {
               </a>
             </div>
 
-            {/* Mobile-only sticky search bar */}
             <div
               ref={searchBarRef}
               className='md:hidden sticky top-0 z-10 p-3 bg-neutral-950/90 backdrop-blur border-b border-neutral-800 flex items-center gap-3'
             >
               {backLink}
-              {subgraphDropdown}
+              {subgraphControl}
               <div className='flex items-center gap-2 flex-1'>
                 {searchControls}
               </div>
             </div>
 
-            {/* Mobile-only sticky filters, offset beneath the search bar */}
             {filterBar && (
               <div
                 className='md:hidden sticky z-10 bg-neutral-950/90 backdrop-blur border-b border-neutral-900'
@@ -307,6 +336,7 @@ export default function StatsView() {
           )}
         </div>
       </div>
+
       {selected && (
         <div className='md:hidden fixed inset-0 z-20 bg-black/70 flex items-center justify-center p-3'>
           <button
