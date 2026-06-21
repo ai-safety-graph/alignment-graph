@@ -5,6 +5,7 @@ import StatsPaperDetails from './StatsPaperDetails'
 import MobilePaperDetails from './MobilePaperDetails'
 import PaperList from './PaperList'
 import FilterBar from './FilterBar'
+import Dropdown from './Dropdown'
 import { useServerFilters } from '../hooks/useServerFilters'
 import { useRelatedPapers } from '../hooks/useRelatedPapers'
 import { useClusterCatalog } from '../hooks/useClusterCatalog'
@@ -120,6 +121,17 @@ export default function StatsView() {
     </Link>
   )
 
+  const subgraphDropdown = (
+    <Dropdown label='No graph selected'>
+      <a
+        href=''
+        className='block px-3 py-2 text-sm text-neutral-300 hover:bg-[#333333] hover:text-neutral-100'
+      >
+        Create a graph
+      </a>
+    </Dropdown>
+  )
+
   const searchControls = (
     <>
       <div className='relative flex-1'>
@@ -167,13 +179,14 @@ export default function StatsView() {
           search bar lives inside the scroll container below the scrolling logo. */}
       <div className='hidden md:flex shrink-0 border-b border-neutral-800 bg-neutral-950/90 backdrop-blur px-3 py-3 items-center gap-3'>
         {backLink}
+        {subgraphDropdown}
         <div className='flex-1 flex justify-center'>
           <div className='relative w-full max-w-xl flex items-center gap-2'>
             {searchControls}
           </div>
         </div>
-        {/* Spacer balances the back arrow so the input stays visually centred */}
-        <div className='shrink-0 w-6' />
+        {/* Spacer balances the back arrow + dropdown so the input stays visually centred */}
+        <div className='shrink-0 w-[190px]' />
       </div>
 
       {/* Body */}
@@ -212,6 +225,7 @@ export default function StatsView() {
               className='md:hidden sticky top-0 z-10 p-3 bg-neutral-950/90 backdrop-blur border-b border-neutral-800 flex items-center gap-3'
             >
               {backLink}
+              {subgraphDropdown}
               <div className='flex items-center gap-2 flex-1'>
                 {searchControls}
               </div>

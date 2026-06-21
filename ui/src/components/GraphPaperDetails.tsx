@@ -1,4 +1,4 @@
-import { CircleX } from 'lucide-react'
+import { CircleX, Plus } from 'lucide-react'
 import { cidToColor } from '../lib/colors'
 import type { ClustersLegend, NodeCompact } from '../lib/types'
 import { usePaperSummary } from '../hooks/usePaperSummary'
@@ -12,6 +12,7 @@ interface Props {
   relatedLoading: boolean
   onClose: () => void
   onSelectPaper: (aid: string) => void
+  onAddToSubgraph?: (aid: string) => void
 }
 
 export default function GraphPaperDetails({
@@ -21,6 +22,7 @@ export default function GraphPaperDetails({
   relatedLoading,
   onClose,
   onSelectPaper,
+  onAddToSubgraph,
 }: Props) {
   const urlKey = paper.ln || (paper as any).aid
   const { data: lazy, loading, error } = usePaperSummary(urlKey)
@@ -69,6 +71,14 @@ export default function GraphPaperDetails({
           <h4 className='mt-1 mb-2 text-lg font-semibold leading-snug text-[#e5e5e5]'>
             {paper.t}
           </h4>
+
+          <button
+            onClick={() => onAddToSubgraph?.(paper.aid)}
+            className='flex items-center gap-1.5 text-[13px] text-neutral-300 hover:text-white border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 mb-2'
+          >
+            Add to Subgraph
+            <Plus size={14} />
+          </button>
         </div>
         <div className='text-[13px] mb-1.5'>
           <strong>Authors:</strong> {paper.au}

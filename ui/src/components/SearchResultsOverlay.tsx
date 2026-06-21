@@ -1,3 +1,4 @@
+import { Plus } from 'lucide-react'
 import { cidToColor } from '../lib/colors'
 import type { ClustersLegend, NodeCompact } from '../lib/types'
 
@@ -9,11 +10,13 @@ export default function SearchResultsOverlay({
   onSelect,
   clusters,
   isLoading,
+  onAddToSubgraph,
 }: {
   results: Array<{ n: NodeCompact; score: number; deg: number }>
   onSelect: (aid: string) => void
   clusters: ClustersLegend
   isLoading?: boolean
+  onAddToSubgraph?: (aid: string) => void
 }) {
   if (!isLoading && !results?.length) return null
 
@@ -61,6 +64,16 @@ export default function SearchResultsOverlay({
                   </span>
                 </div>
               </div>
+              <button
+                onClick={(e) => {
+                  e.preventDefault()
+                  onAddToSubgraph?.(n.aid)
+                }}
+                aria-label='Add to subgraph'
+                className='p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200 shrink-0'
+              >
+                <Plus size={16} />
+              </button>
             </div>
           </li>
         ))}

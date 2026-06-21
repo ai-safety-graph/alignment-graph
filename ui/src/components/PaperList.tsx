@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Plus } from 'lucide-react'
 import type { NodeCompact, ClustersLegend } from '../lib/types'
 import { cidToColor } from '../lib/colors'
 
@@ -11,6 +12,7 @@ interface PaperListProps {
   hasMore?: boolean
   onLoadMore?: () => void
   selectedId?: string
+  onAddToSubgraph?: (aid: string) => void
 }
 
 export default function PaperList({
@@ -22,6 +24,7 @@ export default function PaperList({
   hasMore = false,
   onLoadMore,
   selectedId,
+  onAddToSubgraph,
 }: PaperListProps) {
   const [limit, setLimit] = useState(40)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
@@ -58,10 +61,10 @@ export default function PaperList({
     <>
       <ul className='divide-y divide-neutral-800'>
         {slice.map(({ n }) => (
-          <li key={n.aid}>
+          <li key={n.aid} className='relative'>
             <button
               onClick={() => onSelectId(n.aid)}
-              className={`w-full text-left px-4 py-3 active:bg-neutral-900${n.aid === selectedId ? ' bg-neutral-800' : ''}${enableHover ? ' hover:bg-neutral-900' : ''}`}
+              className={`w-full text-left px-4 py-3 pr-10 active:bg-neutral-900${n.aid === selectedId ? ' bg-neutral-800' : ''}${enableHover ? ' hover:bg-neutral-900' : ''}`}
             >
               <div className='text-[13px] text-neutral-400 truncate'>
                 {n.au}
@@ -81,6 +84,16 @@ export default function PaperList({
                   <span>{n.dm}</span>
                 </div>
               </div>
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onAddToSubgraph?.(n.aid)
+              }}
+              aria-label='Add to subgraph'
+              className='absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200'
+            >
+              <Plus size={16} />
             </button>
           </li>
         ))}

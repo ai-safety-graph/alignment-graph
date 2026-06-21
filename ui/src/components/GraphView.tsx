@@ -13,7 +13,7 @@ import type {
   LinkObject,
   NodeObject,
 } from 'react-force-graph-2d'
-import { Trash, Search, Newspaper, ChevronDown } from 'lucide-react'
+import { Trash, Search, Newspaper } from 'lucide-react'
 
 import { useForceConfig } from '../hooks/useForceConfig'
 import { useGraphShortcuts } from '../hooks/useGraphShortcuts'
@@ -30,6 +30,7 @@ import type { RelatedPaper, SearchResult } from '../lib/api'
 import GraphPaperDetails from './GraphPaperDetails'
 import SearchResultsOverlay from './SearchResultsOverlay'
 import ClusterLegendOverlay from './ClusterLegendOverlay'
+import Dropdown from './Dropdown'
 
 const DEMO_PAPER_IDS = [
   'https://arxiv.org/abs/2401.02843', // Thousands of AI Authors on the Future of AI
@@ -92,8 +93,6 @@ export default function ArxivGraph({
   >([])
   const [related, setRelated] = useState<RelatedPaper[]>([])
   const [relatedLoading, setRelatedLoading] = useState(false)
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
-  const dropdownRef = useRef<HTMLDivElement | null>(null)
   const [width, setWidth] = useState<number>(0)
   const [height, setHeight] = useState<number>(0)
 
@@ -406,8 +405,10 @@ export default function ArxivGraph({
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (hoverId != null && !ghostIds.has(hoverId)) setPinned(simById.get(hoverId) as any, false)
-        if (lockedId != null && !ghostIds.has(lockedId)) setPinned(simById.get(lockedId) as any, false)
+        if (hoverId != null && !ghostIds.has(hoverId))
+          setPinned(simById.get(hoverId) as any, false)
+        if (lockedId != null && !ghostIds.has(lockedId))
+          setPinned(simById.get(lockedId) as any, false)
         setLockedId(null)
         setHoverId(null)
         setSelectedId(null)
@@ -417,20 +418,6 @@ export default function ArxivGraph({
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
   }, [hoverId, lockedId, simById])
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(e.target as Node)
-      ) {
-        setIsDropdownOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [])
 
   const fitPadding = () => (simNodes.length === 1 ? 400 : 150)
 
@@ -497,8 +484,10 @@ export default function ArxivGraph({
   }
 
   const onBackgroundClick = () => {
-    if (hoverId != null && !ghostIds.has(hoverId)) setPinned(simById.get(hoverId) as any, false)
-    if (lockedId != null && !ghostIds.has(lockedId)) setPinned(simById.get(lockedId) as any, false)
+    if (hoverId != null && !ghostIds.has(hoverId))
+      setPinned(simById.get(hoverId) as any, false)
+    if (lockedId != null && !ghostIds.has(lockedId))
+      setPinned(simById.get(lockedId) as any, false)
     fgRef.current?.zoomToFit(400, fitPadding())
     setLockedId(null)
     setHoverId(null)
@@ -690,28 +679,14 @@ export default function ArxivGraph({
           <Newspaper size={18} />
         </Link>
 
-        <div className='relative' ref={dropdownRef}>
-          <button
-            onClick={() => setIsDropdownOpen((o) => !o)}
-            className='flex items-center gap-1.5 px-3 py-[7px] rounded-full bg-[#2a2a2a] border border-[#333333] text-sm text-neutral-400 hover:text-neutral-200 whitespace-nowrap cursor-pointer'
+        <Dropdown label={isDemo ? 'Demo subgraph' : 'Custom subgraph'}>
+          <a
+            href='/stats'
+            className='block px-3 py-2 text-sm text-neutral-300 hover:bg-[#333333] hover:text-neutral-100'
           >
-            {isDemo ? 'Demo subgraph' : 'Custom subgraph'}
-            <ChevronDown
-              size={13}
-              className={`transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`}
-            />
-          </button>
-          {isDropdownOpen && (
-            <div className='absolute top-full mt-1 left-0 bg-[#2a2a2a] border border-[#333333] rounded-xl overflow-hidden shadow-lg min-w-[160px]'>
-              <a
-                href='/stats'
-                className='block px-3 py-2 text-sm text-neutral-300 hover:bg-[#333333] hover:text-neutral-100'
-              >
-                Create a subgraph
-              </a>
-            </div>
-          )}
-        </div>
+            Create a subgraph
+          </a>
+        </Dropdown>
       </div>
 
       <ClusterLegendOverlay clusters={clusters} />

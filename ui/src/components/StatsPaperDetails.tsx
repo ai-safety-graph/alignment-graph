@@ -1,6 +1,7 @@
 import { cidToColor } from '../lib/colors'
 import type { ClustersLegend, NodeCompact } from '../lib/types'
 import type { PaperDetail } from '../lib/api'
+import { Plus } from 'lucide-react'
 import { useRef, useLayoutEffect } from 'react'
 
 type NeighborEntry = { n: NodeCompact; w: number }
@@ -14,6 +15,7 @@ interface Props {
   onSelectPaper: (aid: string) => void
   navHistory: { aid: string; title: string }[]
   onNavigateTo: (aid: string, historyIndex: number) => void
+  onAddToSubgraph?: (aid: string) => void
 }
 
 export default function StatsPaperDetails({
@@ -24,6 +26,7 @@ export default function StatsPaperDetails({
   onSelectPaper,
   navHistory,
   onNavigateTo,
+  onAddToSubgraph,
 }: Props) {
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const summaryText = paper.sm
@@ -42,34 +45,34 @@ export default function StatsPaperDetails({
       <div>
         <div className='py-3 sticky top-0 bg-neutral-950 px-3 lg:px-6'>
           <div className='min-h-[1.25rem] pb-2'>
-          {navHistory.length > 0 && (
-            <div className='flex items-center gap-1 text-xs text-zinc-500 flex-wrap'>
-              {navHistory.slice(-3).map((entry, i) => {
-                const absoluteIndex =
-                  navHistory.length - Math.min(3, navHistory.length) + i
-                return (
-                  <span key={entry.aid} className='flex items-center gap-1'>
-                    <button
-                      onClick={() => onNavigateTo(entry.aid, absoluteIndex)}
-                      className='hover:text-zinc-200 underline underline-offset-2 truncate max-w-[160px] text-left'
-                      title={entry.title}
-                    >
-                      {entry.title.length > 35
-                        ? entry.title.slice(0, 35) + '…'
-                        : entry.title}
-                    </button>
-                    <span className='text-zinc-700'>›</span>
-                  </span>
-                )
-              })}
-              <span
-                className='text-zinc-400 truncate max-w-[160px]'
-                title={paper.t}
-              >
-                {paper.t.length > 35 ? paper.t.slice(0, 35) + '…' : paper.t}
-              </span>
-            </div>
-          )}
+            {navHistory.length > 0 && (
+              <div className='flex items-center gap-1 text-xs text-zinc-500 flex-wrap'>
+                {navHistory.slice(-3).map((entry, i) => {
+                  const absoluteIndex =
+                    navHistory.length - Math.min(3, navHistory.length) + i
+                  return (
+                    <span key={entry.aid} className='flex items-center gap-1'>
+                      <button
+                        onClick={() => onNavigateTo(entry.aid, absoluteIndex)}
+                        className='hover:text-zinc-200 underline underline-offset-2 truncate max-w-[160px] text-left'
+                        title={entry.title}
+                      >
+                        {entry.title.length > 35
+                          ? entry.title.slice(0, 35) + '…'
+                          : entry.title}
+                      </button>
+                      <span className='text-zinc-700'>›</span>
+                    </span>
+                  )
+                })}
+                <span
+                  className='text-zinc-400 truncate max-w-[160px]'
+                  title={paper.t}
+                >
+                  {paper.t.length > 35 ? paper.t.slice(0, 35) + '…' : paper.t}
+                </span>
+              </div>
+            )}
           </div>
           <div className='flex items-center justify-between mb-2'>
             <div className='flex items-center gap-2 mb-0.5'>
@@ -83,6 +86,14 @@ export default function StatsPaperDetails({
                 {paper.dm}
               </span>
             </div>
+
+            <button
+              onClick={() => onAddToSubgraph?.(paper.aid)}
+              className='flex items-center gap-1.5 text-[13px] text-neutral-300 hover:text-white border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1'
+            >
+              Add to Subgraph
+              <Plus size={14} />
+            </button>
           </div>
 
           <h4 className='mt-1 mb-2 text-lg font-semibold leading-snug text-[#e5e5e5]'>
@@ -125,7 +136,10 @@ export default function StatsPaperDetails({
           {neighborsLoading ? (
             <div className='space-y-3 animate-pulse'>
               {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className='py-1.5 border-b border-neutral-800 space-y-1.5'>
+                <div
+                  key={i}
+                  className='py-1.5 border-b border-neutral-800 space-y-1.5'
+                >
                   <div className='h-3 bg-neutral-800 rounded w-5/6' />
                   <div className='h-3 bg-neutral-800 rounded w-3/6' />
                   <div className='h-3 bg-neutral-800 rounded w-2/6' />
@@ -133,45 +147,58 @@ export default function StatsPaperDetails({
               ))}
             </div>
           ) : (
-          <>
-          <div className='text-[13px] text-neutral-400 mb-1.5'>
-            Showing {neighbors.length} (sorted by similarity)
-          </div>
+            <>
+              <div className='text-[13px] text-neutral-400 mb-1.5'>
+                Showing {neighbors.length} (sorted by similarity)
+              </div>
 
-          <ul className='list-none p-0 m-0'>
-            {neighbors.map(({ n }) => (
-              <li key={n.aid} className='py-1.5 border-b border-neutral-800'>
-                <div className='flex justify-between gap-2'>
-                  <a
-                    onClick={(e) => {
-                      e.preventDefault()
-                      onSelectPaper(n.aid)
-                    }}
-                    href='#'
-                    className='no-underline text-blue-400 hover:underline flex-1'
-                    title={n.t}
+              <ul className='list-none p-0 m-0'>
+                {neighbors.map(({ n }) => (
+                  <li
+                    key={n.aid}
+                    className='py-1.5 border-b border-neutral-800'
                   >
-                    {n.t.length > 80 ? n.t.slice(0, 77) + '…' : n.t}
-                  </a>
-                </div>
-                <div className='text-[12px] text-neutral-500'>
-                  <div>{n.au}</div>
-                  <div className='flex items-center gap-2 mb-0.5'>
-                    <span
-                      className='inline-block w-2 h-2 rounded-full mt-0.5 border border-[#333333]'
-                      style={{ background: cidToColor(n.cid) }}
-                      aria-hidden
-                    />
-                    <span className='text-neutral-400'>
-                      {clusters[String(n.cid)]?.label ?? `Cluster ${n.cid}`} •{' '}
-                      {n.dm}
-                    </span>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-          </>
+                    <div className='flex justify-between gap-2'>
+                      <a
+                        onClick={(e) => {
+                          e.preventDefault()
+                          onSelectPaper(n.aid)
+                        }}
+                        href='#'
+                        className='no-underline text-blue-400 hover:underline flex-1'
+                        title={n.t}
+                      >
+                        {n.t.length > 80 ? n.t.slice(0, 77) + '…' : n.t}
+                      </a>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onAddToSubgraph?.(n.aid)
+                        }}
+                        aria-label='Add to subgraph'
+                        className='shrink-0 p-1 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200'
+                      >
+                        <Plus size={14} />
+                      </button>
+                    </div>
+                    <div className='text-[12px] text-neutral-500'>
+                      <div>{n.au}</div>
+                      <div className='flex items-center gap-2 mb-0.5'>
+                        <span
+                          className='inline-block w-2 h-2 rounded-full mt-0.5 border border-[#333333]'
+                          style={{ background: cidToColor(n.cid) }}
+                          aria-hidden
+                        />
+                        <span className='text-neutral-400'>
+                          {clusters[String(n.cid)]?.label ?? `Cluster ${n.cid}`}{' '}
+                          • {n.dm}
+                        </span>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </div>
       </div>
