@@ -1,7 +1,7 @@
 import { cidToColor } from '../lib/colors'
 import type { ClustersLegend, NodeCompact } from '../lib/types'
 import type { PaperDetail } from '../lib/api'
-import { Plus } from 'lucide-react'
+import { Plus, Minus } from 'lucide-react'
 import { useRef, useLayoutEffect } from 'react'
 
 type NeighborEntry = { n: NodeCompact; w: number }
@@ -16,6 +16,9 @@ interface Props {
   navHistory: { aid: string; title: string }[]
   onNavigateTo: (aid: string, historyIndex: number) => void
   onAddToSubgraph?: (aid: string) => void
+  onRemoveFromSubgraph?: (aid: string) => void
+  subgraphPaperIds?: Set<string>
+  subgraphName?: string
 }
 
 export default function StatsPaperDetails({
@@ -27,7 +30,12 @@ export default function StatsPaperDetails({
   navHistory,
   onNavigateTo,
   onAddToSubgraph,
+  onRemoveFromSubgraph,
+  subgraphPaperIds,
+  subgraphName,
 }: Props) {
+  const isPaperInSubgraph = subgraphPaperIds?.has(paper.aid) ?? false
+  const subgraphLabel = subgraphName ?? 'Subgraph'
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const summaryText = paper.sm
 
@@ -88,11 +96,24 @@ export default function StatsPaperDetails({
             </div>
 
             <button
-              onClick={() => onAddToSubgraph?.(paper.aid)}
+              onClick={() =>
+                isPaperInSubgraph
+                  ? onRemoveFromSubgraph?.(paper.aid)
+                  : onAddToSubgraph?.(paper.aid)
+              }
               className='flex items-center gap-1.5 text-[13px] text-neutral-300 hover:text-white border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1'
             >
-              Add to Subgraph
-              <Plus size={14} />
+              {isPaperInSubgraph ? (
+                <>
+                  Remove from {subgraphLabel}
+                  <Minus size={14} />
+                </>
+              ) : (
+                <>
+                  Add to {subgraphLabel}
+                  <Plus size={14} />
+                </>
+              )}
             </button>
           </div>
 
@@ -153,7 +174,9 @@ export default function StatsPaperDetails({
               </div>
 
               <ul className='list-none p-0 m-0'>
-                {neighbors.map(({ n }) => (
+                {neighbors.map(({ n }) => {
+                  const inSubgraph = subgraphPaperIds?.has(n.aid) ?? false
+                  return (
                   <li
                     key={n.aid}
                     className='py-1.5 border-b border-neutral-800'
@@ -173,12 +196,17 @@ export default function StatsPaperDetails({
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          onAddToSubgraph?.(n.aid)
+                          if (inSubgraph) onRemoveFromSubgraph?.(n.aid)
+                          else onAddToSubgraph?.(n.aid)
                         }}
-                        aria-label='Add to subgraph'
+                        aria-label={
+                          inSubgraph
+                            ? `Remove from ${subgraphLabel}`
+                            : `Add to ${subgraphLabel}`
+                        }
                         className='shrink-0 p-1 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200'
                       >
-                        <Plus size={14} />
+                        {inSubgraph ? <Minus size={14} /> : <Plus size={14} />}
                       </button>
                     </div>
                     <div className='text-[12px] text-neutral-500'>
@@ -196,7 +224,8 @@ export default function StatsPaperDetails({
                       </div>
                     </div>
                   </li>
-                ))}
+                  )
+                })}
               </ul>
             </>
           )}

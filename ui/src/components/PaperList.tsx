@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Plus } from 'lucide-react'
+import { Plus, Minus } from 'lucide-react'
 import type { NodeCompact, ClustersLegend } from '../lib/types'
 import { cidToColor } from '../lib/colors'
 
@@ -13,6 +13,9 @@ interface PaperListProps {
   onLoadMore?: () => void
   selectedId?: string
   onAddToSubgraph?: (aid: string) => void
+  onRemoveFromSubgraph?: (aid: string) => void
+  subgraphPaperIds?: Set<string>
+  subgraphName?: string
 }
 
 export default function PaperList({
@@ -25,6 +28,9 @@ export default function PaperList({
   onLoadMore,
   selectedId,
   onAddToSubgraph,
+  onRemoveFromSubgraph,
+  subgraphPaperIds,
+  subgraphName,
 }: PaperListProps) {
   const [limit, setLimit] = useState(40)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
@@ -60,7 +66,9 @@ export default function PaperList({
   return (
     <>
       <ul className='divide-y divide-neutral-800'>
-        {slice.map(({ n }) => (
+        {slice.map(({ n }) => {
+          const inSubgraph = subgraphPaperIds?.has(n.aid) ?? false
+          return (
           <li key={n.aid} className='relative'>
             <button
               onClick={() => onSelectId(n.aid)}
@@ -88,15 +96,21 @@ export default function PaperList({
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                onAddToSubgraph?.(n.aid)
+                if (inSubgraph) onRemoveFromSubgraph?.(n.aid)
+                else onAddToSubgraph?.(n.aid)
               }}
-              aria-label='Add to subgraph'
+              aria-label={
+                inSubgraph
+                  ? `Remove from ${subgraphName ?? 'subgraph'}`
+                  : `Add to ${subgraphName ?? 'subgraph'}`
+              }
               className='absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200'
             >
-              <Plus size={16} />
+              {inSubgraph ? <Minus size={16} /> : <Plus size={16} />}
             </button>
           </li>
-        ))}
+          )
+        })}
       </ul>
       <div ref={sentinelRef} className='h-10' />
     </>

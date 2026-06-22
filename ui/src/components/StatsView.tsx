@@ -9,6 +9,7 @@ import Dropdown from './Dropdown'
 import {
   createSavedGraph,
   listSavedGraphs,
+  updateSavedGraph,
   type SavedGraph,
 } from '../lib/storage'
 import { useServerFilters } from '../hooks/useServerFilters'
@@ -36,6 +37,30 @@ export default function StatsView() {
     const subgraph = createSavedGraph(name, [])
     setSubgraphs((prev) => [...prev, subgraph])
     setSelectedSubgraphId(subgraph.id)
+  }
+
+  const addToSelectedSubgraph = (aid: string) => {
+    if (!selectedSubgraphId) return
+    const current = subgraphs.find((s) => s.id === selectedSubgraphId)
+    if (!current || current.paperIds.includes(aid)) return
+    const updated = updateSavedGraph(selectedSubgraphId, {
+      paperIds: [...current.paperIds, aid],
+    })
+    setSubgraphs((prev) =>
+      prev.map((s) => (s.id === updated.id ? updated : s)),
+    )
+  }
+
+  const removeFromSelectedSubgraph = (aid: string) => {
+    if (!selectedSubgraphId) return
+    const current = subgraphs.find((s) => s.id === selectedSubgraphId)
+    if (!current) return
+    const updated = updateSavedGraph(selectedSubgraphId, {
+      paperIds: current.paperIds.filter((id) => id !== aid),
+    })
+    setSubgraphs((prev) =>
+      prev.map((s) => (s.id === updated.id ? updated : s)),
+    )
   }
 
   const startCreatingSubgraph = () => {
@@ -152,6 +177,11 @@ export default function StatsView() {
 
   const selectedSubgraph = subgraphs.find(
     (subgraph) => subgraph.id === selectedSubgraphId,
+  )
+
+  const selectedSubgraphPaperIds = useMemo(
+    () => new Set(selectedSubgraph?.paperIds ?? []),
+    [selectedSubgraph],
   )
 
   const newGraphButton = (
@@ -345,6 +375,10 @@ export default function StatsView() {
               hasMore={hasMore}
               onLoadMore={loadMore}
               selectedId={selectedId ?? undefined}
+              onAddToSubgraph={addToSelectedSubgraph}
+              onRemoveFromSubgraph={removeFromSelectedSubgraph}
+              subgraphPaperIds={selectedSubgraphPaperIds}
+              subgraphName={selectedSubgraph?.name}
             />
           </div>
         </div>
@@ -360,6 +394,10 @@ export default function StatsView() {
               onClose={close}
               onSelectPaper={handleSelectRelated}
               onNavigateTo={navigateTo}
+              onAddToSubgraph={addToSelectedSubgraph}
+              onRemoveFromSubgraph={removeFromSelectedSubgraph}
+              subgraphPaperIds={selectedSubgraphPaperIds}
+              subgraphName={selectedSubgraph?.name}
             />
           ) : selectedId ? (
             <div className='p-6 space-y-3 animate-pulse'>
