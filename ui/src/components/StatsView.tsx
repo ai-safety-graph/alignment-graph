@@ -1,11 +1,16 @@
 import { useEffect, useMemo, useRef, useState, useLayoutEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Share2, Search, Trash, Plus } from 'lucide-react'
+import { Share2, Search, Trash, Plus, Check, X } from 'lucide-react'
 import StatsPaperDetails from './StatsPaperDetails'
 import MobilePaperDetails from './MobilePaperDetails'
 import PaperList from './PaperList'
 import FilterBar from './FilterBar'
 import Dropdown from './Dropdown'
+import {
+  createSavedGraph,
+  listSavedGraphs,
+  type SavedGraph,
+} from '../lib/storage'
 import { useServerFilters } from '../hooks/useServerFilters'
 import { useRelatedPapers } from '../hooks/useRelatedPapers'
 import { useClusterCatalog } from '../hooks/useClusterCatalog'
@@ -14,28 +19,41 @@ import { usePaperBrowser } from '../hooks/usePaperBrowser'
 import { usePaperDetail } from '../hooks/usePaperDetail'
 import { useNavHistory } from '../hooks/useNavHistory'
 
-type SubGraph = {
-  id: string
-  name: string
-}
-
 export default function StatsView() {
   const { clusters, availableDomains } = useClusterCatalog()
   const [query, setQuery] = useState('')
   const debouncedQuery = useDebouncedValue(query, 300)
-  const [subgraphs, setSubgraphs] = useState<SubGraph[]>([])
+  const [subgraphs, setSubgraphs] = useState<SavedGraph[]>(() =>
+    listSavedGraphs(),
+  )
   const [selectedSubgraphId, setSelectedSubgraphId] = useState<string | null>(
     null,
   )
+  const [isCreatingSubgraph, setIsCreatingSubgraph] = useState(false)
+  const [newSubgraphName, setNewSubgraphName] = useState('')
 
-  const createSubgraph = () => {
-    const subgraph: SubGraph = {
-      id: crypto.randomUUID(),
-      name: `New Graph ${subgraphs.length + 1}`,
-    }
-
+  const createSubgraph = (name: string) => {
+    const subgraph = createSavedGraph(name, [])
     setSubgraphs((prev) => [...prev, subgraph])
     setSelectedSubgraphId(subgraph.id)
+  }
+
+  const startCreatingSubgraph = () => {
+    setNewSubgraphName('')
+    setIsCreatingSubgraph(true)
+  }
+
+  const cancelCreatingSubgraph = () => {
+    setIsCreatingSubgraph(false)
+    setNewSubgraphName('')
+  }
+
+  const confirmCreateSubgraph = () => {
+    const name = newSubgraphName.trim()
+    if (!name) return
+    createSubgraph(name)
+    setIsCreatingSubgraph(false)
+    setNewSubgraphName('')
   }
 
   const {
@@ -136,17 +154,52 @@ export default function StatsView() {
     (subgraph) => subgraph.id === selectedSubgraphId,
   )
 
-  const subgraphControl =
-    subgraphs.length === 0 ? (
+  const newGraphButton = (
+    <button
+      type='button'
+      onClick={startCreatingSubgraph}
+      className='shrink-0 flex items-center gap-1.5 px-3 py-[7px] rounded-full bg-[#2a2a2a] border border-[#333333] text-sm text-neutral-400 hover:text-neutral-200 whitespace-nowrap cursor-pointer'
+    >
+      New Graph
+      <Plus size={13} />
+    </button>
+  )
+
+  const subgraphControl = isCreatingSubgraph ? (
+    <div className='shrink-0 flex items-center gap-1.5 px-2 py-1 rounded-full bg-[#2a2a2a] border border-[#333333]'>
+      <input
+        autoFocus
+        value={newSubgraphName}
+        onChange={(e) => setNewSubgraphName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') confirmCreateSubgraph()
+          if (e.key === 'Escape') cancelCreatingSubgraph()
+        }}
+        placeholder='Graph name'
+        className='w-32 px-1.5 py-0.5 bg-transparent text-sm text-[#e5e5e5] placeholder-[#666666] outline-none'
+      />
       <button
         type='button'
-        onClick={createSubgraph}
-        className='shrink-0 flex items-center gap-1.5 px-3 py-[7px] rounded-full bg-[#2a2a2a] border border-[#333333] text-sm text-neutral-400 hover:text-neutral-200 whitespace-nowrap cursor-pointer'
+        aria-label='Create graph'
+        disabled={!newSubgraphName.trim()}
+        onClick={confirmCreateSubgraph}
+        className='p-1 rounded-full text-neutral-400 hover:text-neutral-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer'
       >
-        New Graph
-        <Plus size={13} />
+        <Check size={15} />
       </button>
-    ) : (
+      <button
+        type='button'
+        aria-label='Cancel'
+        onClick={cancelCreatingSubgraph}
+        className='p-1 rounded-full text-neutral-400 hover:text-neutral-200 cursor-pointer'
+      >
+        <X size={15} />
+      </button>
+    </div>
+  ) : subgraphs.length === 0 ? (
+    newGraphButton
+  ) : (
+    <div className='shrink-0 flex items-center gap-2'>
       <Dropdown label={selectedSubgraph?.name ?? 'Select graph'}>
         {subgraphs.map((subgraph) => (
           <button
@@ -158,17 +211,10 @@ export default function StatsView() {
             {subgraph.name}
           </button>
         ))}
-
-        <button
-          type='button'
-          onClick={createSubgraph}
-          className='flex items-center gap-1.5 w-full text-left px-3 py-2 text-sm text-neutral-300 hover:bg-[#333333] hover:text-neutral-100 border-t border-neutral-800'
-        >
-          New Graph
-          <Plus size={13} />
-        </button>
       </Dropdown>
-    )
+      {newGraphButton}
+    </div>
+  )
 
   const searchControls = (
     <>

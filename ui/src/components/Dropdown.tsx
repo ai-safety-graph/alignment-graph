@@ -11,7 +11,7 @@ export default function Dropdown({
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const ref = useRef<HTMLDivElement | null>(null)
-  const canOpen = Children.count(children) > 1
+  const canOpen = Children.count(children) > 0
 
   useEffect(() => {
     const h = (e: MouseEvent) => {
