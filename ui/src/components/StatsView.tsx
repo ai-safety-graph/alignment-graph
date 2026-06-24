@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useLayoutEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Share2, Search, Trash, Plus, Check, X } from 'lucide-react'
+import { Share2, Search, Trash, Plus, Check, X, Eye, EyeOff, ExternalLink } from 'lucide-react'
 import StatsPaperDetails from './StatsPaperDetails'
 import MobilePaperDetails from './MobilePaperDetails'
 import PaperList from './PaperList'
@@ -12,6 +12,7 @@ import {
   updateSavedGraph,
   type SavedGraph,
 } from '../lib/storage'
+import type { NodeCompact } from '../lib/types'
 import { useServerFilters } from '../hooks/useServerFilters'
 import { useRelatedPapers } from '../hooks/useRelatedPapers'
 import { useClusterCatalog } from '../hooks/useClusterCatalog'
@@ -32,6 +33,10 @@ export default function StatsView() {
   )
   const [isCreatingSubgraph, setIsCreatingSubgraph] = useState(false)
   const [newSubgraphName, setNewSubgraphName] = useState('')
+  const [viewMode, setViewMode] = useState<'browse' | 'subgraph'>('browse')
+  const [subgraphNodes, setSubgraphNodes] = useState<NodeCompact[] | null>(
+    null,
+  )
 
   const createSubgraph = (name: string) => {
     const subgraph = createSavedGraph(name, [])
@@ -184,6 +189,41 @@ export default function StatsView() {
     [selectedSubgraph],
   )
 
+  useEffect(() => {
+    if (viewMode !== 'subgraph' || !selectedSubgraphId) return
+    let alive = true
+    setSubgraphNodes(null)
+    ;(async () => {
+      const { fetchSubgraph } = await import('../lib/api')
+      const data = await fetchSubgraph(selectedSubgraph?.paperIds ?? [])
+      if (alive) setSubgraphNodes(data.nodes)
+    })()
+    return () => {
+      alive = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode, selectedSubgraphId])
+
+  const toggleViewMode = () => {
+    if (!selectedSubgraphId) return
+    setViewMode((m) => (m === 'subgraph' ? 'browse' : 'subgraph'))
+  }
+
+  const removeFromSubgraphView = (aid: string) => {
+    removeFromSelectedSubgraph(aid)
+    setSubgraphNodes((prev) => (prev ?? []).filter((n) => n.aid !== aid))
+  }
+
+  const subgraphItems = useMemo(
+    () => (subgraphNodes ?? []).map((n) => ({ n })),
+    [subgraphNodes],
+  )
+
+  const subgraphNodeIds = useMemo(
+    () => new Set((subgraphNodes ?? []).map((n) => n.aid)),
+    [subgraphNodes],
+  )
+
   const newGraphButton = (
     <button
       type='button'
@@ -242,6 +282,35 @@ export default function StatsView() {
           </button>
         ))}
       </Dropdown>
+      {selectedSubgraphId && (
+        <>
+          <button
+            type='button'
+            onClick={toggleViewMode}
+            aria-label={
+              viewMode === 'subgraph'
+                ? 'Back to all papers'
+                : 'View graph papers'
+            }
+            className='shrink-0 p-2 rounded-full cursor-pointer bg-[#2a2a2a] border border-[#333333] text-neutral-400 hover:text-neutral-200'
+          >
+            {viewMode === 'subgraph' ? (
+              <EyeOff size={16} />
+            ) : (
+              <Eye size={16} />
+            )}
+          </button>
+          <Link
+            to={`/subgraph/${selectedSubgraphId}`}
+            target='_blank'
+            rel='noopener noreferrer'
+            aria-label='Open shareable subgraph page'
+            className='shrink-0 p-2 rounded-full cursor-pointer bg-[#2a2a2a] border border-[#333333] text-neutral-400 hover:text-neutral-200'
+          >
+            <ExternalLink size={16} />
+          </Link>
+        </>
+      )}
       {newGraphButton}
     </div>
   )
@@ -272,7 +341,9 @@ export default function StatsView() {
     </>
   )
 
-  const filterBar = papers ? (
+  const isBrowsing = viewMode === 'browse'
+
+  const filterBar = isBrowsing && papers ? (
     <FilterBar
       clusterEntries={clusterEntries}
       availableDomains={availableDomains}
@@ -287,16 +358,31 @@ export default function StatsView() {
     />
   ) : null
 
+  const viewingLabel = (
+    <div className='flex-1 flex items-center justify-center text-sm text-neutral-400 truncate'>
+      Viewing <span className='mx-1 text-neutral-200'>{selectedSubgraph?.name}</span>
+      {subgraphNodes && (
+        <span className='ml-1'>
+          ({subgraphNodes.length} paper{subgraphNodes.length === 1 ? '' : 's'})
+        </span>
+      )}
+    </div>
+  )
+
   return (
     <div className='fixed inset-0 bg-neutral-950 text-[#e5e5e5] flex flex-col'>
       <div className='hidden md:flex shrink-0 border-b border-neutral-800 bg-neutral-950/90 backdrop-blur px-3 py-3 items-center gap-3'>
         {backLink}
         {subgraphControl}
-        <div className='flex-1 flex justify-center'>
-          <div className='relative w-full max-w-xl flex items-center gap-2'>
-            {searchControls}
+        {isBrowsing ? (
+          <div className='flex-1 flex justify-center'>
+            <div className='relative w-full max-w-xl flex items-center gap-2'>
+              {searchControls}
+            </div>
           </div>
-        </div>
+        ) : (
+          viewingLabel
+        )}
         <div className='shrink-0 w-[190px]' />
       </div>
 
@@ -332,9 +418,13 @@ export default function StatsView() {
             >
               {backLink}
               {subgraphControl}
-              <div className='flex items-center gap-2 flex-1'>
-                {searchControls}
-              </div>
+              {isBrowsing ? (
+                <div className='flex items-center gap-2 flex-1'>
+                  {searchControls}
+                </div>
+              ) : (
+                viewingLabel
+              )}
             </div>
 
             {filterBar && (
@@ -346,40 +436,66 @@ export default function StatsView() {
               </div>
             )}
 
-            {papers && total > 0 && (
+            {isBrowsing && papers && total > 0 && (
               <div className='px-4 py-1.5 text-xs text-neutral-500'>
                 Showing {papers.length} of {total.toLocaleString()} papers
               </div>
             )}
 
-            {error && <p className='p-4 text-red-400'>{error}</p>}
+            {isBrowsing && error && <p className='p-4 text-red-400'>{error}</p>}
 
-            {!papers && (
+            {isBrowsing && !papers && (
               <div className='flex h-[60vh] items-center justify-center text-neutral-400'>
                 Loading…
               </div>
             )}
 
-            {papers && items.length === 0 && (
+            {isBrowsing && papers && items.length === 0 && (
               <div className='p-6 text-center text-neutral-400'>
                 No matches.
               </div>
             )}
 
-            <PaperList
-              items={items}
-              clusters={clusters}
-              onSelectId={selectFromList}
-              enableHover
-              resetKey={resetKey}
-              hasMore={hasMore}
-              onLoadMore={loadMore}
-              selectedId={selectedId ?? undefined}
-              onAddToSubgraph={addToSelectedSubgraph}
-              onRemoveFromSubgraph={removeFromSelectedSubgraph}
-              subgraphPaperIds={selectedSubgraphPaperIds}
-              subgraphName={selectedSubgraph?.name}
-            />
+            {!isBrowsing && !subgraphNodes && (
+              <div className='flex h-[60vh] items-center justify-center text-neutral-400'>
+                Loading…
+              </div>
+            )}
+
+            {!isBrowsing && subgraphNodes && subgraphItems.length === 0 && (
+              <div className='p-6 text-center text-neutral-400'>
+                No papers in this graph yet.
+              </div>
+            )}
+
+            {isBrowsing ? (
+              <PaperList
+                items={items}
+                clusters={clusters}
+                onSelectId={selectFromList}
+                enableHover
+                resetKey={resetKey}
+                hasMore={hasMore}
+                onLoadMore={loadMore}
+                selectedId={selectedId ?? undefined}
+                onAddToSubgraph={addToSelectedSubgraph}
+                onRemoveFromSubgraph={removeFromSelectedSubgraph}
+                subgraphPaperIds={selectedSubgraphPaperIds}
+                subgraphName={selectedSubgraph?.name}
+              />
+            ) : (
+              <PaperList
+                items={subgraphItems}
+                clusters={clusters}
+                onSelectId={selectFromList}
+                enableHover
+                resetKey={selectedSubgraphId ?? undefined}
+                selectedId={selectedId ?? undefined}
+                onRemoveFromSubgraph={removeFromSubgraphView}
+                subgraphPaperIds={subgraphNodeIds}
+                subgraphName={selectedSubgraph?.name}
+              />
+            )}
           </div>
         </div>
 
@@ -394,9 +510,13 @@ export default function StatsView() {
               onClose={close}
               onSelectPaper={handleSelectRelated}
               onNavigateTo={navigateTo}
-              onAddToSubgraph={addToSelectedSubgraph}
-              onRemoveFromSubgraph={removeFromSelectedSubgraph}
-              subgraphPaperIds={selectedSubgraphPaperIds}
+              onAddToSubgraph={isBrowsing ? addToSelectedSubgraph : undefined}
+              onRemoveFromSubgraph={
+                isBrowsing ? removeFromSelectedSubgraph : removeFromSubgraphView
+              }
+              subgraphPaperIds={
+                isBrowsing ? selectedSubgraphPaperIds : subgraphNodeIds
+              }
               subgraphName={selectedSubgraph?.name}
             />
           ) : selectedId ? (
