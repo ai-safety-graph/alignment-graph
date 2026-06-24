@@ -10,6 +10,7 @@ import {
   Eye,
   EyeOff,
   ExternalLink,
+  Trash2,
 } from 'lucide-react'
 import StatsPaperDetails from './StatsPaperDetails'
 import MobilePaperDetails from './MobilePaperDetails'
@@ -18,6 +19,7 @@ import FilterBar from './FilterBar'
 import Dropdown from './Dropdown'
 import {
   createSavedGraph,
+  deleteSavedGraph,
   listSavedGraphs,
   updateSavedGraph,
   type SavedGraph,
@@ -46,11 +48,12 @@ export default function StatsView() {
       )?.id ?? null,
   )
   const [isCreatingSubgraph, setIsCreatingSubgraph] = useState(false)
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
   const [newSubgraphName, setNewSubgraphName] = useState('')
   const [viewMode, setViewMode] = useState<'browse' | 'subgraph'>('browse')
   const [subgraphNodes, setSubgraphNodes] = useState<NodeCompact[] | null>(null)
   const [subgraphQuery, setSubgraphQuery] = useState('')
-  const debouncedSubgraphQuery = useDebouncedValue(subgraphQuery, 300)
+  const [debouncedSubgraphQuery, setDebouncedSubgraphQuery] = useState('')
   const [subgraphActiveCids, setSubgraphActiveCids] = useState<Set<number>>(
     new Set(),
   )
@@ -230,6 +233,22 @@ export default function StatsView() {
     setViewMode((m) => (m === 'subgraph' ? 'browse' : 'subgraph'))
   }
 
+  const confirmDeleteSubgraph = () => {
+    if (!selectedSubgraphId) return
+    deleteSavedGraph(selectedSubgraphId)
+    const remaining = subgraphs.filter((s) => s.id !== selectedSubgraphId)
+    setSubgraphs(remaining)
+    setSelectedSubgraphId(
+      remaining.reduce(
+        (latest, s) => (!latest || s.createdAt > latest.createdAt ? s : latest),
+        null as SavedGraph | null,
+      )?.id ?? null,
+    )
+    setSubgraphNodes(null)
+    setViewMode('browse')
+    setIsConfirmingDelete(false)
+  }
+
   const removeFromSubgraphView = (aid: string) => {
     removeFromSelectedSubgraph(aid)
     setSubgraphNodes((prev) => (prev ?? []).filter((n) => n.aid !== aid))
@@ -237,9 +256,18 @@ export default function StatsView() {
 
   useEffect(() => {
     setSubgraphQuery('')
+    setDebouncedSubgraphQuery('')
     setSubgraphActiveCids(new Set())
     setSubgraphActiveDomains(new Set())
   }, [selectedSubgraphId])
+
+  useEffect(() => {
+    const timer = setTimeout(
+      () => setDebouncedSubgraphQuery(subgraphQuery),
+      300,
+    )
+    return () => clearTimeout(timer)
+  }, [subgraphQuery])
 
   const subgraphClusterEntries = useMemo(() => {
     const counts = new Map<number, number>()
@@ -283,6 +311,7 @@ export default function StatsView() {
 
   const clearSubgraphFilters = () => {
     setSubgraphQuery('')
+    setDebouncedSubgraphQuery('')
     setSubgraphActiveCids(new Set())
     setSubgraphActiveDomains(new Set())
   }
@@ -454,6 +483,16 @@ export default function StatsView() {
         >
           {viewMode === 'subgraph' ? <EyeOff size={16} /> : <Eye size={16} />}
         </button>
+        {viewMode === 'subgraph' && (
+          <button
+            type='button'
+            onClick={() => setIsConfirmingDelete(true)}
+            aria-label='Delete graph'
+            className='shrink-0 p-2 rounded-full cursor-pointer bg-[#2a2a2a] border border-[#333333] text-neutral-400 hover:text-red-400'
+          >
+            <Trash2 size={16} />
+          </button>
+        )}
         <Link
           to={`/subgraph/${selectedSubgraphId}`}
           target='_blank'
@@ -687,6 +726,46 @@ export default function StatsView() {
               onSelectPaper={handleSelectRelated}
               onNavigateTo={navigateTo}
             />
+          </div>
+        </div>
+      )}
+
+      {isConfirmingDelete && (
+        <div className='fixed inset-0 z-30 bg-black/70 flex items-center justify-center p-3'>
+          <button
+            aria-label='Close dialog'
+            onClick={() => setIsConfirmingDelete(false)}
+            className='absolute inset-0'
+          />
+          <div className='relative z-10 w-full max-w-sm rounded-2xl bg-[#1f1f1f] border border-[#333333] shadow-2xl p-5 space-y-4'>
+            <div className='space-y-1'>
+              <h2 className='text-base font-medium text-neutral-100'>
+                Delete graph
+              </h2>
+              <p className='text-sm text-neutral-400'>
+                Delete{' '}
+                <span className='text-neutral-200'>
+                  {selectedSubgraph?.name}
+                </span>
+                ? This cannot be undone.
+              </p>
+            </div>
+            <div className='flex justify-end gap-2'>
+              <button
+                type='button'
+                onClick={() => setIsConfirmingDelete(false)}
+                className='px-3 py-1.5 rounded-full text-sm text-neutral-300 bg-[#2a2a2a] border border-[#333333] hover:text-neutral-100 cursor-pointer'
+              >
+                Cancel
+              </button>
+              <button
+                type='button'
+                onClick={confirmDeleteSubgraph}
+                className='px-3 py-1.5 rounded-full text-sm text-white bg-red-600 hover:bg-red-500 cursor-pointer'
+              >
+                Delete
+              </button>
+            </div>
           </div>
         </div>
       )}
