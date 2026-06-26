@@ -26,7 +26,7 @@ import type {
   NodeCompact,
 } from '../lib/types'
 import type { RelatedPaper, SearchResult } from '../lib/api'
-import { listSavedGraphs } from '../lib/storage'
+import { listSavedGraphs, updateSavedGraph } from '../lib/storage'
 import type { SavedGraph } from '../lib/storage'
 
 import GraphPaperDetails from './GraphPaperDetails'
@@ -75,7 +75,7 @@ export default function ArxivGraph({
   const fgRef = useRef<ForceGraphMethods | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
 
-  const [savedGraphs] = useState<SavedGraph[]>(() =>
+  const [savedGraphs, setSavedGraphs] = useState<SavedGraph[]>(() =>
     listSavedGraphs().sort(
       (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
     ),
@@ -83,6 +83,28 @@ export default function ArxivGraph({
   const [activeSavedGraph, setActiveSavedGraph] = useState<SavedGraph | null>(
     () => (paperIds?.length ? null : (savedGraphs[0] ?? null)),
   )
+
+  const addToActiveSavedGraph = (aid: string) => {
+    if (!activeSavedGraph) return
+    const current = savedGraphs.find((s) => s.id === activeSavedGraph.id)
+    if (!current || current.paperIds.includes(aid)) return
+    const updated = updateSavedGraph(activeSavedGraph.id, {
+      paperIds: [...current.paperIds, aid],
+    })
+    setSavedGraphs((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
+    setActiveSavedGraph(updated)
+  }
+
+  const removeFromActiveSavedGraph = (aid: string) => {
+    if (!activeSavedGraph) return
+    const current = savedGraphs.find((s) => s.id === activeSavedGraph.id)
+    if (!current) return
+    const updated = updateSavedGraph(activeSavedGraph.id, {
+      paperIds: current.paperIds.filter((id) => id !== aid),
+    })
+    setSavedGraphs((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
+    setActiveSavedGraph(updated)
+  }
 
   const [data, setData] = useState<GraphDataCompact | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -690,6 +712,10 @@ export default function ArxivGraph({
           onSelect={onSearchPick}
           clusters={clusters}
           isLoading={isSearching}
+          onAddToSubgraph={activeSavedGraph ? addToActiveSavedGraph : undefined}
+          onRemoveFromSubgraph={activeSavedGraph ? removeFromActiveSavedGraph : undefined}
+          subgraphPaperIds={activeSavedGraph ? new Set(activeSavedGraph.paperIds) : undefined}
+          subgraphName={activeSavedGraph?.name}
         />
       )}
 
@@ -700,6 +726,10 @@ export default function ArxivGraph({
           related={related}
           relatedLoading={relatedLoading}
           onClose={onBackgroundClick}
+          onAddToSubgraph={activeSavedGraph ? addToActiveSavedGraph : undefined}
+          onRemoveFromSubgraph={activeSavedGraph ? removeFromActiveSavedGraph : undefined}
+          subgraphPaperIds={activeSavedGraph ? new Set(activeSavedGraph.paperIds) : undefined}
+          subgraphName={activeSavedGraph?.name}
           onSelectPaper={(aid) => {
             const id = aidToId.get(aid)
             if (id == null) return

@@ -1,4 +1,4 @@
-import { CircleX, Plus } from 'lucide-react'
+import { CircleX, Plus, Minus } from 'lucide-react'
 import { cidToColor } from '../lib/colors'
 import type { ClustersLegend, NodeCompact } from '../lib/types'
 import { usePaperSummary } from '../hooks/usePaperSummary'
@@ -13,6 +13,9 @@ interface Props {
   onClose: () => void
   onSelectPaper: (aid: string) => void
   onAddToSubgraph?: (aid: string) => void
+  onRemoveFromSubgraph?: (aid: string) => void
+  subgraphPaperIds?: Set<string>
+  subgraphName?: string
 }
 
 export default function GraphPaperDetails({
@@ -23,7 +26,12 @@ export default function GraphPaperDetails({
   onClose,
   onSelectPaper,
   onAddToSubgraph,
+  onRemoveFromSubgraph,
+  subgraphPaperIds,
+  subgraphName,
 }: Props) {
+  const isPaperInSubgraph = subgraphPaperIds?.has(paper.aid) ?? false
+  const subgraphLabel = subgraphName ?? 'Subgraph'
   const urlKey = paper.ln || (paper as any).aid
   const { data: lazy, loading, error } = usePaperSummary(urlKey)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
@@ -73,11 +81,24 @@ export default function GraphPaperDetails({
           </h4>
 
           <button
-            onClick={() => onAddToSubgraph?.(paper.aid)}
+            onClick={() =>
+              isPaperInSubgraph
+                ? onRemoveFromSubgraph?.(paper.aid)
+                : onAddToSubgraph?.(paper.aid)
+            }
             className='flex items-center gap-1.5 text-[13px] text-neutral-300 hover:text-white border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 mb-2'
           >
-            Add to Subgraph
-            <Plus size={14} />
+            {isPaperInSubgraph ? (
+              <>
+                Remove from {subgraphLabel}
+                <Minus size={14} />
+              </>
+            ) : (
+              <>
+                Add to {subgraphLabel}
+                <Plus size={14} />
+              </>
+            )}
           </button>
         </div>
         <div className='text-[13px] mb-1.5'>
