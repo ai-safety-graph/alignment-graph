@@ -26,6 +26,8 @@ import type {
   NodeCompact,
 } from '../lib/types'
 import type { RelatedPaper, SearchResult } from '../lib/api'
+import { listSavedGraphs } from '../lib/storage'
+import type { SavedGraph } from '../lib/storage'
 
 import GraphPaperDetails from './GraphPaperDetails'
 import SearchResultsOverlay from './SearchResultsOverlay'
@@ -73,9 +75,19 @@ export default function ArxivGraph({
   const fgRef = useRef<ForceGraphMethods | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
 
+  const [savedGraphs] = useState<SavedGraph[]>(() =>
+    listSavedGraphs().sort(
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+    ),
+  )
+  const [activeSavedGraph, setActiveSavedGraph] = useState<SavedGraph | null>(
+    () => (paperIds?.length ? null : (savedGraphs[0] ?? null)),
+  )
+
   const [data, setData] = useState<GraphDataCompact | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [isDemo, setIsDemo] = useState(false)
+
+  const isDemo = !paperIds?.length && !activeSavedGraph
 
   const [hoverId, setHoverId] = useState<number | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -118,11 +130,12 @@ export default function ArxivGraph({
     ;(async () => {
       try {
         const { fetchSubgraph } = await import('../lib/api')
-        const ids = paperIds?.length ? paperIds : DEMO_PAPER_IDS
+        const ids = paperIds?.length
+          ? paperIds
+          : (activeSavedGraph?.paperIds ?? DEMO_PAPER_IDS)
         const json = await fetchSubgraph(ids)
         if (!alive) return
         setData(json)
-        setIsDemo(!paperIds?.length)
       } catch (e: any) {
         if (!alive) return
         setError(`Failed to load graph: ${e?.message ?? String(e)}`)
@@ -131,7 +144,7 @@ export default function ArxivGraph({
     return () => {
       alive = false
     }
-  }, [paperIds])
+  }, [paperIds, activeSavedGraph])
 
   // Prepare simulation nodes (mutable x/y)
   const simNodes = useMemo(() => {
@@ -400,11 +413,11 @@ export default function ArxivGraph({
   // Force configuration
   useForceConfig(fgRef, !!data)
 
-  // Autofit once per src
+  // Autofit once per graph source
   const didAutoFit = useRef(false)
   useEffect(() => {
     didAutoFit.current = false
-  }, [src])
+  }, [src, activeSavedGraph])
 
   // ESC unlock (global)
   useEffect(() => {
@@ -707,7 +720,51 @@ export default function ArxivGraph({
           <Newspaper size={18} />
         </Link>
 
-        <Dropdown label={isDemo ? 'Demo subgraph' : 'Custom subgraph'} />
+        <Dropdown
+          label={
+            isDemo
+              ? 'Demo subgraph'
+              : (activeSavedGraph?.name ?? 'Custom subgraph')
+          }
+        >
+          {savedGraphs.map((g) => (
+            <button
+              key={g.id}
+              type='button'
+              onClick={() => {
+                setActiveSavedGraph(g)
+                setData(null)
+                setSelectedId(null)
+                setLockedId(null)
+                setHoverId(null)
+              }}
+              className={`w-full text-left px-4 py-2 text-sm hover:bg-[#333333] cursor-pointer transition-colors ${
+                activeSavedGraph?.id === g.id
+                  ? 'text-[#4ea8de]'
+                  : 'text-neutral-300'
+              }`}
+            >
+              {g.name}
+            </button>
+          ))}
+          {savedGraphs.length > 0 && (
+            <button
+              type='button'
+              onClick={() => {
+                setActiveSavedGraph(null)
+                setData(null)
+                setSelectedId(null)
+                setLockedId(null)
+                setHoverId(null)
+              }}
+              className={`w-full text-left px-4 py-2 text-sm hover:bg-[#333333] cursor-pointer border-t border-[#333333] transition-colors ${
+                isDemo ? 'text-[#4ea8de]' : 'text-neutral-400'
+              }`}
+            >
+              Demo subgraph
+            </button>
+          )}
+        </Dropdown>
 
         <button
           type='button'
