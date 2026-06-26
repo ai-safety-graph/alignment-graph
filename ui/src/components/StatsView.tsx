@@ -11,6 +11,7 @@ import {
   EyeOff,
   ExternalLink,
   Trash2,
+  Sparkles,
 } from 'lucide-react'
 import StatsPaperDetails from './StatsPaperDetails'
 import MobilePaperDetails from './MobilePaperDetails'
@@ -35,8 +36,11 @@ import { useNavHistory } from '../hooks/useNavHistory'
 
 export default function StatsView() {
   const { clusters, availableDomains } = useClusterCatalog()
+  const [searchMode, setSearchMode] = useState<'keyword' | 'semantic'>('keyword')
   const [query, setQuery] = useState('')
   const debouncedQuery = useDebouncedValue(query, 300)
+  const [semanticResults, setSemanticResults] = useState<NodeCompact[] | null>(null)
+  const [semanticLoading, setSemanticLoading] = useState(false)
   const [subgraphs, setSubgraphs] = useState<SavedGraph[]>(() =>
     listSavedGraphs(),
   )
@@ -124,6 +128,7 @@ export default function StatsView() {
     fromDate,
     activeCids,
     activeDomains,
+    enabled: searchMode === 'keyword',
   })
 
   const {
@@ -137,6 +142,40 @@ export default function StatsView() {
 
   const selected = usePaperDetail(selectedId)
   const { neighbors, loading: neighborsLoading } = useRelatedPapers(selectedId)
+
+  useEffect(() => {
+    if (searchMode !== 'semantic') {
+      setSemanticResults(null)
+      return
+    }
+    const q = debouncedQuery.trim()
+    if (!q) {
+      setSemanticResults(null)
+      return
+    }
+    let alive = true
+    setSemanticLoading(true)
+    ;(async () => {
+      try {
+        const { searchPapers } = await import('../lib/api')
+        const res = await searchPapers(q, { limit: 50 })
+        if (alive)
+          setSemanticResults(res.results.map((r, i) => ({ ...r, id: i })))
+      } catch {
+        if (alive) setSemanticResults([])
+      } finally {
+        if (alive) setSemanticLoading(false)
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [debouncedQuery, searchMode])
+
+  const semanticItems = useMemo(
+    () => (semanticResults ?? []).map((n) => ({ n })),
+    [semanticResults],
+  )
 
   const listRef = useRef<HTMLDivElement | null>(null)
   const autoSelectedRef = useRef(false)
@@ -433,6 +472,29 @@ export default function StatsView() {
           <Trash size={18} />
         </button>
       )}
+      <button
+        type='button'
+        onClick={() =>
+          setSearchMode((m) => (m === 'semantic' ? 'keyword' : 'semantic'))
+        }
+        aria-label={
+          searchMode === 'semantic'
+            ? 'Switch to keyword search'
+            : 'Switch to semantic search'
+        }
+        title={
+          searchMode === 'semantic'
+            ? 'Semantic search active'
+            : 'Enable semantic search'
+        }
+        className={`shrink-0 p-2 rounded-lg border cursor-pointer transition-colors ${
+          searchMode === 'semantic'
+            ? 'bg-[#4ea8de]/15 border-[#4ea8de] text-[#4ea8de]'
+            : 'border-transparent text-neutral-500 hover:text-neutral-300'
+        }`}
+      >
+        <Sparkles size={16} />
+      </button>
     </>
   )
 
@@ -507,7 +569,7 @@ export default function StatsView() {
   ) : null
 
   const filterBar =
-    isBrowsing && papers ? (
+    isBrowsing && searchMode === 'keyword' && papers ? (
       <FilterBar
         clusterEntries={clusterEntries}
         availableDomains={availableDomains}
@@ -595,9 +657,15 @@ export default function StatsView() {
               </div>
             )}
 
-            {isBrowsing && papers && total > 0 && (
+            {isBrowsing && searchMode === 'keyword' && papers && total > 0 && (
               <div className='px-4 py-1.5 text-xs text-neutral-500'>
                 Showing {papers.length} of {total.toLocaleString()} papers
+              </div>
+            )}
+
+            {isBrowsing && searchMode === 'semantic' && semanticResults && (
+              <div className='px-4 py-1.5 text-xs text-neutral-500'>
+                {semanticResults.length} semantic results
               </div>
             )}
 
@@ -607,15 +675,35 @@ export default function StatsView() {
               </div>
             )}
 
-            {isBrowsing && error && <p className='p-4 text-red-400'>{error}</p>}
+            {isBrowsing && searchMode === 'keyword' && error && (
+              <p className='p-4 text-red-400'>{error}</p>
+            )}
 
-            {isBrowsing && !papers && (
+            {isBrowsing && searchMode === 'keyword' && !papers && (
               <div className='flex h-[60vh] items-center justify-center text-neutral-400'>
                 Loading…
               </div>
             )}
 
-            {isBrowsing && papers && items.length === 0 && (
+            {isBrowsing && searchMode === 'keyword' && papers && items.length === 0 && (
+              <div className='p-6 text-center text-neutral-400'>
+                No matches.
+              </div>
+            )}
+
+            {isBrowsing && searchMode === 'semantic' && semanticLoading && (
+              <div className='flex h-[60vh] items-center justify-center text-neutral-400'>
+                Searching…
+              </div>
+            )}
+
+            {isBrowsing && searchMode === 'semantic' && !semanticLoading && !debouncedQuery.trim() && (
+              <div className='p-6 text-center text-neutral-500 text-sm'>
+                Enter a query to search semantically.
+              </div>
+            )}
+
+            {isBrowsing && searchMode === 'semantic' && !semanticLoading && debouncedQuery.trim() && semanticResults && semanticResults.length === 0 && (
               <div className='p-6 text-center text-neutral-400'>
                 No matches.
               </div>
@@ -652,6 +740,20 @@ export default function StatsView() {
             )}
 
             {isBrowsing ? (
+              searchMode === 'semantic' ? (
+                <PaperList
+                  items={semanticItems}
+                  clusters={clusters}
+                  onSelectId={selectFromList}
+                  enableHover
+                  resetKey={`semantic|${debouncedQuery}`}
+                  selectedId={selectedId ?? undefined}
+                  onAddToSubgraph={addToSelectedSubgraph}
+                  onRemoveFromSubgraph={removeFromSelectedSubgraph}
+                  subgraphPaperIds={selectedSubgraphPaperIds}
+                  subgraphName={selectedSubgraph?.name}
+                />
+              ) : (
               <PaperList
                 items={items}
                 clusters={clusters}
@@ -666,6 +768,7 @@ export default function StatsView() {
                 subgraphPaperIds={selectedSubgraphPaperIds}
                 subgraphName={selectedSubgraph?.name}
               />
+              )
             ) : (
               <PaperList
                 items={subgraphItems}

@@ -13,7 +13,7 @@ import type {
   LinkObject,
   NodeObject,
 } from 'react-force-graph-2d'
-import { Trash, Search, Newspaper, Plus } from 'lucide-react'
+import { Trash, Search, Newspaper, Plus, Sparkles } from 'lucide-react'
 
 import { useForceConfig } from '../hooks/useForceConfig'
 import { useGraphShortcuts } from '../hooks/useGraphShortcuts'
@@ -82,6 +82,7 @@ export default function ArxivGraph({
   const [lockedId, setLockedId] = useState<number | null>(null)
   const activeId = lockedId ?? hoverId
 
+  const [searchMode, setSearchMode] = useState<'keyword' | 'semantic'>('keyword')
   const [query, setQuery] = useState('')
   const [apiResults, setApiResults] = useState<SearchResult[]>([])
   const [isSearching, setIsSearching] = useState(false)
@@ -212,12 +213,19 @@ export default function ArxivGraph({
     setIsSearching(true)
     searchTimerRef.current = window.setTimeout(async () => {
       try {
-        const { searchPapers, fetchSubgraph } = await import('../lib/api')
-        const res = await searchPapers(query, { limit: 50 })
-        setApiResults(res.results)
+        const { searchPapers, fetchPapers, fetchSubgraph } = await import('../lib/api')
+        let results: SearchResult[]
+        if (searchMode === 'semantic') {
+          const res = await searchPapers(query, { limit: 50 })
+          results = res.results
+        } else {
+          const res = await fetchPapers({ q: query, limit: 50 })
+          results = res.items.map((item, i) => ({ ...item, id: i, sim: null }))
+        }
+        setApiResults(results)
 
         const existingAids = new Set(simNodesRef.current.map((n) => n.aid))
-        const ghostAids = res.results
+        const ghostAids = results
           .map((r) => r.aid)
           .filter((aid) => !existingAids.has(aid))
         if (ghostAids.length > 0) {
@@ -225,9 +233,6 @@ export default function ArxivGraph({
           const maxId =
             simNodesRef.current.reduce((m, n) => Math.max(m, n.id), 0) + 1
           let nextId = maxId
-          // Position search ghosts in the MAIN graph's coordinate space (via its
-          // bounds), not the ghost subset's own normalization. Falls back to the
-          // fetched coords if the main graph has no stored bounds.
           const coords = dataRef.current?.meta.coords
           const pin = !!coords?.included
           const ghosts = ghostData.nodes.map((n) => {
@@ -254,7 +259,7 @@ export default function ArxivGraph({
     return () => {
       if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current)
     }
-  }, [query])
+  }, [query, searchMode])
 
   // Search results for overlay
   const searchResults = useMemo(() => {
@@ -596,7 +601,7 @@ export default function ArxivGraph({
       )}
 
       {/* Search bar */}
-      <div className='fixed top-3 left-1/2 -translate-x-1/2 z-10'>
+      <div className='fixed top-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2'>
         <div className='bg-[#2a2a2a] backdrop-blur-xs rounded-3xl w-[min(550px,80vw)] border border-[#333333]'>
           <div className='flex items-center gap-2'>
             <div className='relative flex-1'>
@@ -640,6 +645,29 @@ export default function ArxivGraph({
             )}
           </div>
         </div>
+        <button
+          type='button'
+          onClick={() =>
+            setSearchMode((m) => (m === 'semantic' ? 'keyword' : 'semantic'))
+          }
+          aria-label={
+            searchMode === 'semantic'
+              ? 'Switch to keyword search'
+              : 'Switch to semantic search'
+          }
+          title={
+            searchMode === 'semantic'
+              ? 'Semantic search active'
+              : 'Enable semantic search'
+          }
+          className={`shrink-0 p-2 rounded-full border cursor-pointer transition-colors ${
+            searchMode === 'semantic'
+              ? 'bg-[#4ea8de]/15 border-[#4ea8de] text-[#4ea8de]'
+              : 'bg-[#2a2a2a] border-[#333333] text-neutral-400 hover:text-neutral-200'
+          }`}
+        >
+          <Sparkles size={16} />
+        </button>
       </div>
 
       {/* Overlays */}
