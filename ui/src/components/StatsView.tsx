@@ -52,8 +52,9 @@ export default function StatsView() {
   const [newSubgraphName, setNewSubgraphName] = useState('')
   const [viewMode, setViewMode] = useState<'browse' | 'subgraph'>('browse')
   const [subgraphNodes, setSubgraphNodes] = useState<NodeCompact[] | null>(null)
+  const [subgraphError, setSubgraphError] = useState<string | null>(null)
   const [subgraphQuery, setSubgraphQuery] = useState('')
-  const [debouncedSubgraphQuery, setDebouncedSubgraphQuery] = useState('')
+  const debouncedSubgraphQuery = useDebouncedValue(subgraphQuery, 300)
   const [subgraphActiveCids, setSubgraphActiveCids] = useState<Set<number>>(
     new Set(),
   )
@@ -157,9 +158,11 @@ export default function StatsView() {
 
   const items = useMemo(() => (papers ?? []).map((n) => ({ n })), [papers])
 
+  const resetKey = `${debouncedQuery}|${fromDate ?? ''}|${[...activeCids].sort()}|${[...activeDomains].sort()}`
+
   useLayoutEffect(() => {
     if (listRef.current) listRef.current.scrollTop = 0
-  }, [items])
+  }, [resetKey])
 
   useEffect(() => {
     if (!selected) return
@@ -175,8 +178,6 @@ export default function StatsView() {
       selected ? { aid: selected.aid, title: selected.t } : null,
       aid,
     )
-
-  const resetKey = `${debouncedQuery}|${fromDate ?? ''}|${[...activeCids].sort()}|${[...activeDomains].sort()}`
 
   useLayoutEffect(() => {
     const el = searchBarRef.current
@@ -217,10 +218,18 @@ export default function StatsView() {
     }
     let alive = true
     setSubgraphNodes(null)
+    setSubgraphError(null)
     ;(async () => {
-      const { fetchSubgraph } = await import('../lib/api')
-      const data = await fetchSubgraph(paperIds)
-      if (alive) setSubgraphNodes(data.nodes)
+      try {
+        const { fetchSubgraph } = await import('../lib/api')
+        const data = await fetchSubgraph(paperIds)
+        if (alive) setSubgraphNodes(data.nodes)
+      } catch (e: unknown) {
+        if (alive)
+          setSubgraphError(
+            e instanceof Error ? e.message : 'Failed to load graph',
+          )
+      }
     })()
     return () => {
       alive = false
@@ -256,18 +265,10 @@ export default function StatsView() {
 
   useEffect(() => {
     setSubgraphQuery('')
-    setDebouncedSubgraphQuery('')
     setSubgraphActiveCids(new Set())
     setSubgraphActiveDomains(new Set())
+    setSubgraphError(null)
   }, [selectedSubgraphId])
-
-  useEffect(() => {
-    const timer = setTimeout(
-      () => setDebouncedSubgraphQuery(subgraphQuery),
-      300,
-    )
-    return () => clearTimeout(timer)
-  }, [subgraphQuery])
 
   const subgraphClusterEntries = useMemo(() => {
     const counts = new Map<number, number>()
@@ -311,7 +312,6 @@ export default function StatsView() {
 
   const clearSubgraphFilters = () => {
     setSubgraphQuery('')
-    setDebouncedSubgraphQuery('')
     setSubgraphActiveCids(new Set())
     setSubgraphActiveDomains(new Set())
   }
@@ -621,17 +621,33 @@ export default function StatsView() {
               </div>
             )}
 
-            {!isBrowsing && !subgraphNodes && (
+            {!isBrowsing && subgraphError && (
+              <p className='p-4 text-red-400'>{subgraphError}</p>
+            )}
+
+            {!isBrowsing && !subgraphNodes && !subgraphError && (
               <div className='flex h-[60vh] items-center justify-center text-neutral-400'>
                 Loading…
               </div>
             )}
 
             {!isBrowsing && subgraphNodes && subgraphItems.length === 0 && (
-              <div className='p-6 text-center text-neutral-400'>
-                {subgraphNodes.length === 0
-                  ? 'No papers in this graph yet.'
-                  : 'No matches.'}
+              <div className='p-6 flex flex-col items-center gap-3 text-center text-neutral-400'>
+                <p>
+                  {subgraphNodes.length === 0
+                    ? 'No papers in this graph yet.'
+                    : 'No matches.'}
+                </p>
+                {subgraphNodes.length === 0 && (
+                  <button
+                    type='button'
+                    onClick={toggleViewMode}
+                    className='flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#2a2a2a] border border-[#333333] text-sm text-neutral-300 hover:text-neutral-100 cursor-pointer'
+                  >
+                    <Plus size={14} />
+                    Add papers
+                  </button>
+                )}
               </div>
             )}
 
