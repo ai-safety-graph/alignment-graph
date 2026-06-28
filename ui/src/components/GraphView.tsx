@@ -13,7 +13,7 @@ import type {
   LinkObject,
   NodeObject,
 } from 'react-force-graph-2d'
-import { Trash, Search, Newspaper, Plus, Sparkles } from 'lucide-react'
+import { Trash, Search, Newspaper, Sparkles } from 'lucide-react'
 
 import { useForceConfig } from '../hooks/useForceConfig'
 import { useGraphShortcuts } from '../hooks/useGraphShortcuts'
@@ -77,7 +77,8 @@ export default function ArxivGraph({
 
   const [savedGraphs, setSavedGraphs] = useState<SavedGraph[]>(() =>
     listSavedGraphs().sort(
-      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+      (a, b) =>
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
     ),
   )
   const [activeSavedGraph, setActiveSavedGraph] = useState<SavedGraph | null>(
@@ -91,7 +92,9 @@ export default function ArxivGraph({
     const updated = updateSavedGraph(activeSavedGraph.id, {
       paperIds: [...current.paperIds, aid],
     })
-    setSavedGraphs((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
+    setSavedGraphs((prev) =>
+      prev.map((s) => (s.id === updated.id ? updated : s)),
+    )
     setActiveSavedGraph(updated)
   }
 
@@ -102,7 +105,9 @@ export default function ArxivGraph({
     const updated = updateSavedGraph(activeSavedGraph.id, {
       paperIds: current.paperIds.filter((id) => id !== aid),
     })
-    setSavedGraphs((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
+    setSavedGraphs((prev) =>
+      prev.map((s) => (s.id === updated.id ? updated : s)),
+    )
     setActiveSavedGraph(updated)
   }
 
@@ -116,7 +121,9 @@ export default function ArxivGraph({
   const [lockedId, setLockedId] = useState<number | null>(null)
   const activeId = lockedId ?? hoverId
 
-  const [searchMode, setSearchMode] = useState<'keyword' | 'semantic'>('keyword')
+  const [searchMode, setSearchMode] = useState<'keyword' | 'semantic'>(
+    'keyword',
+  )
   const [query, setQuery] = useState('')
   const [apiResults, setApiResults] = useState<SearchResult[]>([])
   const [isSearching, setIsSearching] = useState(false)
@@ -248,7 +255,8 @@ export default function ArxivGraph({
     setIsSearching(true)
     searchTimerRef.current = window.setTimeout(async () => {
       try {
-        const { searchPapers, fetchPapers, fetchSubgraph } = await import('../lib/api')
+        const { searchPapers, fetchPapers, fetchSubgraph } =
+          await import('../lib/api')
         let results: SearchResult[]
         if (searchMode === 'semantic') {
           const res = await searchPapers(query, { limit: 50 })
@@ -713,8 +721,12 @@ export default function ArxivGraph({
           clusters={clusters}
           isLoading={isSearching}
           onAddToSubgraph={activeSavedGraph ? addToActiveSavedGraph : undefined}
-          onRemoveFromSubgraph={activeSavedGraph ? removeFromActiveSavedGraph : undefined}
-          subgraphPaperIds={activeSavedGraph ? new Set(activeSavedGraph.paperIds) : undefined}
+          onRemoveFromSubgraph={
+            activeSavedGraph ? removeFromActiveSavedGraph : undefined
+          }
+          subgraphPaperIds={
+            activeSavedGraph ? new Set(activeSavedGraph.paperIds) : undefined
+          }
           subgraphName={activeSavedGraph?.name}
         />
       )}
@@ -727,8 +739,12 @@ export default function ArxivGraph({
           relatedLoading={relatedLoading}
           onClose={onBackgroundClick}
           onAddToSubgraph={activeSavedGraph ? addToActiveSavedGraph : undefined}
-          onRemoveFromSubgraph={activeSavedGraph ? removeFromActiveSavedGraph : undefined}
-          subgraphPaperIds={activeSavedGraph ? new Set(activeSavedGraph.paperIds) : undefined}
+          onRemoveFromSubgraph={
+            activeSavedGraph ? removeFromActiveSavedGraph : undefined
+          }
+          subgraphPaperIds={
+            activeSavedGraph ? new Set(activeSavedGraph.paperIds) : undefined
+          }
           subgraphName={activeSavedGraph?.name}
           onSelectPaper={(aid) => {
             const id = aidToId.get(aid)
@@ -796,13 +812,14 @@ export default function ArxivGraph({
           )}
         </Dropdown>
 
-        <button
-          type='button'
+        {/* <Link
+          to='/stats'
+          aria-label='Show stats'
           className='shrink-0 flex items-center gap-1.5 px-3 py-[7px] rounded-full bg-[#2a2a2a] border border-[#333333] text-sm text-neutral-400 hover:text-neutral-200 whitespace-nowrap cursor-pointer'
         >
           New Graph
           <Plus size={13} />
-        </button>
+        </Link> */}
       </div>
 
       <ClusterLegendOverlay clusters={clusters} />

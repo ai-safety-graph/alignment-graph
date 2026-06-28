@@ -95,37 +95,6 @@ def _build_subgraph(conn, paper_ids: List[str]) -> dict:
         for i, p in enumerate(papers)
     ]
 
-    id_to_idx = {aid: i for i, aid in enumerate(ids)}
-    seen: set = set()
-    edge_list = []
-
-    TOP_K = 5
-    MIN_SIM = 0.85
-
-    batch_size = 200
-    for start in range(0, N, batch_size):
-        batch_ids = ids[start:start + batch_size]
-        rows_emb = conn.execute("""
-            SELECT a.id AS aid, b.id AS bid,
-                   1 - (a.embedding <=> b.embedding) AS sim
-            FROM papers a
-            JOIN papers b ON b.id = ANY(%s)
-            WHERE a.id = ANY(%s)
-              AND a.id != b.id
-              AND 1 - (a.embedding <=> b.embedding) >= %s
-              AND a.embedding IS NOT NULL AND b.embedding IS NOT NULL
-        """, (ids, batch_ids, MIN_SIM)).fetchall()
-        for aid, bid, sim in rows_emb:
-            i, j = id_to_idx.get(aid), id_to_idx.get(bid)
-            if i is None or j is None:
-                continue
-            a, b = (i, j) if i < j else (j, i)
-            if (a, b) not in seen:
-                seen.add((a, b))
-                edge_list.append((a, b, float(sim)))
-
-    links = [{"s": a, "t": b, "w": round(w, 6)} for a, b, w in edge_list]
-
     clusters = {
         str(cid): {"label": labels.get(cid), "size": int(cluster_counts[cid])}
         for cid in sorted(set(cluster_ids))
@@ -136,7 +105,7 @@ def _build_subgraph(conn, paper_ids: List[str]) -> dict:
             "model": EMB_MODEL,
             "embedding_dim": EMB_DIMS,
             "generated_at": dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat(),
-            "neighbors": {"top_k": TOP_K, "min_sim": MIN_SIM, "same_cluster_only": False},
+            "neighbors": None,
             "coords": {
                 "included": has_coords,
                 "method": "stored-subset" if has_coords else "none",
@@ -150,7 +119,7 @@ def _build_subgraph(conn, paper_ids: List[str]) -> dict:
         },
         "clusters": clusters,
         "nodes": nodes,
-        "links": links,
+        "links": [],
     }
 
 
