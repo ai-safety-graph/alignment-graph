@@ -13,7 +13,7 @@ import type {
   LinkObject,
   NodeObject,
 } from 'react-force-graph-2d'
-import { Trash, Search, Newspaper, Sparkles } from 'lucide-react'
+import { Trash, Search, Library, Sparkles } from 'lucide-react'
 
 import { useForceConfig } from '../hooks/useForceConfig'
 import { useGraphShortcuts } from '../hooks/useGraphShortcuts'
@@ -660,7 +660,7 @@ export default function ArxivGraph({
                   if (selectedId != null) onBackgroundClick()
                   setQuery(e.target.value)
                 }}
-                className='w-full pl-9 pr-20 py-2 rounded-3xl bg-neutral-900 border border-[#333333] text-[#e5e5e5] placeholder-[#666666] outline-none focus:ring-2 focus:ring-[#4ea8de]'
+                className='w-full pl-9 pr-20 py-1 rounded-3xl bg-neutral-900 border border-[#333333] text-[#e5e5e5] placeholder-[#666666] outline-none focus:ring-2 focus:ring-[#4ea8de]'
               />
               <div className='absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[11px] text-neutral-400 pointer-events-none select-none'>
                 <kbd className='px-1.5 py-0.5 rounded bg-transparent border border-neutral-600 text-[11px] font-mono'>
@@ -675,9 +675,9 @@ export default function ArxivGraph({
               <button
                 aria-label='Clear search query'
                 onClick={() => setQuery('')}
-                className='p-2 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200 flex items-center gap-2'
+                className='px-2 py-1 rounded-md cursor-pointer text-neutral-300 hover:text-white flex items-center gap-2'
               >
-                <Trash size={19} />
+                <Trash size={15} />
                 <kbd className='px-1.5 py-0.5 rounded bg-transparent border border-neutral-600 text-[11px] font-mono'>
                   Ctrl
                 </kbd>
@@ -693,24 +693,21 @@ export default function ArxivGraph({
           onClick={() =>
             setSearchMode((m) => (m === 'semantic' ? 'keyword' : 'semantic'))
           }
-          aria-label={
+          className={`shrink-0 px-2 py-1 rounded-md bg-[#2a2a2a] border cursor-pointer transition-colors ${
             searchMode === 'semantic'
-              ? 'Switch to keyword search'
-              : 'Switch to semantic search'
-          }
-          title={
-            searchMode === 'semantic'
-              ? 'Semantic search active'
-              : 'Enable semantic search'
-          }
-          className={`shrink-0 p-2 rounded-full border cursor-pointer transition-colors ${
-            searchMode === 'semantic'
-              ? 'bg-[#4ea8de]/15 border-[#4ea8de] text-[#4ea8de]'
-              : 'bg-[#2a2a2a] border-[#333333] text-neutral-400 hover:text-neutral-200'
+              ? 'border-[#4ea8de] text-[#4ea8de]'
+              : 'border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white'
           }`}
         >
-          <Sparkles size={16} />
+          <Sparkles size={15} />
         </button>
+        <span
+          className={`shrink-0 text-[13px] whitespace-nowrap transition-colors ${searchMode === 'semantic' ? 'text-[#4ea8de]' : 'text-neutral-500'}`}
+        >
+          {searchMode === 'semantic'
+            ? 'semantic search on'
+            : 'semantic search off'}
+        </span>
       </div>
 
       {/* Overlays */}
@@ -761,9 +758,9 @@ export default function ArxivGraph({
         <Link
           to='/stats'
           aria-label='Show stats'
-          className='p-2 rounded-full cursor-pointer bg-[#2a2a2a] border border-[#333333] text-neutral-400 hover:text-neutral-200'
+          className='px-2 py-1 rounded-md cursor-pointer bg-[#2a2a2a] border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors'
         >
-          <Newspaper size={18} />
+          <Library size={18} />
         </Link>
 
         <Dropdown

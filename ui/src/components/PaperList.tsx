@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Plus, Minus } from 'lucide-react'
+import SharePlusIcon from './icons/SharePlusIcon'
+import ShareMinusIcon from './icons/ShareMinusIcon'
 import type { NodeCompact, ClustersLegend } from '../lib/types'
 import { cidToColor } from '../lib/colors'
 
@@ -104,9 +105,9 @@ export default function PaperList({
                   ? `Remove from ${subgraphName ?? 'subgraph'}`
                   : `Add to ${subgraphName ?? 'subgraph'}`
               }
-              className='absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200'
+              className='group absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200'
             >
-              {inSubgraph ? <Minus size={16} /> : <Plus size={16} />}
+              {inSubgraph ? <ShareMinusIcon size={14} className='text-red-800 group-hover:text-red-500 transition-colors' /> : <SharePlusIcon size={14} className='text-green-800 group-hover:text-green-500 transition-colors' />}
             </button>
           </li>
           )

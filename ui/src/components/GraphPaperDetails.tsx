@@ -1,4 +1,6 @@
-import { CircleX, Plus, Minus } from 'lucide-react'
+import { CircleX } from 'lucide-react'
+import SharePlusIcon from './icons/SharePlusIcon'
+import ShareMinusIcon from './icons/ShareMinusIcon'
 import { cidToColor } from '../lib/colors'
 import type { ClustersLegend, NodeCompact } from '../lib/types'
 import { usePaperSummary } from '../hooks/usePaperSummary'
@@ -86,17 +88,23 @@ export default function GraphPaperDetails({
                 ? onRemoveFromSubgraph?.(paper.aid)
                 : onAddToSubgraph?.(paper.aid)
             }
-            className='flex items-center gap-1.5 text-[13px] text-neutral-300 hover:text-white border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 mb-2'
+            className='group flex items-center gap-1.5 text-[13px] text-neutral-300 hover:text-white bg-[#2a2a2a] border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 mb-2 cursor-pointer transition-colors'
           >
             {isPaperInSubgraph ? (
               <>
                 Remove from {subgraphLabel}
-                <Minus size={14} />
+                <ShareMinusIcon
+                  size={14}
+                  className='text-red-800 group-hover:text-red-500 transition-colors'
+                />
               </>
             ) : (
               <>
                 Add to {subgraphLabel}
-                <Plus size={14} />
+                <SharePlusIcon
+                  size={14}
+                  className='text-green-800 group-hover:text-green-500 transition-colors'
+                />
               </>
             )}
           </button>

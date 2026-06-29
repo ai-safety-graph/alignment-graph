@@ -22,7 +22,7 @@ function presetToFromDate(preset: DatePreset): string | undefined {
 export function useServerFilters(clusters: ClustersLegend) {
   const [activeCids, setActiveCids] = useState<Set<number>>(new Set())
   const [activeDomains, setActiveDomains] = useState<Set<string>>(new Set())
-  const [datePreset, setDatePreset] = useState<DatePreset>('3m')
+  const [datePreset, setDatePreset] = useState<DatePreset>('all')
 
   const clusterEntries = useMemo(
     () =>
@@ -35,12 +35,12 @@ export function useServerFilters(clusters: ClustersLegend) {
   const fromDate = useMemo(() => presetToFromDate(datePreset), [datePreset])
 
   const hasActiveFilters =
-    activeCids.size > 0 || activeDomains.size > 0 || datePreset !== '3m'
+    activeCids.size > 0 || activeDomains.size > 0 || datePreset !== 'all'
 
   function clearAllFilters() {
     setActiveCids(new Set())
     setActiveDomains(new Set())
-    setDatePreset('3m')
+    setDatePreset('all')
   }
 
   function toggleCluster(cid: number) {

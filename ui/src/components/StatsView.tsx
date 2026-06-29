@@ -7,11 +7,12 @@ import {
   Plus,
   Check,
   X,
-  Eye,
-  EyeOff,
+  Globe,
+  List,
   ExternalLink,
   Trash2,
   Sparkles,
+  SlidersHorizontal,
 } from 'lucide-react'
 import StatsPaperDetails from './StatsPaperDetails'
 import MobilePaperDetails from './MobilePaperDetails'
@@ -36,10 +37,14 @@ import { useNavHistory } from '../hooks/useNavHistory'
 
 export default function StatsView() {
   const { clusters, availableDomains } = useClusterCatalog()
-  const [searchMode, setSearchMode] = useState<'keyword' | 'semantic'>('keyword')
+  const [searchMode, setSearchMode] = useState<'keyword' | 'semantic'>(
+    'keyword',
+  )
   const [query, setQuery] = useState('')
   const debouncedQuery = useDebouncedValue(query, 300)
-  const [semanticResults, setSemanticResults] = useState<NodeCompact[] | null>(null)
+  const [semanticResults, setSemanticResults] = useState<NodeCompact[] | null>(
+    null,
+  )
   const [semanticLoading, setSemanticLoading] = useState(false)
   const [subgraphs, setSubgraphs] = useState<SavedGraph[]>(() =>
     listSavedGraphs(),
@@ -55,6 +60,7 @@ export default function StatsView() {
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
   const [newSubgraphName, setNewSubgraphName] = useState('')
   const [viewMode, setViewMode] = useState<'browse' | 'subgraph'>('browse')
+  const [filterExpanded, setFilterExpanded] = useState(true)
   const [subgraphNodes, setSubgraphNodes] = useState<NodeCompact[] | null>(null)
   const [subgraphError, setSubgraphError] = useState<string | null>(null)
   const [subgraphQuery, setSubgraphQuery] = useState('')
@@ -232,7 +238,7 @@ export default function StatsView() {
   const backLink = onHome ? null : (
     <Link
       to='/'
-      className='shrink-0 p-2 rounded-full cursor-pointer bg-[#2a2a2a] border border-[#333333] text-neutral-400 hover:text-neutral-200'
+      className='shrink-0 px-2 py-1 rounded-md cursor-pointer bg-[#2a2a2a] border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors'
       aria-label='Back to graph'
     >
       <Share2 size={18} />
@@ -391,7 +397,7 @@ export default function StatsView() {
     <button
       type='button'
       onClick={startCreatingSubgraph}
-      className='shrink-0 flex items-center gap-1.5 px-3 py-[7px] rounded-full bg-[#2a2a2a] border border-[#333333] text-sm text-neutral-400 hover:text-neutral-200 whitespace-nowrap cursor-pointer'
+      className='shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#2a2a2a] border border-neutral-700 hover:border-neutral-500 text-[13px] text-neutral-300 hover:text-white whitespace-nowrap cursor-pointer transition-colors'
     >
       New Graph
       <Plus size={13} />
@@ -399,7 +405,7 @@ export default function StatsView() {
   )
 
   const subgraphControl = isCreatingSubgraph ? (
-    <div className='shrink-0 flex items-center gap-1.5 px-2 py-1 rounded-full bg-[#2a2a2a] border border-[#333333]'>
+    <div className='shrink-0 flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#2a2a2a] border border-[#333333]'>
       <input
         autoFocus
         value={newSubgraphName}
@@ -460,7 +466,7 @@ export default function StatsView() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder='Search papers on AI safety & alignment'
-          className='w-full pl-9 pr-3 py-2 rounded-xl bg-neutral-900 border border-[#333333] text-[#e5e5e5] placeholder-[#666666] outline-none focus:ring-2 focus:ring-[#4ea8de]'
+          className='w-full pl-9 pr-3 py-1 rounded-xl bg-neutral-900 border border-[#333333] text-[#e5e5e5] placeholder-[#666666] outline-none focus:ring-2 focus:ring-[#4ea8de]'
         />
       </div>
       {query && (
@@ -477,24 +483,21 @@ export default function StatsView() {
         onClick={() =>
           setSearchMode((m) => (m === 'semantic' ? 'keyword' : 'semantic'))
         }
-        aria-label={
+        className={`shrink-0 px-2 py-1 rounded-md bg-[#2a2a2a] border cursor-pointer transition-colors ${
           searchMode === 'semantic'
-            ? 'Switch to keyword search'
-            : 'Switch to semantic search'
-        }
-        title={
-          searchMode === 'semantic'
-            ? 'Semantic search active'
-            : 'Enable semantic search'
-        }
-        className={`shrink-0 p-2 rounded-lg border cursor-pointer transition-colors ${
-          searchMode === 'semantic'
-            ? 'bg-[#4ea8de]/15 border-[#4ea8de] text-[#4ea8de]'
-            : 'border-transparent text-neutral-500 hover:text-neutral-300'
+            ? 'border-[#4ea8de] text-[#4ea8de]'
+            : 'border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white'
         }`}
       >
-        <Sparkles size={16} />
+        <Sparkles size={15} />
       </button>
+      <span
+        className={`shrink-0 text-[13px] whitespace-nowrap transition-colors ${searchMode === 'semantic' ? 'text-[#4ea8de]' : 'text-neutral-500'}`}
+      >
+        {searchMode === 'semantic'
+          ? 'semantic search on'
+          : 'semantic search off'}
+      </span>
     </>
   )
 
@@ -509,7 +512,7 @@ export default function StatsView() {
           value={subgraphQuery}
           onChange={(e) => setSubgraphQuery(e.target.value)}
           placeholder={`Search papers in ${selectedSubgraph?.name ?? 'this graph'}`}
-          className='w-full pl-9 pr-3 py-2 rounded-xl bg-neutral-900 border border-[#333333] text-[#e5e5e5] placeholder-[#666666] outline-none focus:ring-2 focus:ring-[#4ea8de]'
+          className='w-full pl-9 pr-3 py-1 rounded-xl bg-neutral-900 border border-[#333333] text-[#e5e5e5] placeholder-[#666666] outline-none focus:ring-2 focus:ring-[#4ea8de]'
         />
       </div>
       {subgraphQuery && (
@@ -527,43 +530,62 @@ export default function StatsView() {
   const isBrowsing = viewMode === 'browse'
 
   const subgraphTitle = selectedSubgraph ? (
-    <div className='shrink-0 px-4 py-2.5 flex items-center justify-between text-sm text-neutral-400 border-b border-neutral-900'>
-      <span>
-        {isBrowsing ? 'Adding papers to' : 'Viewing papers in'}{' '}
-        <span className='text-lg font-medium text-neutral-200'>
-          {selectedSubgraph.name}
+    <div className='shrink-0 px-4 py-2.5 flex items-center text-sm text-neutral-400'>
+      <div className='flex-1 flex items-center gap-2'>
+        <span>
+          {isBrowsing ? 'Adding papers to' : 'Viewing papers in'}{' '}
+          <span className='text-lg font-medium text-neutral-200'>
+            {selectedSubgraph.name}
+          </span>
         </span>
-      </span>
-      <div className='shrink-0 flex items-center gap-2'>
+      </div>
+      <div className='flex-1 flex justify-end items-center gap-2'>
+        <button
+          type='button'
+          onClick={() => setFilterExpanded((v) => !v)}
+          title={filterExpanded ? 'Collapse filters' : 'Expand filters'}
+          aria-label={filterExpanded ? 'Collapse filters' : 'Expand filters'}
+          className={`shrink-0 flex items-center gap-1.5 px-2 py-0.5 rounded-md cursor-pointer bg-[#2a2a2a] border border-neutral-700 hover:border-neutral-500 hover:text-white transition-colors ${filterExpanded ? 'text-white' : 'text-neutral-300'}`}
+        >
+          <SlidersHorizontal size={15} />
+          Filters
+        </button>
         <button
           type='button'
           onClick={toggleViewMode}
+          title={
+            viewMode === 'subgraph' ? 'Browse all papers' : 'View subgraph'
+          }
           aria-label={
             viewMode === 'subgraph' ? 'Back to all papers' : 'View graph papers'
           }
-          className='shrink-0 p-2 rounded-full cursor-pointer bg-[#2a2a2a] border border-[#333333] text-neutral-400 hover:text-neutral-200'
+          className='shrink-0 px-1.5 py-1 rounded-md cursor-pointer bg-[#2a2a2a] border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors'
         >
-          {viewMode === 'subgraph' ? <EyeOff size={16} /> : <Eye size={16} />}
+          {viewMode === 'subgraph' ? <Globe size={15} /> : <List size={15} />}
         </button>
+        {viewMode === 'subgraph' && (
+          <Link
+            to={`/subgraph/${selectedSubgraphId}`}
+            target='_blank'
+            rel='noopener noreferrer'
+            title='Export subgraph'
+            aria-label='Open shareable subgraph page'
+            className='shrink-0 px-1.5 py-1 rounded-md cursor-pointer bg-[#2a2a2a] border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors'
+          >
+            <ExternalLink size={15} />
+          </Link>
+        )}
         {viewMode === 'subgraph' && (
           <button
             type='button'
             onClick={() => setIsConfirmingDelete(true)}
+            title='Delete graph'
             aria-label='Delete graph'
-            className='shrink-0 p-2 rounded-full cursor-pointer bg-[#2a2a2a] border border-[#333333] text-neutral-400 hover:text-red-400'
+            className='shrink-0 px-1.5 py-1 rounded-md cursor-pointer bg-[#2a2a2a] border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-red-400 transition-colors'
           >
-            <Trash2 size={16} />
+            <Trash2 size={15} />
           </button>
         )}
-        <Link
-          to={`/subgraph/${selectedSubgraphId}`}
-          target='_blank'
-          rel='noopener noreferrer'
-          aria-label='Open shareable subgraph page'
-          className='shrink-0 p-2 rounded-full cursor-pointer bg-[#2a2a2a] border border-[#333333] text-neutral-400 hover:text-neutral-200'
-        >
-          <ExternalLink size={16} />
-        </Link>
       </div>
     </div>
   ) : null
@@ -581,6 +603,7 @@ export default function StatsView() {
         onToggleDomain={toggleDomain}
         onSetDatePreset={setDatePreset}
         onClearAll={clearAllFilters}
+        isExpanded={filterExpanded}
       />
     ) : !isBrowsing && subgraphNodes ? (
       <FilterBar
@@ -592,12 +615,13 @@ export default function StatsView() {
         onToggleCluster={toggleSubgraphCluster}
         onToggleDomain={toggleSubgraphDomain}
         onClearAll={clearSubgraphFilters}
+        isExpanded={filterExpanded}
       />
     ) : null
 
   return (
     <div className='fixed inset-0 bg-neutral-950 text-[#e5e5e5] flex flex-col'>
-      <div className='hidden md:flex shrink-0 border-b border-neutral-800 bg-neutral-950/90 backdrop-blur px-3 py-3 items-center gap-3'>
+      <div className='hidden md:flex shrink-0 bg-neutral-950/90 backdrop-blur px-3 py-3 items-center gap-3'>
         {backLink}
         {subgraphControl}
         <div className='flex-1 flex justify-center'>
@@ -614,9 +638,7 @@ export default function StatsView() {
             <div className='hidden md:block'>{subgraphTitle}</div>
           )}
           {filterBar && (
-            <div className='hidden md:block shrink-0 border-b border-neutral-900'>
-              {filterBar}
-            </div>
+            <div className='hidden md:block shrink-0'>{filterBar}</div>
           )}
 
           <div
@@ -639,7 +661,7 @@ export default function StatsView() {
 
             <div
               ref={searchBarRef}
-              className='md:hidden sticky top-0 z-10 p-3 bg-neutral-950/90 backdrop-blur border-b border-neutral-800 flex items-center gap-3'
+              className='md:hidden sticky top-0 z-10 p-3 bg-neutral-950/90 backdrop-blur flex items-center gap-3'
             >
               {backLink}
               {subgraphControl}
@@ -650,7 +672,7 @@ export default function StatsView() {
 
             {filterBar && (
               <div
-                className='md:hidden sticky z-10 bg-neutral-950/90 backdrop-blur border-b border-neutral-900'
+                className='md:hidden sticky z-10 bg-neutral-950/90 backdrop-blur'
                 style={{ top: searchHeight }}
               >
                 {filterBar}
@@ -685,11 +707,14 @@ export default function StatsView() {
               </div>
             )}
 
-            {isBrowsing && searchMode === 'keyword' && papers && items.length === 0 && (
-              <div className='p-6 text-center text-neutral-400'>
-                No matches.
-              </div>
-            )}
+            {isBrowsing &&
+              searchMode === 'keyword' &&
+              papers &&
+              items.length === 0 && (
+                <div className='p-6 text-center text-neutral-400'>
+                  No matches.
+                </div>
+              )}
 
             {isBrowsing && searchMode === 'semantic' && semanticLoading && (
               <div className='flex h-[60vh] items-center justify-center text-neutral-400'>
@@ -697,17 +722,25 @@ export default function StatsView() {
               </div>
             )}
 
-            {isBrowsing && searchMode === 'semantic' && !semanticLoading && !debouncedQuery.trim() && (
-              <div className='p-6 text-center text-neutral-500 text-sm'>
-                Enter a query to search semantically.
-              </div>
-            )}
+            {isBrowsing &&
+              searchMode === 'semantic' &&
+              !semanticLoading &&
+              !debouncedQuery.trim() && (
+                <div className='p-6 text-center text-neutral-500 text-sm'>
+                  Enter a query to search semantically.
+                </div>
+              )}
 
-            {isBrowsing && searchMode === 'semantic' && !semanticLoading && debouncedQuery.trim() && semanticResults && semanticResults.length === 0 && (
-              <div className='p-6 text-center text-neutral-400'>
-                No matches.
-              </div>
-            )}
+            {isBrowsing &&
+              searchMode === 'semantic' &&
+              !semanticLoading &&
+              debouncedQuery.trim() &&
+              semanticResults &&
+              semanticResults.length === 0 && (
+                <div className='p-6 text-center text-neutral-400'>
+                  No matches.
+                </div>
+              )}
 
             {!isBrowsing && subgraphError && (
               <p className='p-4 text-red-400'>{subgraphError}</p>
@@ -754,20 +787,20 @@ export default function StatsView() {
                   subgraphName={selectedSubgraph?.name}
                 />
               ) : (
-              <PaperList
-                items={items}
-                clusters={clusters}
-                onSelectId={selectFromList}
-                enableHover
-                resetKey={resetKey}
-                hasMore={hasMore}
-                onLoadMore={loadMore}
-                selectedId={selectedId ?? undefined}
-                onAddToSubgraph={addToSelectedSubgraph}
-                onRemoveFromSubgraph={removeFromSelectedSubgraph}
-                subgraphPaperIds={selectedSubgraphPaperIds}
-                subgraphName={selectedSubgraph?.name}
-              />
+                <PaperList
+                  items={items}
+                  clusters={clusters}
+                  onSelectId={selectFromList}
+                  enableHover
+                  resetKey={resetKey}
+                  hasMore={hasMore}
+                  onLoadMore={loadMore}
+                  selectedId={selectedId ?? undefined}
+                  onAddToSubgraph={addToSelectedSubgraph}
+                  onRemoveFromSubgraph={removeFromSelectedSubgraph}
+                  subgraphPaperIds={selectedSubgraphPaperIds}
+                  subgraphName={selectedSubgraph?.name}
+                />
               )
             ) : (
               <PaperList

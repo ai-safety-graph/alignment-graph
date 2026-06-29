@@ -1,7 +1,8 @@
 import { cidToColor } from '../lib/colors'
 import type { ClustersLegend, NodeCompact } from '../lib/types'
 import type { PaperDetail } from '../lib/api'
-import { Plus, Minus } from 'lucide-react'
+import SharePlusIcon from './icons/SharePlusIcon'
+import ShareMinusIcon from './icons/ShareMinusIcon'
 import { useRef, useLayoutEffect } from 'react'
 
 type NeighborEntry = { n: NodeCompact; w: number }
@@ -101,17 +102,17 @@ export default function StatsPaperDetails({
                   ? onRemoveFromSubgraph?.(paper.aid)
                   : onAddToSubgraph?.(paper.aid)
               }
-              className='flex items-center gap-1.5 text-[13px] text-neutral-300 hover:text-white border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1'
+              className='group flex items-center gap-1.5 text-[13px] text-neutral-300 hover:text-white bg-[#2a2a2a] border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 cursor-pointer transition-colors'
             >
               {isPaperInSubgraph ? (
                 <>
                   Remove from {subgraphLabel}
-                  <Minus size={14} />
+                  <ShareMinusIcon size={14} className='text-red-800 group-hover:text-red-500 transition-colors' />
                 </>
               ) : (
                 <>
                   Add to {subgraphLabel}
-                  <Plus size={14} />
+                  <SharePlusIcon size={14} className='text-green-800 group-hover:text-green-500 transition-colors' />
                 </>
               )}
             </button>
@@ -204,9 +205,9 @@ export default function StatsPaperDetails({
                             ? `Remove from ${subgraphLabel}`
                             : `Add to ${subgraphLabel}`
                         }
-                        className='shrink-0 p-1 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200'
+                        className='group shrink-0 p-1 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200 transition-colors'
                       >
-                        {inSubgraph ? <Minus size={14} /> : <Plus size={14} />}
+                        {inSubgraph ? <ShareMinusIcon size={14} className='text-red-800 group-hover:text-red-500 transition-colors' /> : <SharePlusIcon size={14} className='text-green-800 group-hover:text-green-500 transition-colors' />}
                       </button>
                     </div>
                     <div className='text-[12px] text-neutral-500'>

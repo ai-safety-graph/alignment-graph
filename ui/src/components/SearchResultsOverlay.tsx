@@ -1,4 +1,5 @@
-import { Plus, Minus } from 'lucide-react'
+import SharePlusIcon from './icons/SharePlusIcon'
+import ShareMinusIcon from './icons/ShareMinusIcon'
 import { cidToColor } from '../lib/colors'
 import type { ClustersLegend, NodeCompact } from '../lib/types'
 
@@ -80,9 +81,9 @@ export default function SearchResultsOverlay({
                     else onAddToSubgraph?.(n.aid)
                   }}
                   aria-label={inSubgraph ? `Remove from ${subgraphLabel}` : `Add to ${subgraphLabel}`}
-                  className='p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200 shrink-0'
+                  className='group p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200 shrink-0'
                 >
-                  {inSubgraph ? <Minus size={16} /> : <Plus size={16} />}
+                  {inSubgraph ? <ShareMinusIcon size={14} className='text-red-800 group-hover:text-red-500 transition-colors' /> : <SharePlusIcon size={14} className='text-green-800 group-hover:text-green-500 transition-colors' />}
                 </button>
               </div>
             </li>
