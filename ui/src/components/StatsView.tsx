@@ -34,9 +34,11 @@ import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { usePaperBrowser } from '../hooks/usePaperBrowser'
 import { usePaperDetail } from '../hooks/usePaperDetail'
 import { useNavHistory } from '../hooks/useNavHistory'
+import { useCapabilities } from '../hooks/useCapabilities'
 
 export default function StatsView() {
   const { clusters, availableDomains } = useClusterCatalog()
+  const { semanticSearch: semanticSearchEnabled } = useCapabilities()
   const [searchMode, setSearchMode] = useState<'keyword' | 'semantic'>(
     'keyword',
   )
@@ -466,7 +468,7 @@ export default function StatsView() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder='Search papers on AI safety & alignment'
-          className='w-full pl-9 pr-3 py-1 rounded-xl bg-neutral-900 border border-[#333333] text-[#e5e5e5] placeholder-[#666666] outline-none focus:ring-2 focus:ring-[#4ea8de]'
+          className='w-full pl-9 pr-3 py-1 rounded-md bg-neutral-900 border border-[#333333] text-[#e5e5e5] placeholder-[#666666] outline-none focus:ring-2 focus:ring-[#4ea8de]'
         />
       </div>
       {query && (
@@ -478,26 +480,30 @@ export default function StatsView() {
           <Trash size={18} />
         </button>
       )}
-      <button
-        type='button'
-        onClick={() =>
-          setSearchMode((m) => (m === 'semantic' ? 'keyword' : 'semantic'))
-        }
-        className={`shrink-0 px-2 py-1 rounded-md bg-[#2a2a2a] border cursor-pointer transition-colors ${
-          searchMode === 'semantic'
-            ? 'border-[#4ea8de] text-[#4ea8de]'
-            : 'border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white'
-        }`}
-      >
-        <Sparkles size={15} />
-      </button>
-      <span
-        className={`shrink-0 text-[13px] whitespace-nowrap transition-colors ${searchMode === 'semantic' ? 'text-[#4ea8de]' : 'text-neutral-500'}`}
-      >
-        {searchMode === 'semantic'
-          ? 'semantic search on'
-          : 'semantic search off'}
-      </span>
+      {semanticSearchEnabled && (
+        <>
+          <button
+            type='button'
+            onClick={() =>
+              setSearchMode((m) => (m === 'semantic' ? 'keyword' : 'semantic'))
+            }
+            className={`shrink-0 px-2 py-1 rounded-md bg-[#2a2a2a] border cursor-pointer transition-colors ${
+              searchMode === 'semantic'
+                ? 'border-[#4ea8de] text-[#4ea8de]'
+                : 'border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white'
+            }`}
+          >
+            <Sparkles size={15} />
+          </button>
+          <span
+            className={`shrink-0 text-[13px] whitespace-nowrap transition-colors ${searchMode === 'semantic' ? 'text-[#4ea8de]' : 'text-neutral-500'}`}
+          >
+            {searchMode === 'semantic'
+              ? 'semantic search on'
+              : 'semantic search off'}
+          </span>
+        </>
+      )}
     </>
   )
 
@@ -512,7 +518,7 @@ export default function StatsView() {
           value={subgraphQuery}
           onChange={(e) => setSubgraphQuery(e.target.value)}
           placeholder={`Search papers in ${selectedSubgraph?.name ?? 'this graph'}`}
-          className='w-full pl-9 pr-3 py-1 rounded-xl bg-neutral-900 border border-[#333333] text-[#e5e5e5] placeholder-[#666666] outline-none focus:ring-2 focus:ring-[#4ea8de]'
+          className='w-full pl-9 pr-3 py-1 rounded-md bg-neutral-900 border border-[#333333] text-[#e5e5e5] placeholder-[#666666] outline-none focus:ring-2 focus:ring-[#4ea8de]'
         />
       </div>
       {subgraphQuery && (

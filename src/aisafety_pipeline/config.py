@@ -35,5 +35,13 @@ API_CORS_ORIGINS = os.getenv(
     "https://alignment-graph.netlify.app,http://localhost:5173,http://localhost:4173",
 ).split(",")
 
+# Semantic search loads a transformer embedding model into memory; only
+# self-hosted deployments (which run alongside the pipeline) enable it.
+ENABLE_SEMANTIC_SEARCH = os.getenv("ENABLE_SEMANTIC_SEARCH", "false").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+)
+
 # UI colors (TTY)
 GREEN = "\033[92m"; YELLOW = "\033[93m"; BLUE = "\033[94m"; CYAN = "\033[96m"; RESET = "\033[0m"

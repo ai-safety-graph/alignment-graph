@@ -33,6 +33,7 @@ import GraphPaperDetails from './GraphPaperDetails'
 import SearchResultsOverlay from './SearchResultsOverlay'
 import ClusterLegendOverlay from './ClusterLegendOverlay'
 import Dropdown from './Dropdown'
+import { useCapabilities } from '../hooks/useCapabilities'
 
 const DEMO_PAPER_IDS = [
   'https://arxiv.org/abs/2401.02843', // Thousands of AI Authors on the Future of AI
@@ -74,6 +75,7 @@ export default function ArxivGraph({
 }) {
   const fgRef = useRef<ForceGraphMethods | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const { semanticSearch: semanticSearchEnabled } = useCapabilities()
 
   const [savedGraphs, setSavedGraphs] = useState<SavedGraph[]>(() =>
     listSavedGraphs().sort(
@@ -645,7 +647,7 @@ export default function ArxivGraph({
 
       {/* Search bar */}
       <div className='fixed top-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2'>
-        <div className='bg-[#2a2a2a] backdrop-blur-xs rounded-3xl w-[min(550px,80vw)] border border-[#333333]'>
+        <div className='bg-[#2a2a2a] backdrop-blur-xs rounded-md w-[min(550px,80vw)] border border-[#333333]'>
           <div className='flex items-center gap-2'>
             <div className='relative flex-1'>
               <Search
@@ -660,7 +662,7 @@ export default function ArxivGraph({
                   if (selectedId != null) onBackgroundClick()
                   setQuery(e.target.value)
                 }}
-                className='w-full pl-9 pr-20 py-1 rounded-3xl bg-neutral-900 border border-[#333333] text-[#e5e5e5] placeholder-[#666666] outline-none focus:ring-2 focus:ring-[#4ea8de]'
+                className='w-full pl-9 pr-20 py-1 rounded-md bg-neutral-900 border border-[#333333] text-[#e5e5e5] placeholder-[#666666] outline-none focus:ring-2 focus:ring-[#4ea8de]'
               />
               <div className='absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[11px] text-neutral-400 pointer-events-none select-none'>
                 <kbd className='px-1.5 py-0.5 rounded bg-transparent border border-neutral-600 text-[11px] font-mono'>
@@ -688,26 +690,32 @@ export default function ArxivGraph({
             )}
           </div>
         </div>
-        <button
-          type='button'
-          onClick={() =>
-            setSearchMode((m) => (m === 'semantic' ? 'keyword' : 'semantic'))
-          }
-          className={`shrink-0 px-2 py-1 rounded-md bg-[#2a2a2a] border cursor-pointer transition-colors ${
-            searchMode === 'semantic'
-              ? 'border-[#4ea8de] text-[#4ea8de]'
-              : 'border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white'
-          }`}
-        >
-          <Sparkles size={15} />
-        </button>
-        <span
-          className={`shrink-0 text-[13px] whitespace-nowrap transition-colors ${searchMode === 'semantic' ? 'text-[#4ea8de]' : 'text-neutral-500'}`}
-        >
-          {searchMode === 'semantic'
-            ? 'semantic search on'
-            : 'semantic search off'}
-        </span>
+        {semanticSearchEnabled && (
+          <>
+            <button
+              type='button'
+              onClick={() =>
+                setSearchMode((m) =>
+                  m === 'semantic' ? 'keyword' : 'semantic',
+                )
+              }
+              className={`shrink-0 px-2 py-1 rounded-md bg-[#2a2a2a] border cursor-pointer transition-colors ${
+                searchMode === 'semantic'
+                  ? 'border-[#4ea8de] text-[#4ea8de]'
+                  : 'border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white'
+              }`}
+            >
+              <Sparkles size={15} />
+            </button>
+            <span
+              className={`shrink-0 text-[13px] whitespace-nowrap transition-colors ${searchMode === 'semantic' ? 'text-[#4ea8de]' : 'text-neutral-500'}`}
+            >
+              {searchMode === 'semantic'
+                ? 'semantic search on'
+                : 'semantic search off'}
+            </span>
+          </>
+        )}
       </div>
 
       {/* Overlays */}

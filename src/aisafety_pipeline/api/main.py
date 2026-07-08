@@ -3,17 +3,19 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .routes import graph, papers, search, clusters, stats
-from ..config import API_CORS_ORIGINS
+from ..config import API_CORS_ORIGINS, ENABLE_SEMANTIC_SEARCH
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Warm the search generator on startup so the first query isn't slow
-    try:
-        from .routes.search import _get_generator
-        _get_generator()
-    except Exception:
-        pass  # model load is optional at startup; will load on first request
+    # Warm the search generator on startup so the first query isn't slow.
+    # Only self-hosted deployments enable this: it loads a transformer model.
+    if ENABLE_SEMANTIC_SEARCH:
+        try:
+            from .routes.search import _get_generator
+            _get_generator()
+        except Exception:
+            pass  # model load is optional at startup; will load on first request
     yield
 
 
@@ -41,4 +43,4 @@ app.include_router(stats.router)
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "semantic_search": ENABLE_SEMANTIC_SEARCH}

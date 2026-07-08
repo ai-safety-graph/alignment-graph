@@ -1,7 +1,8 @@
 from __future__ import annotations
 from typing import Optional
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from ...config import ENABLE_SEMANTIC_SEARCH
 from ..deps import get_conn
 
 router = APIRouter(prefix="/api/search", tags=["search"])
@@ -26,6 +27,12 @@ class SearchRequest(BaseModel):
 
 @router.post("")
 def semantic_search(req: SearchRequest, conn=Depends(get_conn)):
+    if not ENABLE_SEMANTIC_SEARCH:
+        raise HTTPException(
+            status_code=503,
+            detail="Semantic search is disabled on this deployment. "
+            "Run the API locally with ENABLE_SEMANTIC_SEARCH=true to enable it.",
+        )
     gen = _get_generator()
     embs = gen.encode([req.query], [""])
     query_vec = embs[0].tolist()
