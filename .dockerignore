@@ -1,0 +1,16 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.git/
+.github/
+ui/
+data/
+archive/
+migrations/
+*.log
+*.npy
+specter2_ids.txt
+.env
+.env.*
+uv.lock

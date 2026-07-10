@@ -29,9 +29,13 @@ cd aisafety-pipeline
 uv venv
 source .venv/bin/activate
 
+# API only (serving an already-populated database):
 uv pip install -e .
 
-# Install PyTorch (choose your platform / CUDA build)
+# Full pipeline (harvesting, embeddings, clustering, self-hosted semantic search):
+uv pip install -e ".[pipeline]"
+
+# Install PyTorch (choose your platform / CUDA build) -- only needed for the pipeline extra
 uv pip install torch --index-url https://download.pytorch.org/whl/cpu
 ```
 
