@@ -1,3 +1,5 @@
+import { fetchPaper, hasApi } from './api'
+
 export type Summary = {
   sm: string
   t: string
@@ -33,7 +35,7 @@ async function loadMap(): Promise<Map<string, Summary>> {
         const m = new Map<string, Summary>()
         for (const [k, v] of Object.entries(json.summaries)) {
           m.set(canon(k), v)
-          if (v?.ln) m.set(canon(v.ln), v) // index by ln too
+          if (v?.ln) m.set(canon(v.ln), v)
         }
         cache = m
         return m
@@ -45,8 +47,27 @@ async function loadMap(): Promise<Map<string, Summary>> {
   return inflight
 }
 
-export async function getSummaryByUrl(url?: string | null) {
+export async function getSummaryByUrl(
+  url?: string | null,
+): Promise<Summary | null> {
   if (!url) return null
+
+  // When API is configured, fetch the individual paper detail
+  if (hasApi()) {
+    const paper = await fetchPaper(url)
+    if (!paper) return null
+    return {
+      sm: paper.sm ?? '',
+      t: paper.t,
+      au: paper.au,
+      pd: paper.pd,
+      ln: paper.ln,
+      dm: paper.dm,
+      cid: paper.cid,
+    }
+  }
+
+  // Fallback: load from static summaries.json
   const m = await loadMap()
   return m.get(canon(url)) ?? null
 }

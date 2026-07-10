@@ -10,6 +10,8 @@ export type NodeCompact = {
   sm?: string
   x?: number
   y?: number
+  rx?: number | null
+  ry?: number | null
 }
 
 export type LinkCompact = { s: number; t: number; w: number }
@@ -27,8 +29,14 @@ export type GraphDataCompact = {
     neighbors: { top_k: number; min_sim: number; same_cluster_only: boolean }
     coords: {
       included: boolean
-      method: 'umap' | 'pca' | 'none'
+      method: 'fa2' | 'fr' | 'umap' | 'pca' | 'stored' | 'stored-subset' | 'none'
       canvas: { w: number; h: number; pad: number }
+      bounds?: {
+        x_min: number
+        x_max: number
+        y_min: number
+        y_max: number
+      } | null
     }
     compact: boolean
   }

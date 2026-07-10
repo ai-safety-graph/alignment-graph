@@ -1,14 +1,13 @@
 import { Suspense, lazy } from 'react'
-import { Routes, Route, useNavigate } from 'react-router-dom'
+import { Routes, Route } from 'react-router-dom'
 import { useMediaQuery } from './hooks/useMediaQuery'
 
-const ArxivGraph = lazy(() => import('./components/Graph'))
-const MobilePapers = lazy(() => import('./components/MobileView'))
+const ArxivGraph = lazy(() => import('./components/GraphView'))
 const StatsPage = lazy(() => import('./components/StatsView'))
+const SubgraphPage = lazy(() => import('./components/SubgraphView'))
 
 export default function App() {
   const isSmall = useMediaQuery('(max-width: 768px)')
-  const navigate = useNavigate()
 
   if (isSmall === null) return <div className='h-screen bg-neutral-950' />
 
@@ -21,20 +20,9 @@ export default function App() {
       }
     >
       <Routes>
-        <Route
-          path='/'
-          element={
-            isSmall ? (
-              <MobilePapers src='/graph.json' onToggleView={() => navigate('/stats')} />
-            ) : (
-              <ArxivGraph src='/graph.json' onToggleView={() => navigate('/stats')} />
-            )
-          }
-        />
-        <Route
-          path='/stats'
-          element={<StatsPage src='/graph.json' onToggleView={() => navigate('/')} />}
-        />
+        <Route path='/' element={isSmall ? <StatsPage /> : <ArxivGraph />} />
+        <Route path='/stats' element={<StatsPage />} />
+        <Route path='/subgraph/:id' element={<SubgraphPage />} />
       </Routes>
     </Suspense>
   )

@@ -2,7 +2,7 @@ from __future__ import annotations
 import argparse, datetime as dt, re, json, os
 from pathlib import Path
 from typing import Optional
-from .config import GREEN, YELLOW, BLUE, RESET
+from .config import GREEN, YELLOW, BLUE, RESET, API_HOST, API_PORT
 from . import oai, filters, embeddings, clustering, labeling, export_graph, export_summaries, config
 
 # Labeling helpers (shared)
@@ -70,8 +70,6 @@ def build_parser() -> argparse.ArgumentParser:
     e = sp.add_parser("cluster", help="Cluster only kept papers")
     e.add_argument("--db", default=config.DB_PATH)
     e.add_argument("--kmeans", type=int, default=8)
-    e.add_argument("--agg", type=int, default=8)
-    e.add_argument("--hdbscan-min", type=int, default=5)
     e.add_argument("--reduce-dim", type=int, default=None)
     e.add_argument("--device", default="auto")
     e.set_defaults(func=clustering.cmd_cluster)
@@ -119,7 +117,23 @@ def build_parser() -> argparse.ArgumentParser:
     es.add_argument("--gzip", action="store_true")
     es.set_defaults(func=export_summaries.cmd_export_summaries)
 
+    srv = sp.add_parser("serve", help="Start the FastAPI server (requires DATABASE_URL)")
+    srv.add_argument("--host", default=API_HOST)
+    srv.add_argument("--port", type=int, default=API_PORT)
+    srv.add_argument("--reload", action="store_true", help="Enable auto-reload for development")
+    srv.set_defaults(func=_cmd_serve)
+
     return ap
+
+
+def _cmd_serve(args):
+    import uvicorn
+    uvicorn.run(
+        "aisafety_pipeline.api.main:app",
+        host=args.host,
+        port=args.port,
+        reload=args.reload,
+    )
 
 
 def cli_entry():

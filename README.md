@@ -1,18 +1,20 @@
 # AI Safety Pipeline & Visualisation
 
-A staged pipeline for harvesting **arXiv** papers → storing in **SQLite** → generating **SPECTER2 embeddings** → applying **filters** → **clustering** → exporting **JSON** for downstream visualization.
+A staged pipeline for harvesting **arXiv** papers → storing in **SQLite or PostgreSQL** → generating **SPECTER2 embeddings** → applying filters → clustering → serving via **FastAPI** or exporting **JSON artifacts** for visualization.
 
 [Live Web App](https://alignment-graph.netlify.app/)
 
 ## Features
 
 - 🔄 OAI-PMH harvest from arXiv (`cs`, `stat`, `econ`)
-- 🗄️ SQLite-backed storage (`papers_raw`, `papers`, `embeddings`, `cluster_meta`)
+- 🗄️ Dual-mode storage: **SQLite** (local dev) or **PostgreSQL + pgvector** (production)
 - 🧠 Embeddings via [SPECTER2](https://huggingface.co/allenai/specter2)
 - 🧹 Two-stage filtering: regex + semantic centroid/logreg
 - 📊 Clustering (k-means, agglomerative, HDBSCAN)
 - 🏷️ Automatic cluster labeling (TF–IDF + semantic refinement)
-- 📤 Multiple export formats:
+- 🔍 Semantic search via pgvector ANN (API mode)
+- 🚀 FastAPI backend with live paper listing, detail, and semantic search endpoints
+- 📤 Static export formats for Netlify deployment:
   - Force-directed graph JSON (`export-graph`)
   - Lazy-load summaries JSON (`export-summaries`)
 
@@ -20,31 +22,34 @@ A staged pipeline for harvesting **arXiv** papers → storing in **SQLite** → 
 
 ## Installation
 
-Clone this repo and install into a virtual environment.
-
 ```bash
 git clone https://github.com/yourname/aisafety-pipeline.git
 cd aisafety-pipeline
 
-# create a venv (uv or python -m venv both work)
 uv venv
 source .venv/bin/activate
 
-# install dependencies
+# API only (serving an already-populated database):
 uv pip install -e .
 
-# install PyTorch separately (choose your platform / CUDA build)
+# Full pipeline (harvesting, embeddings, clustering, self-hosted semantic search):
+uv pip install -e ".[pipeline]"
+
+# Install PyTorch (choose your platform / CUDA build) -- only needed for the pipeline extra
 uv pip install torch --index-url https://download.pytorch.org/whl/cpu
 ```
 
+---
+
 ## CLI Usage
 
-After installation, the CLI is available as:
-`aisafety-pipeline --help`
+```bash
+aisafety-pipeline --help
+```
 
 ### Common workflow
 
-**1. Harvest arXiv metadata into SQLite**
+**1. Harvest arXiv metadata**
 
 ```bash
 aisafety-pipeline harvest --from 2024-01-01 --until 2024-12-31 --db data/arxiv_papers.db
@@ -56,19 +61,19 @@ aisafety-pipeline harvest --from 2024-01-01 --until 2024-12-31 --db data/arxiv_p
 aisafety-pipeline stage1 --db data/arxiv_papers.db
 ```
 
-**3. Generate embeddings (SPECTER2)**
+**3. Generate SPECTER2 embeddings**
 
 ```bash
 aisafety-pipeline embed --db data/arxiv_papers.db --device auto
 ```
 
-**4. Stage-2 semantic filter (centroid with seeds)**
+**4. Stage-2 semantic filter**
 
 ```bash
 aisafety-pipeline filter --db data/arxiv_papers.db --method centroid --seeds seeds.txt --tau 0.92
 ```
 
-**5. Cluster the kept Papers**
+**5. Cluster**
 
 ```bash
 aisafety-pipeline cluster --db data/arxiv_papers.db --kmeans 8 --agg 8 --hdbscan-min 5
@@ -80,31 +85,80 @@ aisafety-pipeline cluster --db data/arxiv_papers.db --kmeans 8 --agg 8 --hdbscan
 aisafety-pipeline label --db data/arxiv_papers.db
 ```
 
-**7. Export**
+**7a. Export static artifacts (static / Netlify mode)**
 
-- **Force-directed graph JSON (for react-force-graph):**
+```bash
+aisafety-pipeline export-graph --db data/arxiv_papers.db --out ui/public/graph.json --coords fr
+aisafety-pipeline export-summaries --db data/arxiv_papers.db --out ui/public/summaries.json
+```
 
-  ```bash
-  aisafety-pipeline export-graph --db data/arxiv_papers.db --out ui/public/graph.json --coords fr
-  ```
+**7b. Start the API (PostgreSQL mode)**
 
-- **Lazy-load paper summaries JSON:**
-  ```bash
-  aisafety-pipeline export-summaries --db data/arxiv_papers.db --out ui/public/summaries.json
-  ```
+```bash
+DATABASE_URL=postgresql://... aisafety-pipeline serve --reload
+```
+
+---
+
+## PostgreSQL + pgvector Setup (API mode)
+
+### 1. Provision PostgreSQL with pgvector
+
+Use [Supabase](https://supabase.com) (free tier, pgvector built-in) or a local Docker instance:
+
+```bash
+docker run -e POSTGRES_PASSWORD=pw -p 5432:5432 pgvector/pgvector:pg16
+```
+
+### 2. Set environment variable
+
+```bash
+export DATABASE_URL=postgresql://user:password@host:5432/dbname
+```
+
+Or add to `.env` in the project root (loaded automatically).
+
+### 3. Migrate existing SQLite data
+
+```bash
+python migrations/sqlite_to_postgres.py --db data/arxiv_papers.db
+```
+
+The script migrates `papers_raw`, `papers`, `cluster_meta`, and converts embedding BLOBs to pgvector format. Prints a verification table comparing SQLite vs PostgreSQL row counts.
+
+### 4. Start the API
+
+```bash
+aisafety-pipeline serve
+# or with custom host/port:
+aisafety-pipeline serve --host 0.0.0.0 --port 8000 --reload
+```
+
+API docs available at `http://localhost:8000/docs`.
+
+### 5. Configure the frontend
+
+Set `VITE_API_URL` in `ui/.env.development` (or Netlify env vars for production):
+
+```
+VITE_API_URL=http://localhost:8000
+```
+
+Without this, the frontend falls back to static `graph.json` / `summaries.json`.
+
+---
 
 ## Development
 
-- Pipeline code is organized in a package under src/aisafety_pipeline/
+- Pipeline code: `src/aisafety_pipeline/`
+- FastAPI backend: `src/aisafety_pipeline/api/`
+- CLI entrypoint: `utils.py`
+- Run without install: `python -m aisafety_pipeline.utils --help`
+- Frontend: `cd ui && npm install && npm run dev`
 
-- CLI entry point lives in utils.py
+---
 
-- Run without installation via:
-  `python -m aisafety_pipeline.utils --help`
+## Reproducing the results
 
-- UI uses seperate components for desktop and mobile views
-
-## Reproducing the results (date window & seeds)
-
-This repo’s seeds.txt contains arXiv papers from 2024-08-01 → 2025-08-01.
-To recreate the same behavior of the stage-2 centroid filter (using those seeds), you need to harvest and embed papers from that exact window before running `filter`. Otherwise make sure to use seeds which are definitely acquired from your harvest.
+`seeds.txt` contains arXiv papers from `2024-08-01 → 2025-08-01`.
+To recreate the same stage-2 centroid filter behavior, harvest and embed papers from that exact window before running `filter`. Otherwise use seeds acquired from your own harvest window.

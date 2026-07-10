@@ -10,15 +10,15 @@ export function useForceConfig(
     const fg = fgRef.current as any
     if (!fg || !enabled) return
     fg.d3Force('link')
-      ?.distance((l: any) => 20 + (1 - (l.w ?? 0)) * 120)
-      .strength(0.3)
-    fg.d3Force('charge', d3.forceManyBody().strength(-10))
+      ?.distance((l: any) => 74 + (1 - (l.w ?? 0)) * 222)
+      .strength(0.2)
+    fg.d3Force('charge', d3.forceManyBody().strength(-147))
     fg.d3Force(
       'collide',
       d3
         .forceCollide()
-        .radius(() => 6)
-        .iterations(2)
+        .radius(() => 13)
+        .iterations(3)
     )
   }, [fgRef, enabled])
 }

@@ -7,7 +7,7 @@ import numpy as np
 from .config import EMB_MODEL, GREEN, YELLOW, BLUE, RESET
 
 
-# -------- Byte helpers --------
+# -------- Byte helpers (SQLite BLOB storage) --------
 
 def bytes_from_vec(vec: np.ndarray) -> bytes:
     return vec.astype(np.float32).tobytes()
@@ -20,7 +20,6 @@ def vec_from_bytes(blob: bytes, dim: int) -> np.ndarray:
 # -------- SQLite batching helpers --------
 
 def _chunks(seq: Iterable[str], n: int) -> Iterable[List[str]]:
-    """Yield successive chunks of size n from seq."""
     if n <= 0:
         raise ValueError("Chunk size must be positive")
     seq = list(seq)
@@ -28,69 +27,65 @@ def _chunks(seq: Iterable[str], n: int) -> Iterable[List[str]]:
         yield seq[i:i + n]
 
 
-def _max_sql_vars(conn: sqlite3.Connection) -> int:
-    """
-    Best-effort probe of the SQLite variable limit for this connection.
-    Falls back to 999 (the common default) if the pragma isn't available.
-    """
+def _sqlite_max_vars(conn) -> int:
     try:
-        row = conn.execute("PRAGMA max_variable_number").fetchone()
+        row = conn._conn.execute("PRAGMA max_variable_number").fetchone()
         if row and row[0]:
             return int(row[0])
-    except sqlite3.OperationalError:
+    except Exception:
         pass
     return 999
 
 
-def _safe_in_batch(conn: sqlite3.Connection, *, headroom: int = 10, extra_params: int = 0) -> int:
-    """
-    Compute a safe maximum size for an IN (...) placeholder list on this connection.
-    `extra_params` counts other bound parameters in the same statement (e.g., the `model`).
-    `headroom` leaves a little space for safety.
-    """
-    limit = _max_sql_vars(conn)
-    usable = max(50, limit - headroom - extra_params)  # keep a reasonable floor
-    return usable
+def _safe_in_batch(conn, *, headroom: int = 10, extra_params: int = 0) -> int:
+    if conn.is_pg:
+        return 5000  # PostgreSQL uses ANY(%s) so no per-element limit
+    limit = _sqlite_max_vars(conn)
+    return max(50, limit - headroom - extra_params)
 
 
 # -------- Upsert / fetch --------
 
-def upsert_embedding(conn: sqlite3.Connection, paper_id: str, model: str, vec: np.ndarray) -> None:
+def upsert_embedding(conn, paper_id: str, model: str, vec: np.ndarray) -> None:
     vec = vec.astype(np.float32)
     vec = vec / (np.linalg.norm(vec) + 1e-12)
-    conn.execute(
-        """
-        INSERT INTO embeddings (paper_id, model, dim, vector)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(paper_id) DO UPDATE SET
-            model=excluded.model,
-            dim=excluded.dim,
-            vector=excluded.vector
-        """,
-        (paper_id, model, vec.shape[0], sqlite3.Binary(bytes_from_vec(vec))),
-    )
+    if conn.is_pg:
+        conn.execute(
+            "UPDATE papers SET embedding = %s WHERE id = %s",
+            (vec.tolist(), paper_id),
+        )
+    else:
+        conn.execute(
+            """
+            INSERT INTO embeddings (paper_id, model, dim, vector)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(paper_id) DO UPDATE SET
+                model=excluded.model, dim=excluded.dim, vector=excluded.vector
+            """,
+            (paper_id, model, vec.shape[0], sqlite3.Binary(bytes_from_vec(vec))),
+        )
 
 
-def fetch_existing_embeddings(
-    conn: sqlite3.Connection, paper_ids: List[str], model: str
-) -> Dict[str, np.ndarray]:
-    """
-    Return {paper_id: vector} for the given IDs, batching the IN-clause to
-    avoid SQLite's variable limit.
-    """
+def fetch_existing_embeddings(conn, paper_ids: List[str], model: str) -> Dict[str, np.ndarray]:
+    """Return {paper_id: vector} for the given IDs."""
     if not paper_ids:
         return {}
     out: Dict[str, np.ndarray] = {}
-    # 1 extra bound param for `model=?`
+    if conn.is_pg:
+        rows = conn.execute(
+            "SELECT id, embedding FROM papers WHERE embedding IS NOT NULL AND id = ANY(%s)",
+            (paper_ids,),
+        ).fetchall()
+        for pid, vec in rows:
+            if vec is not None:
+                out[pid] = np.array(vec, dtype=np.float32)
+        return out
+    # SQLite path
     in_batch = _safe_in_batch(conn, headroom=10, extra_params=1)
     for chunk in _chunks(paper_ids, in_batch):
         placeholders = ",".join("?" for _ in chunk)
         rows = conn.execute(
-            f"""
-            SELECT paper_id, dim, vector
-            FROM embeddings
-            WHERE model=? AND paper_id IN ({placeholders})
-            """,
+            f"SELECT paper_id, dim, vector FROM embeddings WHERE model=? AND paper_id IN ({placeholders})",
             (model, *chunk),
         ).fetchall()
         for pid, dim, blob in rows:
@@ -184,33 +179,37 @@ class EmbeddingGenerator:
 
 # -------- Pipeline entry points --------
 
-def ensure_embeddings_for_candidates(conn: sqlite3.Connection, device: str = "auto") -> None:
-    # All candidate paper IDs
+def ensure_embeddings_for_candidates(conn, device: str = "auto") -> None:
     ids = [row[0] for row in conn.execute("SELECT id FROM papers").fetchall()]
     if not ids:
         print(f"{YELLOW}embed:{RESET} no rows in `papers`. Run stage1 first.")
         return
 
-    # Which ones already have embeddings?
     have = fetch_existing_embeddings(conn, ids, EMB_MODEL)
     missing = [pid for pid in ids if pid not in have]
     if not missing:
         print(f"{GREEN}embed:{RESET} all embeddings present.")
         return
 
-    # Fetch titles/summaries for missing, in safe IN(...) batches.
-    in_batch = _safe_in_batch(conn, headroom=10, extra_params=0)
-    meta: Dict[str, Tuple[Optional[str], Optional[str]]] = {}
-    for chunk in _chunks(missing, in_batch):
-        placeholders = ",".join("?" for _ in chunk)
-        # Grab id as well to map reliably
-        for pid, title, summary in conn.execute(
-            f"SELECT id, title, summary FROM papers WHERE id IN ({placeholders})",
-            chunk,
-        ).fetchall():
-            meta[pid] = (title, summary)
+    # Fetch titles/summaries for missing
+    if conn.is_pg:
+        rows = conn.execute(
+            "SELECT id, title, summary FROM papers WHERE id = ANY(%s)",
+            (missing,),
+        ).fetchall()
+        meta: Dict[str, Tuple[Optional[str], Optional[str]]] = {
+            row[0]: (row[1], row[2]) for row in rows
+        }
+    else:
+        in_batch = _safe_in_batch(conn, headroom=10, extra_params=0)
+        meta = {}
+        for chunk in _chunks(missing, in_batch):
+            placeholders = ",".join("?" for _ in chunk)
+            for pid, title, summary in conn.execute(
+                f"SELECT id, title, summary FROM papers WHERE id IN ({placeholders})", chunk
+            ).fetchall():
+                meta[pid] = (title, summary)
 
-    # Preserve original `missing` order for deterministic alignment with model output
     titles: List[str] = []
     sums: List[str] = []
     for pid in missing:
@@ -221,7 +220,6 @@ def ensure_embeddings_for_candidates(conn: sqlite3.Connection, device: str = "au
     print(f"{BLUE}embed:{RESET} computing embeddings for {len(missing)} papers…")
     embs = EmbeddingGenerator(batch_size=32, device=device).encode(titles, sums)
 
-    # Transactional upsert
     cur = conn.cursor()
     cur.execute("BEGIN")
     try:
@@ -236,7 +234,8 @@ def ensure_embeddings_for_candidates(conn: sqlite3.Connection, device: str = "au
 
 
 def cmd_embed(args) -> None:
-    conn = sqlite3.connect(args.db)
+    from .db import connect
+    conn = connect(args.db)
     try:
         ensure_embeddings_for_candidates(conn, device=args.device)
     finally:

@@ -2,15 +2,15 @@
 
 ## Purpose
 
-`src/aisafety_pipeline/` is the backend package that turns raw arXiv metadata into filtered, clustered, labeled artifacts for the frontend.
+`src/aisafety_pipeline/` is the backend package that turns raw arXiv metadata into a filtered, clustered, labeled dataset served via FastAPI or exported as static JSON artifacts.
 
 Its core job is to manage a staged literature-processing pipeline:
 
 ```text
-harvest -> stage1 -> embed -> filter -> cluster -> label -> export
+harvest -> stage1 -> embed -> filter -> cluster -> label -> export / serve
 ```
 
-This package is CLI-driven and SQLite-backed.
+The package supports two database backends transparently: **SQLite** (local / static) and **PostgreSQL + pgvector** (production / API).
 
 ---
 
@@ -18,31 +18,33 @@ This package is CLI-driven and SQLite-backed.
 
 ### `config.py`
 
-Central configuration constants such as:
+Central configuration:
 
-- database path
-- state-file path
-- embedding model metadata
-- color/logging constants
-
-This module is the shared configuration anchor for the package.
+- `DB_PATH` — SQLite path (local dev)
+- `DATABASE_URL` — PostgreSQL DSN (production; activates `PgConnection`)
+- `API_HOST`, `API_PORT`, `API_CORS_ORIGINS`
+- Embedding model metadata, OAI-PMH settings, logging colors
 
 ### `db.py`
 
-Owns SQLite connection setup and schema initialization.
+Owns database connection setup and schema initialization for both backends.
 
-Current tables:
+Key exports:
 
-- `papers_raw`
-- `papers`
-- `embeddings`
-- `cluster_meta`
+- `connect(db_arg)` — returns `SqliteConnection` or `PgConnection` based on `DATABASE_URL`
+- `init_db(db_arg)` — creates schema for the detected backend
+- `SqliteConnection` / `PgConnection` — unified wrapper pair with `is_pg` flag
 
-This module defines the persistence contract for the rest of the backend.
+Both wrappers implement the same cursor interface. `PgConnection` uses psycopg2 with `DictCursor` and intercepts `BEGIN`/`COMMIT`/`ROLLBACK` strings to map them to connection-level calls. Parameter placeholders (`?`, `:name`) are translated to psycopg2 format (`%s`, `%(name)s`) automatically.
+
+Schema variants:
+
+- **SQLite**: `papers_raw`, `papers`, `embeddings` (BLOB), `cluster_meta`
+- **PostgreSQL**: `papers_raw`, `papers` (with `embedding vector(768)`, `graph_x`, `graph_y`), `cluster_meta` + HNSW index
 
 ### `oai.py`
 
-Harvests metadata from arXiv via OAI-PMH into `papers_raw`.
+Harvests metadata from arXiv via OAI-PMH into `papers_raw`. Uses `:name` paramstyle (translated to `%(name)s` for PostgreSQL automatically).
 
 ### `filters.py`
 
@@ -51,409 +53,199 @@ Implements filtering stages:
 - **stage 1**: regex/keyword gating into `papers`
 - **stage 2**: semantic filtering using centroid or logistic regression
 
+Dual-mode for vector loading: PostgreSQL reads `papers.embedding`, SQLite reads `embeddings` table.
+
 ### `embeddings.py`
 
-Ensures SPECTER2 embeddings exist for candidate papers and provides vector encode/decode helpers.
+Generates SPECTER2 embeddings and stores them.
+
+Dual-mode storage:
+
+- PostgreSQL: `UPDATE papers SET embedding = %s WHERE id = %s`
+- SQLite: INSERT into separate `embeddings` BLOB table
+
+Provides `bytes_from_vec` / `vec_from_bytes` helpers for SQLite BLOB encoding.
 
 ### `clustering.py`
 
-Assigns clusters to kept papers. The schema indicates support for:
+Assigns clusters to kept papers. Supports k-means, agglomerative, HDBSCAN.
 
-- k-means
-- agglomerative
-- HDBSCAN
+Dual-mode: PostgreSQL reads `papers.embedding`, SQLite reads `embeddings` table.
+Uses cursor-based fetch + `pd.DataFrame([list(r) for r in rows], ...)` instead of `pd.read_sql_query` (incompatible with the connection wrapper).
 
 ### `labeling.py`
 
-Assigns cluster labels and confidence/terms into `cluster_meta`.
+Assigns cluster labels and terms into `cluster_meta`. Uses cursor-based DataFrame construction.
 
 ### `export_graph.py`
 
-Exports frontend graph JSON from filtered + clustered papers.
-This is the main producer of `ui/public/graph.json`.
+Exports frontend graph JSON from filtered + clustered papers. Also persists `graph_x` / `graph_y` back to the `papers` table after layout computation.
+
+Dual-mode embedding loading for neighbor-link calculation.
 
 ### `export_summaries.py`
 
-Exports summary lookup JSON from filtered papers.
-This is the main producer of `ui/public/summaries.json`.
+Exports summary lookup JSON. Dual-mode WHERE clause for id whitelist.
+
+### `api/`
+
+FastAPI backend module. See `src/aisafety_pipeline/api/ARCHITECTURE.md`.
 
 ### `utils.py`
 
-Defines the CLI parser and public command surface.
-This is the package entrypoint for user-facing orchestration.
+CLI parser and public command surface. Registers all subcommands including `serve` (starts uvicorn with the FastAPI app).
 
 ---
 
 ## Execution Model
 
-The package is organized as a sequence of explicit CLI stages rather than one automatic pipeline runner.
-
 ### Canonical commands
 
-- `harvest`
-- `stage1`
-- `embed`
-- `filter`
-- `cluster`
-- `label`
-- `export-graph`
-- `export-summaries`
-
-### Typical order
-
 ```bash
-aisafety-pipeline harvest
-aisafety-pipeline stage1
-aisafety-pipeline embed
-aisafety-pipeline filter
-aisafety-pipeline cluster
-aisafety-pipeline label
-aisafety-pipeline export-graph
+aisafety-pipeline harvest        # OAI-PMH fetch
+aisafety-pipeline stage1         # regex filter
+aisafety-pipeline embed          # SPECTER2 vectors
+aisafety-pipeline filter         # semantic stage-2
+aisafety-pipeline cluster        # k-means / agg / HDBSCAN
+aisafety-pipeline label          # cluster labels
+aisafety-pipeline export-graph   # JSON + persists graph_x/y to DB
 aisafety-pipeline export-summaries
+aisafety-pipeline serve          # FastAPI (DATABASE_URL required)
 ```
 
-Each stage persists its outputs back into SQLite or emitted JSON artifacts.
+Each pipeline stage persists its outputs back into the database. `serve` requires PostgreSQL.
 
 ---
 
 ## Database Architecture
 
-## Connection model
+### Connection model
 
-`db.connect()` opens SQLite with foreign keys enabled:
+`db.connect()` auto-detects backend:
 
-- `PRAGMA foreign_keys = ON`
+- `DATABASE_URL` set → `PgConnection` (psycopg2, DictCursor, pgvector registered)
+- `DATABASE_URL` unset → `SqliteConnection` (sqlite3, row_factory=Row, foreign keys ON)
 
-`db.init_db()` is responsible for creating all tables and indexes.
+Both return a wrapper with `.cursor()`, `.commit()`, `.rollback()`, `.execute()`, `.close()`, and `.is_pg` flag.
 
-## Tables
+### SQLite tables
 
-### `papers_raw`
+**`papers_raw`**: raw upstream metadata from OAI harvest.
 
-Source ingest table for harvested metadata.
+**`papers`**: working set and pipeline state.
 
-Columns:
+Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `kmeans_cluster`, `agg_cluster`, `hdbscan_cluster`, `ai_regex_hit`, `ai_sem_sim`, `ai_stage2_keep`, `ai_stage2_reason`, `domain_tag`, `graph_x`, `graph_y`
 
-- `id` (primary key)
-- `title`
-- `authors`
-- `published`
-- `summary`
-- `link`
-- `categories`
-- `updated`
-- `pdf_url`
+**`embeddings`**: separate BLOB table — `paper_id`, `model`, `dim`, `vector`, `created_at`.
 
-Interpretation:
+**`cluster_meta`**: `(method, cluster_id)` → `label`, `confidence`, `terms`.
 
-- this is the raw upstream record layer
-- records come from the OAI/arXiv harvest stage
-- downstream stages should treat this as the raw source of truth
+### PostgreSQL tables
 
-### `papers`
+Same as SQLite except:
 
-Main working-set table and pipeline state table.
+- `papers` includes `embedding vector(768)` (replaces the `embeddings` table)
+- `papers` includes `graph_x REAL`, `graph_y REAL`
+- No separate `embeddings` table
+- `CREATE EXTENSION IF NOT EXISTS vector` required
+- HNSW index: `CREATE INDEX ON papers USING hnsw (embedding vector_cosine_ops)`
 
-Columns include:
+### Dual-mode invariant
 
-- copied content metadata (`title`, `authors`, `published`, `summary`, `link`)
-- clustering outputs:
-  - `kmeans_cluster`
-  - `agg_cluster`
-  - `hdbscan_cluster`
-
-- filtering outputs:
-  - `ai_regex_hit`
-  - `ai_sem_sim`
-  - `ai_stage2_keep`
-  - `ai_stage2_reason`
-
-- semantic/domain annotation:
-  - `domain_tag`
-
-Interpretation:
-
-- this table is not only content storage
-- it is the central checkpoint for pipeline decisions and annotations
-
-This is the most important persistence table for downstream logic.
-
-### `embeddings`
-
-Stores one embedding per paper.
-
-Columns:
-
-- `paper_id` (primary key)
-- `model`
-- `dim`
-- `vector` (BLOB)
-- `created_at`
-
-Interpretation:
-
-- embeddings are versioned by model name in the row metadata
-- vectors are stored serialized in SQLite
-- export and clustering logic rely on this table for semantic similarity
-
-### `cluster_meta`
-
-Stores cluster labels and related metadata.
-
-Columns:
-
-- `method`
-- `cluster_id`
-- `label`
-- `confidence`
-- `terms`
-- `created_at`
-
-Primary key:
-
-- `(method, cluster_id)`
-
-Interpretation:
-
-- labels are method-specific, not globally attached to a cluster id number
-- the same numeric cluster id under different methods may represent unrelated groups
-
-## Current indexes
-
-- `idx_embeddings_model`
-- `idx_papers_domain_tag`
+All pipeline modules use `conn.is_pg` to branch between vector storage strategies. No module imports `sqlite3` or `psycopg2` directly — they use `db.connect()`.
 
 ---
 
 ## Data Lifecycle
 
-### 1. Harvest
-
-`oai.py` writes raw upstream records into `papers_raw`.
-
-### 2. Stage 1
-
-`filters.py` copies or gates records into `papers` and records `ai_regex_hit`.
-
-### 3. Embedding generation
-
-`embeddings.py` computes SPECTER2 vectors and stores them in `embeddings`.
-
-### 4. Stage 2 semantic filter
-
-`filters.py` writes:
-
-- `ai_sem_sim`
-- `ai_stage2_keep`
-- `ai_stage2_reason`
-
-### 5. Clustering
-
-`clustering.py` writes cluster assignments back into `papers`.
-
-### 6. Labeling
-
-`labeling.py` writes cluster labels into `cluster_meta`.
-
-### 7. Export
-
-Export modules read from the database and emit static JSON artifacts.
+1. **Harvest** → `papers_raw`
+2. **Stage 1** → `papers` (regex filter, `ai_regex_hit`)
+3. **Embedding** → `papers.embedding` (PostgreSQL) or `embeddings` (SQLite)
+4. **Stage 2 filter** → `papers` (`ai_sem_sim`, `ai_stage2_keep`, `ai_stage2_reason`)
+5. **Clustering** → `papers` (`kmeans_cluster`, `agg_cluster`, `hdbscan_cluster`)
+6. **Labeling** → `cluster_meta`
+7. **Export graph** → `ui/public/graph.json` + `papers.graph_x/y`
+8. **Export summaries** → `ui/public/summaries.json`
+9. **Serve** → FastAPI reads from PostgreSQL live
 
 ---
 
 ## Export Contract
 
-## `export_graph.py`
+### `export_graph.py`
 
-This module exports the main frontend graph artifact.
+Exports only rows where `ai_stage2_keep = 1` AND `kmeans_cluster IS NOT NULL`.
 
-### Current selection logic
+Uses `kmeans_cluster AS cid` — this is the production cluster id consumed by the UI.
 
-It exports only rows where:
+After layout computation, persists coords: `UPDATE papers SET graph_x=?, graph_y=? WHERE id=?`
 
-- `ai_stage2_keep = 1`
-- `kmeans_cluster IS NOT NULL`
+Compact node fields: `id`, `aid`, `t`, `au`, `pd`, `dm`, `ln`, `cid`, optional `sm`, `x`, `y`
 
-So the graph is based on **kept and clustered papers**, not the entire database.
+Edges: top-k cosine similarity neighbors, optional same-cluster and MST edges.
 
-### Current clustering assumption
+### `export_summaries.py`
 
-Although the pipeline stores multiple cluster outputs, graph export currently uses:
-
-- `kmeans_cluster AS cid`
-
-This is a major architectural constraint. The exported graph is currently **k-means-specific**.
-
-### Edge semantics
-
-Edges are built from embedding cosine similarity using:
-
-- top-k neighbors
-- `min_sim` threshold
-- optional same-cluster restriction
-- optional per-cluster MST edges for connectivity
-
-So this is a **semantic-neighbor graph**, not a citation graph.
-
-### Compact graph schema
-
-The compact payload contains:
-
-- `meta`
-- `clusters`
-- `nodes`
-- `links`
-
-Compact node fields:
-
-- `id`: integer graph-local node id
-- `aid`: canonical paper id / arXiv abs URL
-- `t`: title
-- `au`: authors
-- `pd`: published date
-- `dm`: domain tag
-- `ln`: link
-- `cid`: k-means cluster id
-- optional `sm`, `x`, `y`
-
-Compact link fields:
-
-- `s`: source integer node id
-- `t`: target integer node id
-- `w`: similarity weight
-
-### Coordinates
-
-The exporter may precompute positions using:
-
-- FR
-- UMAP
-- PCA
-- optional none
-
-The CLI currently exposes `fr`, `umap`, `pca`, and `none`.
-
-## `export_summaries.py`
-
-This module exports a lookup-oriented summaries artifact.
-
-### Key shape
-
-The artifact is keyed by canonical arXiv abs URLs.
-
-### Current default selection
-
-By default it includes all:
-
-- `ai_stage2_keep = 1`
-
-It may optionally require `kmeans_cluster IS NOT NULL`, but does not require that by default.
-
-### Record shape
-
-Each summary record contains:
-
-- `sm`
-- optional `t`, `au`, `pd`, `ln`, `dm`, `cid`
-
-### Relationship to graph export
-
-- `graph.json` is optimized for rendering and graph traversal
-- `summaries.json` is optimized for lazy lookup and detail display
+All `ai_stage2_keep = 1` papers. Keyed by canonical arXiv abs URL.
 
 ---
 
 ## CLI Surface
 
-`utils.py` is the supported entrypoint.
+Notable defaults:
 
-### Notable defaults
-
-- stage-2 filter method defaults to `centroid`
-- graph export defaults to `coords=fr`
-- graph export defaults to compact output unless `--verbose`
-- summaries export defaults to including all kept papers unless `--only-ids`
-
-### Shared labeling helper logic
-
-`utils.py` also contains generic-label filtering helpers such as `is_generic_phrase()`, which indicates some label post-processing is intentionally lightweight and heuristic.
+- Stage-2 method: `centroid`
+- Graph export coords: `fr` (Fruchterman-Reingold)
+- Graph output: compact unless `--verbose`
+- Serve: `--host 0.0.0.0 --port 8000`
 
 ---
 
 ## Invariants and Assumptions
 
-### Canonical paper id format
-
-Paper ids should be treated as canonical arXiv abs URLs.
-
-### `papers` is the state table
-
-Any change to `papers` semantics affects filtering, clustering, labeling, and export.
-
-### Cluster labels are method-scoped
-
-Do not assume `cluster_id=3` means the same thing across clustering methods.
-
-### Exported `cid` currently means k-means id
-
-Changing this requires coordinated backend and frontend changes.
-
-### Embedding compatibility matters
-
-`export_graph.py` expects embeddings for exported papers under the configured embedding model.
-Missing embeddings are considered an error state.
+- Paper ids are canonical arXiv abs URLs
+- `papers` is the central state table — changes affect all downstream stages
+- `cid` in exports means k-means cluster id
+- Embedding storage location differs by backend (`papers.embedding` vs `embeddings` table)
+- `graph_x/y` are always stored back to DB by `export-graph`, regardless of backend
 
 ---
 
 ## Safe Edit Zones
 
-AI may usually safely modify:
+Safe:
 
-- CLI help text and parser ergonomics
-- internal helper functions
-- export metadata fields, if UI is updated accordingly
-- labeling heuristics
-- logging and diagnostics
+- CLI help text and ergonomics
+- Internal helpers, logging
+- Export metadata fields (coordinated with UI)
+- Labeling heuristics
 
-AI should be careful around:
+Be careful around:
 
-- SQL schema changes
-- foreign-key relationships
-- embedding serialization format
-- canonical paper id normalization
-- compact graph field names
-- meaning of `ai_stage2_keep`
-- switching export from k-means to another cluster namespace
+- SQL schema changes (either backend)
+- `is_pg` branching logic in pipeline modules
+- Embedding serialization format (`bytes_from_vec` / `vec_from_bytes`)
+- Canonical paper id normalization
+- Compact graph field names
+- `_to_pg_sql()` param translation in `db.py`
+- pgvector HNSW index (needed for API search performance)
 
 ---
 
 ## Known Architecture Weak Points
 
-### 1. Multi-method clustering vs single-method export
-
-The backend stores several clustering outputs, but the frontend contract only consumes k-means-centered exports.
-
-### 2. SQLite schema migrations are implicit
-
-There is schema initialization but no explicit migration framework visible in the current files.
-
-### 3. Artifact duplication is intentional but easy to misuse
-
-Both graph and summaries exports include overlapping metadata. Changes must stay consistent across both.
-
-### 4. Export failures occur late
-
-Some invalid states, especially missing embeddings, are only caught at export time.
+1. **Schema migrations are implicit**: `db.py` does `CREATE TABLE IF NOT EXISTS` + `ALTER TABLE ADD COLUMN` for new columns, but has no formal migration framework.
+2. **Duplicate metadata in exports**: graph and summaries overlap; changes must stay consistent.
+3. **Export failures occur late**: missing embeddings only caught at export time.
+4. **`serve` requires PostgreSQL**: the FastAPI backend has no SQLite fallback.
 
 ---
 
 ## Recommended Mental Model
 
-Treat this package as four layers:
+Four layers:
 
 1. **Ingest** (`oai.py`, `papers_raw`)
-2. **Stateful analysis** (`papers`, `embeddings`, filters, clustering, labeling)
-3. **Artifact shaping** (`export_graph.py`, `export_summaries.py`)
+2. **Stateful analysis** (`papers`, `embeddings` / `papers.embedding`, filters, clustering, labeling)
+3. **Artifact shaping / serving** (`export_graph.py`, `export_summaries.py`, `api/`)
 4. **CLI orchestration** (`utils.py`)
-
-Most changes should stay within one layer unless there is a deliberate cross-layer refactor.

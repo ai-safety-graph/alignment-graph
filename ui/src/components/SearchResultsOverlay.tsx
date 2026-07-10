@@ -1,3 +1,5 @@
+import SharePlusIcon from './icons/SharePlusIcon'
+import ShareMinusIcon from './icons/ShareMinusIcon'
 import { cidToColor } from '../lib/colors'
 import type { ClustersLegend, NodeCompact } from '../lib/types'
 
@@ -8,12 +10,23 @@ export default function SearchResultsOverlay({
   results,
   onSelect,
   clusters,
+  isLoading,
+  onAddToSubgraph,
+  onRemoveFromSubgraph,
+  subgraphPaperIds,
+  subgraphName,
 }: {
   results: Array<{ n: NodeCompact; score: number; deg: number }>
-  onSelect: (id: number) => void
+  onSelect: (aid: string) => void
   clusters: ClustersLegend
+  isLoading?: boolean
+  onAddToSubgraph?: (aid: string) => void
+  onRemoveFromSubgraph?: (aid: string) => void
+  subgraphPaperIds?: Set<string>
+  subgraphName?: string
 }) {
-  if (!results?.length) return null
+  const subgraphLabel = subgraphName ?? 'Subgraph'
+  if (!isLoading && !results?.length) return null
 
   return (
     <aside className='scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent scrollbar-hover:scrollbar-thumb-[#666] fixed top-[72px] left-4 bottom-[208px] w-[360px] z-10 bg-[#262626] backdrop-blur-md border border-[#333333] rounded-xl p-3 overflow-auto text-[#e5e5e5]'>
@@ -24,40 +37,58 @@ export default function SearchResultsOverlay({
         <span className='text-[12px] text-neutral-400'>{results.length}</span>
       </div>
 
+      {isLoading && results.length === 0 && (
+        <p className='text-neutral-400 text-sm p-2'>Searching…</p>
+      )}
+
       <ul className='list-none p-0 m-0'>
-        {results.map(({ n }) => (
-          <li key={n.id} className='py-2 border-b border-neutral-800'>
-            <div className='flex items-start gap-2'>
-              <div className='flex-1 min-w-0'>
-                <a
-                  href='#'
+        {results.map(({ n }) => {
+          const inSubgraph = subgraphPaperIds?.has(n.aid) ?? false
+          return (
+            <li key={n.aid} className='py-2 border-b border-neutral-800'>
+              <div className='flex items-start gap-2'>
+                <div className='flex-1 min-w-0'>
+                  <a
+                    href='#'
+                    onClick={(e) => {
+                      e.preventDefault()
+                      onSelect(n.aid)
+                    }}
+                    className='no-underline text-blue-400 hover:underline block'
+                    title={n.t}
+                  >
+                    {truncate(n.t, 90)}
+                  </a>
+                  <div className='text-[12px] text-neutral-500 truncate'>
+                    {n.au}
+                  </div>
+                  <div className='text-[12px] text-neutral-400 flex items-center gap-2 mb-0.5'>
+                    <span
+                      className='inline-block w-2 h-2 rounded-full mt-0.5 border border-[#333333]'
+                      style={{ background: cidToColor(n.cid) }}
+                      aria-hidden
+                    />
+                    <span>
+                      {clusters[String(n.cid)]?.label ?? `Cluster ${n.cid}`} •{' '}
+                      {n.dm}
+                    </span>
+                  </div>
+                </div>
+                <button
                   onClick={(e) => {
                     e.preventDefault()
-                    onSelect(n.id)
+                    if (inSubgraph) onRemoveFromSubgraph?.(n.aid)
+                    else onAddToSubgraph?.(n.aid)
                   }}
-                  className='no-underline text-blue-400 hover:underline block'
-                  title={n.t}
+                  aria-label={inSubgraph ? `Remove from ${subgraphLabel}` : `Add to ${subgraphLabel}`}
+                  className='group p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200 shrink-0'
                 >
-                  {truncate(n.t, 90)}
-                </a>
-                <div className='text-[12px] text-neutral-500 truncate'>
-                  {n.au}
-                </div>
-                <div className='text-[12px] text-neutral-400 flex items-center gap-2 mb-0.5'>
-                  <span
-                    className='inline-block w-2 h-2 rounded-full mt-0.5 border border-[#333333]'
-                    style={{ background: cidToColor(n.cid) }}
-                    aria-hidden
-                  />
-                  <span>
-                    {clusters[String(n.cid)]?.label ?? `Cluster ${n.cid}`} •{' '}
-                    {n.dm}
-                  </span>
-                </div>
+                  {inSubgraph ? <ShareMinusIcon size={14} className='text-red-800 group-hover:text-red-500 transition-colors' /> : <SharePlusIcon size={14} className='text-green-800 group-hover:text-green-500 transition-colors' />}
+                </button>
               </div>
-            </div>
-          </li>
-        ))}
+            </li>
+          )
+        })}
       </ul>
     </aside>
   )

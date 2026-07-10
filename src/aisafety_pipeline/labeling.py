@@ -1,5 +1,5 @@
 from __future__ import annotations
-import re, json, sqlite3, numpy as np, pandas as pd
+import re, json, numpy as np, pandas as pd
 from typing import Dict, List, Optional
 from sklearn.feature_extraction.text import TfidfVectorizer
 from .embeddings import EmbeddingGenerator
@@ -32,12 +32,15 @@ def label_clusters_default(conn, method_name: str = "default", topk_terms: int =
     """)
     conn.commit()
 
-    df = pd.read_sql_query("""
+    cur = conn.cursor()
+    cur.execute("""
         SELECT p.id, p.title, p.summary, p.kmeans_cluster AS cid
         FROM papers AS p
-        WHERE p.ai_stage2_keep=1 AND p.kmeans_cluster IS NOT NULL
+        WHERE p.ai_stage2_keep AND p.kmeans_cluster IS NOT NULL
         ORDER BY p.kmeans_cluster ASC
-    """, conn)
+    """)
+    rows = cur.fetchall()
+    df = pd.DataFrame([list(r) for r in rows], columns=["id", "title", "summary", "cid"])
     if df.empty: return {}
     ids = df["id"].tolist(); cids = df["cid"].to_numpy()
     texts = (df["title"].fillna("") + ". " + df["summary"].fillna("")).tolist()
@@ -134,7 +137,8 @@ def label_clusters_default(conn, method_name: str = "default", topk_terms: int =
 
 
 def cmd_label(args):
-    conn = sqlite3.connect(args.db); conn.row_factory = sqlite3.Row
+    from .db import connect
+    conn = connect(args.db)
     try:
         out = label_clusters_default(conn, method_name="default", topk_terms=args.topk, ngram_range=(1,3), min_df=args.min_df, max_df=args.max_df, extra_phrases=args.extra and [s.strip() for s in args.extra.split(",") if s.strip()] or None)
         print(f"{GREEN}label:{GREEN} stored labels for {len(out)} clusters (method=default).")
