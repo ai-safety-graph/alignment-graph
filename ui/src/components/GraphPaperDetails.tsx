@@ -2,6 +2,7 @@ import { CircleX } from 'lucide-react'
 import SharePlusIcon from './icons/SharePlusIcon'
 import ShareMinusIcon from './icons/ShareMinusIcon'
 import { cidToColor } from '../lib/colors'
+import { domainLabel } from '../lib/domain'
 import type { ClustersLegend, NodeCompact } from '../lib/types'
 import { usePaperSummary } from '../hooks/usePaperSummary'
 import { useRef, useLayoutEffect } from 'react'
@@ -61,7 +62,7 @@ export default function GraphPaperDetails({
               />
               <span className='text-[13px] text-neutral-400'>
                 {clusters[String(paper.cid)]?.label ?? `Cluster ${paper.cid}`} •{' '}
-                {paper.dm}
+                {domainLabel(paper.dm)}
               </span>
             </div>
             <div className='flex items-center gap-1'>
@@ -82,32 +83,34 @@ export default function GraphPaperDetails({
             {paper.t}
           </h4>
 
-          <button
-            onClick={() =>
-              isPaperInSubgraph
-                ? onRemoveFromSubgraph?.(paper.aid)
-                : onAddToSubgraph?.(paper.aid)
-            }
-            className='group flex items-center gap-1.5 text-[13px] text-neutral-300 hover:text-white bg-[#2a2a2a] border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 mb-2 cursor-pointer transition-colors'
-          >
-            {isPaperInSubgraph ? (
-              <>
-                Remove from {subgraphLabel}
-                <ShareMinusIcon
-                  size={14}
-                  className='text-red-800 group-hover:text-red-500 transition-colors'
-                />
-              </>
-            ) : (
-              <>
-                Add to {subgraphLabel}
-                <SharePlusIcon
-                  size={14}
-                  className='text-green-800 group-hover:text-green-500 transition-colors'
-                />
-              </>
-            )}
-          </button>
+          {(onAddToSubgraph || onRemoveFromSubgraph) && (
+            <button
+              onClick={() =>
+                isPaperInSubgraph
+                  ? onRemoveFromSubgraph?.(paper.aid)
+                  : onAddToSubgraph?.(paper.aid)
+              }
+              className='group flex items-center gap-1.5 text-[13px] text-neutral-300 hover:text-white bg-[#2a2a2a] border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 mb-2 cursor-pointer transition-colors'
+            >
+              {isPaperInSubgraph ? (
+                <>
+                  Remove from {subgraphLabel}
+                  <ShareMinusIcon
+                    size={14}
+                    className='text-red-800 group-hover:text-red-500 transition-colors'
+                  />
+                </>
+              ) : (
+                <>
+                  Add to {subgraphLabel}
+                  <SharePlusIcon
+                    size={14}
+                    className='text-green-800 group-hover:text-green-500 transition-colors'
+                  />
+                </>
+              )}
+            </button>
+          )}
         </div>
         <div className='text-[13px] mb-1.5'>
           <strong>Authors:</strong> {paper.au}
@@ -206,7 +209,7 @@ export default function GraphPaperDetails({
                       />
                       <span className='text-neutral-400'>
                         {clusters[String(r.cid)]?.label ?? `Cluster ${r.cid}`} •{' '}
-                        {r.dm}
+                        {domainLabel(r.dm)}
                       </span>
                     </div>
                   </div>

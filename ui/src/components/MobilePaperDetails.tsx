@@ -1,5 +1,6 @@
 import { CircleX } from 'lucide-react'
 import { cidToColor } from '../lib/colors'
+import { domainLabel } from '../lib/domain'
 import type { ClustersLegend, NodeCompact } from '../lib/types'
 import { useRef, useLayoutEffect } from 'react'
 
@@ -76,7 +77,7 @@ export default function MobilePaperDetails({
               />
               <span className='text-[13px] text-neutral-400'>
                 {clusters[String(paper.cid)]?.label ?? `Cluster ${paper.cid}`} •{' '}
-                {paper.dm}
+                {domainLabel(paper.dm)}
               </span>
             </div>
             <button
@@ -165,7 +166,7 @@ export default function MobilePaperDetails({
                     />
                     <span className='text-neutral-400'>
                       {clusters[String(n.cid)]?.label ?? `Cluster ${n.cid}`} •{' '}
-                      {n.dm}
+                      {domainLabel(n.dm)}
                     </span>
                   </div>
                 </div>

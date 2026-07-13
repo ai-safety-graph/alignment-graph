@@ -1,4 +1,5 @@
 import { cidToColor } from '../lib/colors'
+import { domainLabel } from '../lib/domain'
 import type { ClustersLegend, NodeCompact } from '../lib/types'
 import type { PaperDetail } from '../lib/api'
 import SharePlusIcon from './icons/SharePlusIcon'
@@ -92,7 +93,7 @@ export default function StatsPaperDetails({
               />
               <span className='text-[13px] text-neutral-400'>
                 {clusters[String(paper.cid)]?.label ?? `Cluster ${paper.cid}`} •{' '}
-                {paper.dm}
+                {domainLabel(paper.dm)}
               </span>
             </div>
 
@@ -220,7 +221,7 @@ export default function StatsPaperDetails({
                         />
                         <span className='text-neutral-400'>
                           {clusters[String(n.cid)]?.label ?? `Cluster ${n.cid}`}{' '}
-                          • {n.dm}
+                          • {domainLabel(n.dm)}
                         </span>
                       </div>
                     </div>
