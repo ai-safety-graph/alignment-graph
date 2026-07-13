@@ -535,6 +535,48 @@ export default function StatsView() {
 
   const isBrowsing = viewMode === 'browse'
 
+  const filterBar =
+    isBrowsing && searchMode === 'keyword' && papers ? (
+      <FilterBar
+        clusterEntries={clusterEntries}
+        availableDomains={availableDomains}
+        activeCids={activeCids}
+        activeDomains={activeDomains}
+        datePreset={datePreset}
+        hasActiveFilters={hasActiveFilters}
+        onToggleCluster={toggleCluster}
+        onToggleDomain={toggleDomain}
+        onSetDatePreset={setDatePreset}
+        onClearAll={clearAllFilters}
+        isExpanded={filterExpanded}
+      />
+    ) : !isBrowsing && subgraphNodes ? (
+      <FilterBar
+        clusterEntries={subgraphClusterEntries}
+        availableDomains={subgraphAvailableDomains}
+        activeCids={subgraphActiveCids}
+        activeDomains={subgraphActiveDomains}
+        hasActiveFilters={hasActiveSubgraphFilters}
+        onToggleCluster={toggleSubgraphCluster}
+        onToggleDomain={toggleSubgraphDomain}
+        onClearAll={clearSubgraphFilters}
+        isExpanded={filterExpanded}
+      />
+    ) : null
+
+  const filterToggleButton = (
+    <button
+      type='button'
+      onClick={() => setFilterExpanded((v) => !v)}
+      title={filterExpanded ? 'Collapse filters' : 'Expand filters'}
+      aria-label={filterExpanded ? 'Collapse filters' : 'Expand filters'}
+      className={`shrink-0 flex items-center gap-1.5 px-2 py-0.5 rounded-md cursor-pointer bg-[#2a2a2a] border border-neutral-700 hover:border-neutral-500 hover:text-white transition-colors ${filterExpanded ? 'text-white' : 'text-neutral-300'}`}
+    >
+      <SlidersHorizontal size={15} />
+      Filters
+    </button>
+  )
+
   const subgraphTitle = selectedSubgraph ? (
     <div className='shrink-0 px-4 py-2.5 flex items-center text-sm text-neutral-400'>
       <div className='flex-1 flex items-center gap-2'>
@@ -546,16 +588,7 @@ export default function StatsView() {
         </span>
       </div>
       <div className='flex-1 flex justify-end items-center gap-2'>
-        <button
-          type='button'
-          onClick={() => setFilterExpanded((v) => !v)}
-          title={filterExpanded ? 'Collapse filters' : 'Expand filters'}
-          aria-label={filterExpanded ? 'Collapse filters' : 'Expand filters'}
-          className={`shrink-0 flex items-center gap-1.5 px-2 py-0.5 rounded-md cursor-pointer bg-[#2a2a2a] border border-neutral-700 hover:border-neutral-500 hover:text-white transition-colors ${filterExpanded ? 'text-white' : 'text-neutral-300'}`}
-        >
-          <SlidersHorizontal size={15} />
-          Filters
-        </button>
+        {filterToggleButton}
         <button
           type='button'
           onClick={toggleViewMode}
@@ -594,40 +627,15 @@ export default function StatsView() {
         )}
       </div>
     </div>
+  ) : filterBar ? (
+    <div className='shrink-0 px-4 py-2.5 flex items-center justify-end text-sm text-neutral-400'>
+      {filterToggleButton}
+    </div>
   ) : null
-
-  const filterBar =
-    isBrowsing && searchMode === 'keyword' && papers ? (
-      <FilterBar
-        clusterEntries={clusterEntries}
-        availableDomains={availableDomains}
-        activeCids={activeCids}
-        activeDomains={activeDomains}
-        datePreset={datePreset}
-        hasActiveFilters={hasActiveFilters}
-        onToggleCluster={toggleCluster}
-        onToggleDomain={toggleDomain}
-        onSetDatePreset={setDatePreset}
-        onClearAll={clearAllFilters}
-        isExpanded={filterExpanded}
-      />
-    ) : !isBrowsing && subgraphNodes ? (
-      <FilterBar
-        clusterEntries={subgraphClusterEntries}
-        availableDomains={subgraphAvailableDomains}
-        activeCids={subgraphActiveCids}
-        activeDomains={subgraphActiveDomains}
-        hasActiveFilters={hasActiveSubgraphFilters}
-        onToggleCluster={toggleSubgraphCluster}
-        onToggleDomain={toggleSubgraphDomain}
-        onClearAll={clearSubgraphFilters}
-        isExpanded={filterExpanded}
-      />
-    ) : null
 
   return (
     <div className='fixed inset-0 bg-neutral-950 text-[#e5e5e5] flex flex-col'>
-      <div className='hidden md:flex shrink-0 bg-neutral-950/90 backdrop-blur px-3 py-3 items-center gap-3'>
+      <div className='hidden md:flex shrink-0 bg-neutral-950/90 backdrop-blur px-3 py-3 items-center gap-3 border-b border-neutral-800'>
         {backLink}
         {subgraphControl}
         <div className='flex-1 flex justify-center'>
@@ -640,17 +648,17 @@ export default function StatsView() {
 
       <div className='flex flex-row flex-1 overflow-hidden'>
         <div className='flex flex-col flex-1 overflow-hidden min-w-0'>
-          {subgraphTitle && (
-            <div className='hidden md:block'>{subgraphTitle}</div>
-          )}
-          {filterBar && (
-            <div className='hidden md:block shrink-0'>{filterBar}</div>
-          )}
-
           <div
             ref={listRef}
             className='flex-1 overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent'
           >
+            {(subgraphTitle || filterBar) && (
+              <div className='hidden md:block sticky top-0 z-10 bg-neutral-950'>
+                {subgraphTitle}
+                {filterBar}
+              </div>
+            )}
+
             <div className='md:hidden px-4 pt-4 pb-2'>
               <a
                 target='_blank'

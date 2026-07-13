@@ -3,6 +3,7 @@ import SharePlusIcon from './icons/SharePlusIcon'
 import ShareMinusIcon from './icons/ShareMinusIcon'
 import type { NodeCompact, ClustersLegend } from '../lib/types'
 import { cidToColor } from '../lib/colors'
+import { domainLabel } from '../lib/domain'
 
 interface PaperListProps {
   items: Array<{ n: NodeCompact }>
@@ -90,7 +91,7 @@ export default function PaperList({
                     {clusters[String(n.cid)]?.label ?? `Cluster ${n.cid}`}
                   </span>
                   <span>•</span>
-                  <span>{n.dm}</span>
+                  <span>{domainLabel(n.dm)}</span>
                 </div>
               </div>
             </button>

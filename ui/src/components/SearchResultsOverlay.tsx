@@ -1,6 +1,7 @@
 import SharePlusIcon from './icons/SharePlusIcon'
 import ShareMinusIcon from './icons/ShareMinusIcon'
 import { cidToColor } from '../lib/colors'
+import { domainLabel } from '../lib/domain'
 import type { ClustersLegend, NodeCompact } from '../lib/types'
 
 const truncate = (s: string, n: number) =>
@@ -70,21 +71,23 @@ export default function SearchResultsOverlay({
                     />
                     <span>
                       {clusters[String(n.cid)]?.label ?? `Cluster ${n.cid}`} •{' '}
-                      {n.dm}
+                      {domainLabel(n.dm)}
                     </span>
                   </div>
                 </div>
-                <button
-                  onClick={(e) => {
-                    e.preventDefault()
-                    if (inSubgraph) onRemoveFromSubgraph?.(n.aid)
-                    else onAddToSubgraph?.(n.aid)
-                  }}
-                  aria-label={inSubgraph ? `Remove from ${subgraphLabel}` : `Add to ${subgraphLabel}`}
-                  className='group p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200 shrink-0'
-                >
-                  {inSubgraph ? <ShareMinusIcon size={14} className='text-red-800 group-hover:text-red-500 transition-colors' /> : <SharePlusIcon size={14} className='text-green-800 group-hover:text-green-500 transition-colors' />}
-                </button>
+                {(onAddToSubgraph || onRemoveFromSubgraph) && (
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault()
+                      if (inSubgraph) onRemoveFromSubgraph?.(n.aid)
+                      else onAddToSubgraph?.(n.aid)
+                    }}
+                    aria-label={inSubgraph ? `Remove from ${subgraphLabel}` : `Add to ${subgraphLabel}`}
+                    className='group p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200 shrink-0'
+                  >
+                    {inSubgraph ? <ShareMinusIcon size={14} className='text-red-800 group-hover:text-red-500 transition-colors' /> : <SharePlusIcon size={14} className='text-green-800 group-hover:text-green-500 transition-colors' />}
+                  </button>
+                )}
               </div>
             </li>
           )
