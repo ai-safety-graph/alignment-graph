@@ -117,6 +117,8 @@ export default function ArxivGraph({
   const [error, setError] = useState<string | null>(null)
 
   const isDemo = !paperIds?.length && !activeSavedGraph
+  const isEmptySavedGraph =
+    !paperIds?.length && !!activeSavedGraph && activeSavedGraph.paperIds.length === 0
 
   const [hoverId, setHoverId] = useState<number | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -158,12 +160,19 @@ export default function ArxivGraph({
   // Data fetch
   useEffect(() => {
     let alive = true
+    const ids = paperIds?.length
+      ? paperIds
+      : (activeSavedGraph?.paperIds ?? DEMO_PAPER_IDS)
+    if (ids.length === 0) {
+      // An empty saved graph has no papers to fetch; the backend rejects an
+      // empty ids list, so skip the request and show an empty-state instead.
+      setData(null)
+      setError(null)
+      return
+    }
     ;(async () => {
       try {
         const { fetchSubgraph } = await import('../lib/api')
-        const ids = paperIds?.length
-          ? paperIds
-          : (activeSavedGraph?.paperIds ?? DEMO_PAPER_IDS)
         const json = await fetchSubgraph(ids)
         if (!alive) return
         setData(json)
@@ -600,6 +609,17 @@ export default function ArxivGraph({
 
   return (
     <div className='fixed inset-0 bg-neutral-950 text-[#e5e5e5]'>
+      {isEmptySavedGraph && (
+        <div className='absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center'>
+          <p className='text-lg text-neutral-300'>
+            &ldquo;{activeSavedGraph?.name}&rdquo; is empty
+          </p>
+          <p className='text-sm text-neutral-500 max-w-sm'>
+            Search for papers above and use &ldquo;Add to subgraph&rdquo; to
+            start building it out.
+          </p>
+        </div>
+      )}
       {data && width > 0 && height > 0 && (
         <ForceGraph2D
           ref={fgRef as any}

@@ -43,6 +43,10 @@ export default function FilterBar({
       {isExpanded && (
         <div className='ml-2 my-2 rounded-md border border-[#333333] bg-[#1f1f1f] overflow-hidden'>
           <div className='px-3 py-3 space-y-2'>
+            <div className='text-xs font-medium text-neutral-400'>
+              Filter by
+            </div>
+
             {datePreset !== undefined && onSetDatePreset && (
               <div className='flex items-center gap-2'>
                 <span className='shrink-0 text-xs text-neutral-500 w-12'>
