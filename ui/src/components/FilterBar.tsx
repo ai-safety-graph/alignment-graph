@@ -1,3 +1,4 @@
+import { RotateCcw } from 'lucide-react'
 import { cidToColor } from '../lib/colors'
 import { domainLabel } from '../lib/domain'
 import { DATE_PRESETS } from '../hooks/useServerFilters'
@@ -161,16 +162,17 @@ export default function FilterBar({
               </div>
             </div>
 
-            {hasActiveFilters && (
-              <div className='flex justify-end'>
-                <button
-                  onClick={onClearAll}
-                  className='text-xs text-neutral-400 hover:text-neutral-200'
-                >
-                  Clear all
-                </button>
-              </div>
-            )}
+            <div className='flex items-start gap-2'>
+              <span className='shrink-0 w-12' aria-hidden />
+              <button
+                onClick={onClearAll}
+                disabled={!hasActiveFilters}
+                className='flex items-center gap-1 px-3 py-1 rounded-md border border-neutral-700 text-xs text-neutral-400 hover:text-neutral-200 hover:border-neutral-500 disabled:text-neutral-700 disabled:hover:text-neutral-700 disabled:hover:border-neutral-700 disabled:cursor-not-allowed'
+              >
+                Clear Filters
+                <RotateCcw size={13} />
+              </button>
+            </div>
           </div>
         </div>
       )}
