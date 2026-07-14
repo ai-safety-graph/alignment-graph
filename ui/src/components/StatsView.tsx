@@ -550,7 +550,7 @@ export default function StatsView() {
         onClearAll={clearAllFilters}
         isExpanded={filterExpanded}
       />
-    ) : !isBrowsing && subgraphNodes ? (
+    ) : !isBrowsing && subgraphNodes && subgraphNodes.length > 0 ? (
       <FilterBar
         clusterEntries={subgraphClusterEntries}
         availableDomains={subgraphAvailableDomains}
@@ -588,7 +588,7 @@ export default function StatsView() {
         </span>
       </div>
       <div className='flex-1 flex justify-end items-center gap-2'>
-        {filterToggleButton}
+        {filterBar && filterToggleButton}
         <button
           type='button'
           onClick={toggleViewMode}
@@ -650,7 +650,7 @@ export default function StatsView() {
         <div className='flex flex-col flex-1 overflow-hidden min-w-0'>
           <div
             ref={listRef}
-            className='flex-1 overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent'
+            className='flex-1 overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent [scrollbar-gutter:stable]'
           >
             {(subgraphTitle || filterBar) && (
               <div className='hidden md:block sticky top-0 z-10 bg-neutral-950'>
@@ -777,7 +777,7 @@ export default function StatsView() {
                   <button
                     type='button'
                     onClick={toggleViewMode}
-                    className='flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#2a2a2a] border border-[#333333] text-sm text-neutral-300 hover:text-neutral-100 cursor-pointer'
+                    className='flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#2a2a2a] border border-[#333333] text-sm text-neutral-300 hover:text-neutral-100 cursor-pointer'
                   >
                     <Plus size={14} />
                     Add papers

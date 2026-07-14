@@ -1,8 +1,8 @@
 const DOMAIN_LABELS: Record<string, string> = {
-  gov: 'Government',
-  tech: 'Technical',
-  both: 'Gov/Tech',
-  unknown: 'Unknown',
+  gov: 'governance',
+  tech: 'technology',
+  both: 'gov/tech',
+  unknown: 'unknown',
 }
 
 export function domainLabel(dm: string): string {
