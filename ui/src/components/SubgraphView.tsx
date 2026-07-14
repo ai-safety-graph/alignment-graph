@@ -13,7 +13,7 @@ import { useNavHistory } from '../hooks/useNavHistory'
 
 export default function SubgraphView() {
   const { id } = useParams<{ id: string }>()
-  const { clusters } = useClusterCatalog()
+  const { clusters, isLoading: clustersLoading } = useClusterCatalog()
 
   const [graphName, setGraphName] = useState<string | null>(null)
   const [nodes, setNodes] = useState<NodeCompact[] | null>(null)
@@ -131,6 +131,7 @@ export default function SubgraphView() {
             <PaperList
               items={items}
               clusters={clusters}
+              clustersLoading={clustersLoading}
               onSelectId={selectFromList}
               enableHover
               selectedId={selectedId ?? undefined}
@@ -146,6 +147,7 @@ export default function SubgraphView() {
             <StatsPaperDetails
               paper={selected}
               clusters={clusters}
+              clustersLoading={clustersLoading}
               neighbors={neighbors}
               neighborsLoading={neighborsLoading}
               navHistory={navHistory}
@@ -181,6 +183,7 @@ export default function SubgraphView() {
             <MobilePaperDetails
               paper={selected}
               clusters={clusters}
+              clustersLoading={clustersLoading}
               neighbors={neighbors}
               neighborsLoading={neighborsLoading}
               navHistory={navHistory}

@@ -4,10 +4,12 @@ import ShareMinusIcon from './icons/ShareMinusIcon'
 import type { NodeCompact, ClustersLegend } from '../lib/types'
 import { cidToColor } from '../lib/colors'
 import { domainLabel } from '../lib/domain'
+import ClusterLabel from './ClusterLabel'
 
 interface PaperListProps {
   items: Array<{ n: NodeCompact }>
   clusters: ClustersLegend
+  clustersLoading?: boolean
   onSelectId: (aid: string) => void
   enableHover?: boolean
   resetKey?: string
@@ -23,6 +25,7 @@ interface PaperListProps {
 export default function PaperList({
   items,
   clusters,
+  clustersLoading = false,
   onSelectId,
   enableHover = false,
   resetKey,
@@ -88,7 +91,11 @@ export default function PaperList({
                     aria-hidden
                   />
                   <span>
-                    {clusters[String(n.cid)]?.label ?? `Cluster ${n.cid}`}
+                    <ClusterLabel
+                      cid={n.cid}
+                      clusters={clusters}
+                      isLoading={clustersLoading}
+                    />
                   </span>
                   <span>•</span>
                   <span>{domainLabel(n.dm)}</span>

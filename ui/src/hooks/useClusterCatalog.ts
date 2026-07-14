@@ -8,9 +8,11 @@ import type { ClustersLegend } from '../lib/types'
 export function useClusterCatalog(): {
   clusters: ClustersLegend
   availableDomains: string[]
+  isLoading: boolean
 } {
   const [clusters, setClusters] = useState<ClustersLegend>({})
   const [availableDomains, setAvailableDomains] = useState<string[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     let alive = true
@@ -26,6 +28,8 @@ export function useClusterCatalog(): {
         setAvailableDomains(Object.keys(stats.domains).filter(Boolean).sort())
       } catch {
         // Catalog is non-critical chrome; leave defaults if it fails.
+      } finally {
+        if (alive) setIsLoading(false)
       }
     })()
     return () => {
@@ -33,5 +37,5 @@ export function useClusterCatalog(): {
     }
   }, [])
 
-  return { clusters, availableDomains }
+  return { clusters, availableDomains, isLoading }
 }

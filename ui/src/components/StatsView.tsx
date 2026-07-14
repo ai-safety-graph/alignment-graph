@@ -37,7 +37,11 @@ import { useNavHistory } from '../hooks/useNavHistory'
 import { useCapabilities } from '../hooks/useCapabilities'
 
 export default function StatsView() {
-  const { clusters, availableDomains } = useClusterCatalog()
+  const {
+    clusters,
+    availableDomains,
+    isLoading: clustersLoading,
+  } = useClusterCatalog()
   const { semanticSearch: semanticSearchEnabled } = useCapabilities()
   const [searchMode, setSearchMode] = useState<'keyword' | 'semantic'>(
     'keyword',
@@ -540,6 +544,7 @@ export default function StatsView() {
       <FilterBar
         clusterEntries={clusterEntries}
         availableDomains={availableDomains}
+        isLoading={clustersLoading}
         activeCids={activeCids}
         activeDomains={activeDomains}
         datePreset={datePreset}
@@ -554,6 +559,7 @@ export default function StatsView() {
       <FilterBar
         clusterEntries={subgraphClusterEntries}
         availableDomains={subgraphAvailableDomains}
+        isLoading={clustersLoading}
         activeCids={subgraphActiveCids}
         activeDomains={subgraphActiveDomains}
         hasActiveFilters={hasActiveSubgraphFilters}
@@ -791,6 +797,7 @@ export default function StatsView() {
                 <PaperList
                   items={semanticItems}
                   clusters={clusters}
+                  clustersLoading={clustersLoading}
                   onSelectId={selectFromList}
                   enableHover
                   resetKey={`semantic|${debouncedQuery}`}
@@ -804,6 +811,7 @@ export default function StatsView() {
                 <PaperList
                   items={items}
                   clusters={clusters}
+                  clustersLoading={clustersLoading}
                   onSelectId={selectFromList}
                   enableHover
                   resetKey={resetKey}
@@ -820,6 +828,7 @@ export default function StatsView() {
               <PaperList
                 items={subgraphItems}
                 clusters={clusters}
+                clustersLoading={clustersLoading}
                 onSelectId={selectFromList}
                 enableHover
                 resetKey={`${selectedSubgraphId ?? ''}|${debouncedSubgraphQuery}|${[...subgraphActiveCids].sort()}|${[...subgraphActiveDomains].sort()}`}
@@ -837,6 +846,7 @@ export default function StatsView() {
             <StatsPaperDetails
               paper={selected}
               clusters={clusters}
+              clustersLoading={clustersLoading}
               neighbors={neighbors}
               neighborsLoading={neighborsLoading}
               navHistory={navHistory}
@@ -885,6 +895,7 @@ export default function StatsView() {
             <MobilePaperDetails
               paper={selected}
               clusters={clusters}
+              clustersLoading={clustersLoading}
               neighbors={neighbors}
               neighborsLoading={neighborsLoading}
               navHistory={navHistory}
