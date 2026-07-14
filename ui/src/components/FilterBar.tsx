@@ -6,6 +6,7 @@ import type { DatePreset } from '../hooks/useServerFilters'
 interface FilterBarProps {
   clusterEntries: Array<[string, { label?: string | null; size: number }]>
   availableDomains: string[]
+  isLoading?: boolean
   activeCids: Set<number>
   activeDomains: Set<string>
   hasActiveFilters: boolean
@@ -25,6 +26,7 @@ interface FilterBarProps {
 export default function FilterBar({
   clusterEntries,
   availableDomains,
+  isLoading = false,
   activeCids,
   activeDomains,
   hasActiveFilters,
@@ -96,24 +98,32 @@ export default function FilterBar({
                 </div>
               )}
 
-            {availableDomains.length > 0 && (
+            {(isLoading || availableDomains.length > 0) && (
               <div className='flex items-center gap-2 overflow-x-auto scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent'>
                 <span className='shrink-0 text-xs text-neutral-500 w-12'>
                   Domain
                 </span>
-                {availableDomains.map((dm) => (
-                  <button
-                    key={dm}
-                    onClick={() => onToggleDomain(dm)}
-                    className={`shrink-0 px-3 py-1 rounded-md border text-xs whitespace-nowrap ${
-                      activeDomains.has(dm)
-                        ? 'bg-neutral-600 border-neutral-500 text-white'
-                        : 'border-neutral-700 hover:border-neutral-500'
-                    }`}
-                  >
-                    {domainLabel(dm)}
-                  </button>
-                ))}
+                {isLoading
+                  ? Array.from({ length: 4 }).map((_, i) => (
+                      <span
+                        key={i}
+                        className='shrink-0 h-6 w-16 rounded-md bg-neutral-800 animate-pulse'
+                        aria-hidden
+                      />
+                    ))
+                  : availableDomains.map((dm) => (
+                      <button
+                        key={dm}
+                        onClick={() => onToggleDomain(dm)}
+                        className={`shrink-0 px-3 py-1 rounded-md border text-xs whitespace-nowrap ${
+                          activeDomains.has(dm)
+                            ? 'bg-neutral-600 border-neutral-500 text-white'
+                            : 'border-neutral-700 hover:border-neutral-500'
+                        }`}
+                      >
+                        {domainLabel(dm)}
+                      </button>
+                    ))}
               </div>
             )}
 
@@ -122,24 +132,32 @@ export default function FilterBar({
                 Cluster
               </span>
               <div className='flex flex-wrap gap-2'>
-                {clusterEntries.map(([cid, meta]) => (
-                  <button
-                    key={cid}
-                    onClick={() => onToggleCluster(+cid)}
-                    className={`px-3 py-1 rounded-md border text-xs whitespace-nowrap ${
-                      activeCids.has(+cid)
-                        ? 'bg-neutral-800 border-neutral-500'
-                        : 'border-neutral-700 hover:border-neutral-500'
-                    }`}
-                  >
-                    <span
-                      className='inline-block w-2 h-2 mr-2 rounded-full border border-[#333333]'
-                      style={{ backgroundColor: cidToColor(Number(cid)) }}
-                      aria-hidden
-                    />
-                    {(meta.label ?? `Cluster ${cid}`) + ' • ' + meta.size}
-                  </button>
-                ))}
+                {isLoading
+                  ? Array.from({ length: 6 }).map((_, i) => (
+                      <span
+                        key={i}
+                        className='h-6 w-20 rounded-md bg-neutral-800 animate-pulse'
+                        aria-hidden
+                      />
+                    ))
+                  : clusterEntries.map(([cid, meta]) => (
+                      <button
+                        key={cid}
+                        onClick={() => onToggleCluster(+cid)}
+                        className={`px-3 py-1 rounded-md border text-xs whitespace-nowrap ${
+                          activeCids.has(+cid)
+                            ? 'bg-neutral-800 border-neutral-500'
+                            : 'border-neutral-700 hover:border-neutral-500'
+                        }`}
+                      >
+                        <span
+                          className='inline-block w-2 h-2 mr-2 rounded-full border border-[#333333]'
+                          style={{ backgroundColor: cidToColor(Number(cid)) }}
+                          aria-hidden
+                        />
+                        {(meta.label ?? `Cluster ${cid}`) + ' • ' + meta.size}
+                      </button>
+                    ))}
               </div>
             </div>
 

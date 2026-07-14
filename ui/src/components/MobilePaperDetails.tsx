@@ -3,6 +3,7 @@ import { cidToColor } from '../lib/colors'
 import { domainLabel } from '../lib/domain'
 import type { ClustersLegend, NodeCompact } from '../lib/types'
 import { useRef, useLayoutEffect } from 'react'
+import ClusterLabel from './ClusterLabel'
 
 type NeighborEntry = { n: NodeCompact; w: number }
 
@@ -10,6 +11,7 @@ interface Props {
   // Accepts any compact node; `sm` (summary) is optional and rendered when present.
   paper: NodeCompact
   clusters: ClustersLegend
+  clustersLoading?: boolean
   neighbors: NeighborEntry[]
   neighborsLoading: boolean
   onClose: () => void
@@ -21,6 +23,7 @@ interface Props {
 export default function MobilePaperDetails({
   paper,
   clusters,
+  clustersLoading = false,
   neighbors,
   neighborsLoading,
   onClose,
@@ -76,8 +79,12 @@ export default function MobilePaperDetails({
                 aria-hidden
               />
               <span className='text-[13px] text-neutral-400'>
-                {clusters[String(paper.cid)]?.label ?? `Cluster ${paper.cid}`} •{' '}
-                {domainLabel(paper.dm)}
+                <ClusterLabel
+                  cid={paper.cid}
+                  clusters={clusters}
+                  isLoading={clustersLoading}
+                />{' '}
+                • {domainLabel(paper.dm)}
               </span>
             </div>
             <button
@@ -165,8 +172,12 @@ export default function MobilePaperDetails({
                       aria-hidden
                     />
                     <span className='text-neutral-400'>
-                      {clusters[String(n.cid)]?.label ?? `Cluster ${n.cid}`} •{' '}
-                      {domainLabel(n.dm)}
+                      <ClusterLabel
+                        cid={n.cid}
+                        clusters={clusters}
+                        isLoading={clustersLoading}
+                      />{' '}
+                      • {domainLabel(n.dm)}
                     </span>
                   </div>
                 </div>

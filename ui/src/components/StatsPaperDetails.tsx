@@ -4,6 +4,7 @@ import type { ClustersLegend, NodeCompact } from '../lib/types'
 import type { PaperDetail } from '../lib/api'
 import SharePlusIcon from './icons/SharePlusIcon'
 import ShareMinusIcon from './icons/ShareMinusIcon'
+import ClusterLabel from './ClusterLabel'
 import { useRef, useLayoutEffect } from 'react'
 
 type NeighborEntry = { n: NodeCompact; w: number }
@@ -11,6 +12,7 @@ type NeighborEntry = { n: NodeCompact; w: number }
 interface Props {
   paper: PaperDetail
   clusters: ClustersLegend
+  clustersLoading?: boolean
   neighbors: NeighborEntry[]
   neighborsLoading: boolean
   onClose: () => void
@@ -26,6 +28,7 @@ interface Props {
 export default function StatsPaperDetails({
   paper,
   clusters,
+  clustersLoading = false,
   neighbors,
   neighborsLoading,
   onSelectPaper,
@@ -92,8 +95,12 @@ export default function StatsPaperDetails({
                 aria-hidden
               />
               <span className='text-[13px] text-neutral-400'>
-                {clusters[String(paper.cid)]?.label ?? `Cluster ${paper.cid}`} •{' '}
-                {domainLabel(paper.dm)}
+                <ClusterLabel
+                  cid={paper.cid}
+                  clusters={clusters}
+                  isLoading={clustersLoading}
+                />{' '}
+                • {domainLabel(paper.dm)}
               </span>
             </div>
 
@@ -220,7 +227,11 @@ export default function StatsPaperDetails({
                           aria-hidden
                         />
                         <span className='text-neutral-400'>
-                          {clusters[String(n.cid)]?.label ?? `Cluster ${n.cid}`}{' '}
+                          <ClusterLabel
+                            cid={n.cid}
+                            clusters={clusters}
+                            isLoading={clustersLoading}
+                          />{' '}
                           • {domainLabel(n.dm)}
                         </span>
                       </div>
