@@ -28,6 +28,7 @@ import {
 } from '../lib/storage'
 import type { NodeCompact } from '../lib/types'
 import { useServerFilters } from '../hooks/useServerFilters'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 import { useRelatedPapers } from '../hooks/useRelatedPapers'
 import { useClusterCatalog } from '../hooks/useClusterCatalog'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
@@ -241,7 +242,8 @@ export default function StatsView() {
   }, [])
 
   const onHome = useLocation().pathname === '/'
-  const backLink = onHome ? null : (
+  const isSmall = useMediaQuery('(max-width: 768px)')
+  const backLink = onHome || isSmall ? null : (
     <Link
       to='/'
       className='shrink-0 px-2 py-1 rounded-md cursor-pointer bg-[#2a2a2a] border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors'
@@ -649,7 +651,18 @@ export default function StatsView() {
             {isBrowsing ? searchControls : subgraphSearchControls}
           </div>
         </div>
-        <div className='shrink-0 w-[190px]' />
+        <div className='shrink-0 w-[190px] flex justify-end'>
+          <a
+            target='_blank'
+            href='https://github.com/ai-safety-graph/alignment-graph'
+          >
+            <img
+              src='/ag-logo.svg'
+              alt='Alignment Graph Logo'
+              className='h-10 w-auto opacity-50 saturate-70'
+            />
+          </a>
+        </div>
       </div>
 
       <div className='flex flex-row flex-1 overflow-hidden'>
@@ -681,13 +694,32 @@ export default function StatsView() {
 
             <div
               ref={searchBarRef}
-              className='md:hidden sticky top-0 z-10 p-3 bg-neutral-950/90 backdrop-blur flex items-center gap-3'
+              className='md:hidden sticky top-0 z-10 bg-neutral-950/90 backdrop-blur'
             >
-              {backLink}
-              {subgraphControl}
-              <div className='flex items-center gap-2 flex-1'>
-                {isBrowsing ? searchControls : subgraphSearchControls}
+              <div className='p-3 flex flex-col gap-2'>
+                <div className='flex items-center gap-3'>
+                  {backLink}
+                  {subgraphControl}
+                </div>
+                <div className='flex items-center gap-2'>
+                  {isBrowsing ? searchControls : subgraphSearchControls}
+                </div>
               </div>
+              {(selectedSubgraph || filterBar) && (
+                <div className='px-3 pb-2 flex items-center gap-2 text-sm text-neutral-400'>
+                  {selectedSubgraph && (
+                    <span className='flex-1 min-w-0 truncate'>
+                      {isBrowsing ? 'Adding papers to' : 'Viewing papers in'}{' '}
+                      <span className='font-medium text-neutral-200'>
+                        {selectedSubgraph.name}
+                      </span>
+                    </span>
+                  )}
+                  {filterBar && (
+                    <div className='ml-auto'>{filterToggleButton}</div>
+                  )}
+                </div>
+              )}
             </div>
 
             {filterBar && (
