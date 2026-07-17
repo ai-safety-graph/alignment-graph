@@ -43,8 +43,12 @@ export default function FilterBar({
 }: FilterBarProps) {
   return (
     <div className='w-full overflow-hidden'>
-      {isExpanded && (
-        <div className='ml-2 my-2 rounded-md border border-[#333333] bg-[#1f1f1f] overflow-hidden'>
+      <div
+        className={`w-full my-2 overflow-hidden transition-colors duration-200 ${
+          isExpanded ? 'bg-[#1f1f1f]' : 'bg-neutral-950'
+        }`}
+      >
+        {isExpanded && (
           <div className='px-3 py-3 space-y-2'>
             <div className='text-xs font-medium text-neutral-400'>
               Filter by
@@ -63,7 +67,7 @@ export default function FilterBar({
                       className={`px-3 py-1 rounded-md border text-xs whitespace-nowrap ${
                         datePreset === value
                           ? 'bg-neutral-600 border-neutral-500 text-white'
-                          : 'border-neutral-700 hover:border-neutral-500'
+                          : 'bg-neutral-950 border-neutral-700 hover:border-neutral-500'
                       }`}
                     >
                       {label}
@@ -89,7 +93,7 @@ export default function FilterBar({
                         className={`px-3 py-1 rounded-md border text-xs whitespace-nowrap ${
                           activeYear === year
                             ? 'bg-neutral-600 border-neutral-500 text-white'
-                            : 'border-neutral-700 hover:border-neutral-500'
+                            : 'bg-neutral-950 border-neutral-700 hover:border-neutral-500'
                         }`}
                       >
                         {year}
@@ -119,7 +123,7 @@ export default function FilterBar({
                         className={`shrink-0 px-3 py-1 rounded-md border text-xs whitespace-nowrap ${
                           activeDomains.has(dm)
                             ? 'bg-neutral-600 border-neutral-500 text-white'
-                            : 'border-neutral-700 hover:border-neutral-500'
+                            : 'bg-neutral-950 border-neutral-700 hover:border-neutral-500'
                         }`}
                       >
                         {domainLabel(dm)}
@@ -148,7 +152,7 @@ export default function FilterBar({
                         className={`px-3 py-1 rounded-md border text-xs whitespace-nowrap ${
                           activeCids.has(+cid)
                             ? 'bg-neutral-800 border-neutral-500'
-                            : 'border-neutral-700 hover:border-neutral-500'
+                            : 'bg-neutral-950 border-neutral-700 hover:border-neutral-500'
                         }`}
                       >
                         <span
@@ -167,15 +171,15 @@ export default function FilterBar({
               <button
                 onClick={onClearAll}
                 disabled={!hasActiveFilters}
-                className='flex items-center gap-1 px-3 py-1 rounded-md border border-neutral-700 text-xs text-neutral-400 hover:text-neutral-200 hover:border-neutral-500 disabled:text-neutral-700 disabled:hover:text-neutral-700 disabled:hover:border-neutral-700 disabled:cursor-not-allowed'
+                className='flex items-center gap-1 px-3 py-1 rounded-md border bg-neutral-950 border-neutral-700 text-xs text-neutral-400 hover:text-neutral-200 hover:border-neutral-500 disabled:text-neutral-700 disabled:hover:text-neutral-700 disabled:hover:border-neutral-700 disabled:cursor-not-allowed'
               >
                 Clear Filters
                 <RotateCcw size={13} />
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }
