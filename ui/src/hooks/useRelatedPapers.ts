@@ -1,36 +1,20 @@
-import { useState, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { fetchRelated } from '../lib/api'
 import type { NodeCompact } from '../lib/types'
 
 type NeighborEntry = { n: NodeCompact; w: number }
 
+/** Cached per `aid` by the QueryClient so re-selecting a paper doesn't refetch its neighbors. */
 export function useRelatedPapers(aid: string | null): { neighbors: NeighborEntry[]; loading: boolean } {
-  const [neighbors, setNeighbors] = useState<NeighborEntry[]>([])
-  const [loading, setLoading] = useState(false)
+  const { data, isPending } = useQuery({
+    queryKey: ['related', aid],
+    queryFn: () => fetchRelated(aid!),
+    enabled: aid != null,
+  })
 
-  useEffect(() => {
-    setNeighbors([])
-    if (!aid) {
-      setLoading(false)
-      return
-    }
-    setLoading(true)
-    let alive = true
-    ;(async () => {
-      try {
-        const { fetchRelated } = await import('../lib/api')
-        const results = await fetchRelated(aid)
-        if (!alive) return
-        setNeighbors(results.map((r, i): NeighborEntry => ({ n: { ...r, id: i }, w: r.sim })))
-      } catch {
-        if (alive) setNeighbors([])
-      } finally {
-        if (alive) setLoading(false)
-      }
-    })()
-    return () => {
-      alive = false
-    }
-  }, [aid])
+  const neighbors = data
+    ? data.map((r, i): NeighborEntry => ({ n: { ...r, id: i }, w: r.sim }))
+    : []
 
-  return { neighbors, loading }
+  return { neighbors, loading: aid != null && isPending }
 }

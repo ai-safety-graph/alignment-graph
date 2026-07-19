@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react'
 import { Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import ForceGraph2D from 'react-force-graph-2d'
 import type {
   ForceGraphMethods,
@@ -113,8 +114,9 @@ export default function ArxivGraph({
     setActiveSavedGraph(updated)
   }
 
-  const [data, setData] = useState<GraphDataCompact | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const ids = paperIds?.length
+    ? paperIds
+    : (activeSavedGraph?.paperIds ?? DEMO_PAPER_IDS)
 
   const isDemo = !paperIds?.length && !activeSavedGraph
   const isEmptySavedGraph =
@@ -157,34 +159,21 @@ export default function ArxivGraph({
     }
   }, [])
 
-  // Data fetch
-  useEffect(() => {
-    let alive = true
-    const ids = paperIds?.length
-      ? paperIds
-      : (activeSavedGraph?.paperIds ?? DEMO_PAPER_IDS)
-    if (ids.length === 0) {
-      // An empty saved graph has no papers to fetch; the backend rejects an
-      // empty ids list, so skip the request and show an empty-state instead.
-      setData(null)
-      setError(null)
-      return
-    }
-    ;(async () => {
-      try {
-        const { fetchSubgraph } = await import('../lib/api')
-        const json = await fetchSubgraph(ids)
-        if (!alive) return
-        setData(json)
-      } catch (e: any) {
-        if (!alive) return
-        setError(`Failed to load graph: ${e?.message ?? String(e)}`)
-      }
-    })()
-    return () => {
-      alive = false
-    }
-  }, [paperIds, activeSavedGraph])
+  // Data fetch. Cached by ids so revisiting the same graph (e.g. navigating
+  // away to /stats and back) doesn't refire /api/graph/subset.
+  const { data, error: queryError } = useQuery({
+    queryKey: ['subgraph', ids],
+    queryFn: async () => {
+      const { fetchSubgraph } = await import('../lib/api')
+      return fetchSubgraph(ids)
+    },
+    // An empty saved graph has no papers to fetch; the backend rejects an
+    // empty ids list, so skip the request and show an empty-state instead.
+    enabled: ids.length > 0,
+  })
+  const error = queryError
+    ? `Failed to load graph: ${queryError.message}`
+    : null
 
   // Prepare simulation nodes (mutable x/y)
   const simNodes = useMemo(() => {
@@ -804,7 +793,6 @@ export default function ArxivGraph({
               type='button'
               onClick={() => {
                 setActiveSavedGraph(g)
-                setData(null)
                 setSelectedId(null)
                 setLockedId(null)
                 setHoverId(null)
@@ -823,7 +811,6 @@ export default function ArxivGraph({
               type='button'
               onClick={() => {
                 setActiveSavedGraph(null)
-                setData(null)
                 setSelectedId(null)
                 setLockedId(null)
                 setHoverId(null)

@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import StatsPaperDetails from './StatsPaperDetails'
 import MobilePaperDetails from './MobilePaperDetails'
 import PaperList from './PaperList'
+import { fetchSubgraph } from '../lib/api'
 import { getSavedGraph, updateSavedGraph } from '../lib/storage'
-import type { NodeCompact } from '../lib/types'
+import type { GraphDataCompact } from '../lib/types'
 import { useClusterCatalog } from '../hooks/useClusterCatalog'
 import { usePaperDetail } from '../hooks/usePaperDetail'
 import { useRelatedPapers } from '../hooks/useRelatedPapers'
@@ -14,41 +16,34 @@ import { useNavHistory } from '../hooks/useNavHistory'
 export default function SubgraphView() {
   const { id } = useParams<{ id: string }>()
   const { clusters, isLoading: clustersLoading } = useClusterCatalog()
+  const queryClient = useQueryClient()
 
-  const [graphName, setGraphName] = useState<string | null>(null)
-  const [nodes, setNodes] = useState<NodeCompact[] | null>(null)
-  const [notFound, setNotFound] = useState(false)
+  const savedGraph = useMemo(() => (id ? getSavedGraph(id) : null), [id])
+  const notFound = id != null && savedGraph == null
+  const graphName = savedGraph?.name ?? null
 
-  useEffect(() => {
-    if (!id) return
-    const graph = getSavedGraph(id)
-    if (!graph) {
-      setNotFound(true)
-      return
-    }
-    setGraphName(graph.name)
-    let alive = true
-    ;(async () => {
-      try {
-        const { fetchSubgraph } = await import('../lib/api')
-        const data = await fetchSubgraph(graph.paperIds)
-        if (alive) setNodes(data.nodes)
-      } catch {
-        if (alive) setNodes([])
-      }
-    })()
-    return () => {
-      alive = false
-    }
-  }, [id])
+  const queryKey = useMemo(() => ['subgraph', id] as const, [id])
+
+  // Cached per graph id by the QueryClient. Removals are written straight
+  // into the cache (below) so they persist across route remounts within the
+  // session, not just via the localStorage-persisted paperIds on next fetch.
+  const { data } = useQuery({
+    queryKey,
+    queryFn: () => fetchSubgraph(savedGraph!.paperIds),
+    enabled: savedGraph != null,
+  })
+
+  const nodes = data?.nodes ?? null
 
   const removeFromSubgraph = (aid: string) => {
     if (!id) return
-    setNodes((prev) => {
-      const next = (prev ?? []).filter((n) => n.aid !== aid)
-      updateSavedGraph(id, { paperIds: next.map((n) => n.aid) })
-      return next
-    })
+    const next = (nodes ?? []).filter((n) => n.aid !== aid)
+    queryClient.setQueryData(
+      queryKey,
+      (old: GraphDataCompact | undefined) =>
+        old ? { ...old, nodes: next } : old,
+    )
+    updateSavedGraph(id, { paperIds: next.map((n) => n.aid) })
   }
 
   const {
