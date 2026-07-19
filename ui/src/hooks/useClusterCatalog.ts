@@ -1,41 +1,30 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { fetchClusters, fetchStats } from '../lib/api'
 import type { ClustersLegend } from '../lib/types'
 
 /**
- * Fetches the cluster legend and the sorted list of available domains once on
- * mount. Shared by the list-based views (StatsView, MobileView).
+ * Fetches the cluster legend and the sorted list of available domains.
+ * Shared by the list-based views (StatsView, MobileView). Cached for the
+ * session by the QueryClient, so navigating back to a view that already
+ * loaded the catalog renders instantly with isLoading: false.
  */
 export function useClusterCatalog(): {
   clusters: ClustersLegend
   availableDomains: string[]
   isLoading: boolean
 } {
-  const [clusters, setClusters] = useState<ClustersLegend>({})
-  const [availableDomains, setAvailableDomains] = useState<string[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const { data, isPending } = useQuery({
+    queryKey: ['cluster-catalog'],
+    queryFn: () => Promise.all([fetchClusters(), fetchStats()]),
+  })
 
-  useEffect(() => {
-    let alive = true
-    ;(async () => {
-      try {
-        const { fetchClusters, fetchStats } = await import('../lib/api')
-        const [allClusters, stats] = await Promise.all([
-          fetchClusters(),
-          fetchStats(),
-        ])
-        if (!alive) return
-        setClusters(allClusters)
-        setAvailableDomains(Object.keys(stats.domains).filter(Boolean).sort())
-      } catch {
-        // Catalog is non-critical chrome; leave defaults if it fails.
-      } finally {
-        if (alive) setIsLoading(false)
-      }
-    })()
-    return () => {
-      alive = false
-    }
-  }, [])
+  const [clusters, stats] = data ?? [{}, undefined]
 
-  return { clusters, availableDomains, isLoading }
+  return {
+    clusters: clusters ?? {},
+    availableDomains: stats
+      ? Object.keys(stats.domains).filter(Boolean).sort()
+      : [],
+    isLoading: isPending,
+  }
 }

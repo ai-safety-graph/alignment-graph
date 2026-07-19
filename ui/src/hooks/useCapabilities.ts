@@ -1,29 +1,18 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { fetchHealth } from '../lib/api'
 
 /**
- * Fetches deployment capability flags from /health once on mount. Semantic
- * search defaults to false (hidden) until confirmed enabled, since it only
- * runs on self-hosted deployments that load the embedding model.
+ * Fetches deployment capability flags from /health. Semantic search defaults
+ * to false (hidden) until confirmed enabled, since it only runs on
+ * self-hosted deployments that load the embedding model. Cached by the
+ * QueryClient so StatsView and GraphView share one request instead of each
+ * polling /health independently.
  */
 export function useCapabilities(): { semanticSearch: boolean } {
-  const [semanticSearch, setSemanticSearch] = useState(false)
+  const { data } = useQuery({
+    queryKey: ['health'],
+    queryFn: fetchHealth,
+  })
 
-  useEffect(() => {
-    let alive = true
-    ;(async () => {
-      try {
-        const { fetchHealth } = await import('../lib/api')
-        const health = await fetchHealth()
-        if (!alive) return
-        setSemanticSearch(health.semantic_search)
-      } catch {
-        // Capability check is non-critical; leave semantic search hidden.
-      }
-    })()
-    return () => {
-      alive = false
-    }
-  }, [])
-
-  return { semanticSearch }
+  return { semanticSearch: data?.semantic_search ?? false }
 }

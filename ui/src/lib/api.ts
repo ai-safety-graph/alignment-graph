@@ -32,19 +32,12 @@ export async function fetchSubgraph(
   })
 }
 
-const paperCache = new Map<string, PaperDetail>()
-
 export async function fetchPaper(
   arxivUrl: string,
 ): Promise<PaperDetail | null> {
   try {
     const id = new URL(arxivUrl).pathname.replace(/^\/abs\//, '')
-    if (paperCache.has(id)) return paperCache.get(id)!
-    const paper = await apiFetch<PaperDetail>(
-      `/api/papers/${encodeURIComponent(id)}`,
-    )
-    paperCache.set(id, paper)
-    return paper
+    return await apiFetch<PaperDetail>(`/api/papers/${encodeURIComponent(id)}`)
   } catch {
     return null
   }
