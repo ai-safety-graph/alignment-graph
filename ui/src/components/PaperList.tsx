@@ -102,21 +102,23 @@ export default function PaperList({
                 </div>
               </div>
             </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                if (inSubgraph) onRemoveFromSubgraph?.(n.aid)
-                else onAddToSubgraph?.(n.aid)
-              }}
-              aria-label={
-                inSubgraph
-                  ? `Remove from ${subgraphName ?? 'subgraph'}`
-                  : `Add to ${subgraphName ?? 'subgraph'}`
-              }
-              className='group absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200'
-            >
-              {inSubgraph ? <ShareMinusIcon size={14} className='text-red-800 group-hover:text-red-500 transition-colors' /> : <SharePlusIcon size={14} className='text-green-800 group-hover:text-green-500 transition-colors' />}
-            </button>
+            {(onAddToSubgraph || onRemoveFromSubgraph) && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (inSubgraph) onRemoveFromSubgraph?.(n.aid)
+                  else onAddToSubgraph?.(n.aid)
+                }}
+                aria-label={
+                  inSubgraph
+                    ? `Remove from ${subgraphName ?? 'subgraph'}`
+                    : `Add to ${subgraphName ?? 'subgraph'}`
+                }
+                className='group absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200'
+              >
+                {inSubgraph ? <ShareMinusIcon size={14} className='text-red-800 group-hover:text-red-500 transition-colors' /> : <SharePlusIcon size={14} className='text-green-800 group-hover:text-green-500 transition-colors' />}
+              </button>
+            )}
           </li>
           )
         })}

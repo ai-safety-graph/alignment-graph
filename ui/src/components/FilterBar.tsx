@@ -49,7 +49,7 @@ export default function FilterBar({
         }`}
       >
         {isExpanded && (
-          <div className='px-3 py-3 space-y-2'>
+          <div className='px-5 py-3 space-y-2'>
             <div className='text-xs font-medium text-neutral-400'>
               Filter by
             </div>

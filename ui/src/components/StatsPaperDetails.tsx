@@ -104,26 +104,28 @@ export default function StatsPaperDetails({
               </span>
             </div>
 
-            <button
-              onClick={() =>
-                isPaperInSubgraph
-                  ? onRemoveFromSubgraph?.(paper.aid)
-                  : onAddToSubgraph?.(paper.aid)
-              }
-              className='group flex items-center gap-1.5 text-[13px] text-neutral-300 hover:text-white bg-[#2a2a2a] border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 cursor-pointer transition-colors'
-            >
-              {isPaperInSubgraph ? (
-                <>
-                  Remove from {subgraphLabel}
-                  <ShareMinusIcon size={14} className='text-red-800 group-hover:text-red-500 transition-colors' />
-                </>
-              ) : (
-                <>
-                  Add to {subgraphLabel}
-                  <SharePlusIcon size={14} className='text-green-800 group-hover:text-green-500 transition-colors' />
-                </>
-              )}
-            </button>
+            {(onAddToSubgraph || onRemoveFromSubgraph) && (
+              <button
+                onClick={() =>
+                  isPaperInSubgraph
+                    ? onRemoveFromSubgraph?.(paper.aid)
+                    : onAddToSubgraph?.(paper.aid)
+                }
+                className='group flex items-center gap-1.5 text-[13px] text-neutral-300 hover:text-white bg-[#2a2a2a] border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 cursor-pointer transition-colors'
+              >
+                {isPaperInSubgraph ? (
+                  <>
+                    Remove from {subgraphLabel}
+                    <ShareMinusIcon size={14} className='text-red-800 group-hover:text-red-500 transition-colors' />
+                  </>
+                ) : (
+                  <>
+                    Add to {subgraphLabel}
+                    <SharePlusIcon size={14} className='text-green-800 group-hover:text-green-500 transition-colors' />
+                  </>
+                )}
+              </button>
+            )}
           </div>
 
           <h4 className='mt-1 mb-2 text-lg font-semibold leading-snug text-[#e5e5e5]'>
@@ -202,21 +204,23 @@ export default function StatsPaperDetails({
                       >
                         {n.t.length > 80 ? n.t.slice(0, 77) + '…' : n.t}
                       </a>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          if (inSubgraph) onRemoveFromSubgraph?.(n.aid)
-                          else onAddToSubgraph?.(n.aid)
-                        }}
-                        aria-label={
-                          inSubgraph
-                            ? `Remove from ${subgraphLabel}`
-                            : `Add to ${subgraphLabel}`
-                        }
-                        className='group shrink-0 p-1 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200 transition-colors'
-                      >
-                        {inSubgraph ? <ShareMinusIcon size={14} className='text-red-800 group-hover:text-red-500 transition-colors' /> : <SharePlusIcon size={14} className='text-green-800 group-hover:text-green-500 transition-colors' />}
-                      </button>
+                      {(onAddToSubgraph || onRemoveFromSubgraph) && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (inSubgraph) onRemoveFromSubgraph?.(n.aid)
+                            else onAddToSubgraph?.(n.aid)
+                          }}
+                          aria-label={
+                            inSubgraph
+                              ? `Remove from ${subgraphLabel}`
+                              : `Add to ${subgraphLabel}`
+                          }
+                          className='group shrink-0 p-1 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200 transition-colors'
+                        >
+                          {inSubgraph ? <ShareMinusIcon size={14} className='text-red-800 group-hover:text-red-500 transition-colors' /> : <SharePlusIcon size={14} className='text-green-800 group-hover:text-green-500 transition-colors' />}
+                        </button>
+                      )}
                     </div>
                     <div className='text-[12px] text-neutral-500'>
                       <div>{n.au}</div>

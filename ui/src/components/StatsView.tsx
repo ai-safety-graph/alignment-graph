@@ -136,13 +136,14 @@ export default function StatsView() {
     toggleDomain,
   } = useServerFilters(clusters)
 
-  const { papers, total, hasMore, error, loadMore, isFiltering } = usePaperBrowser({
-    query: debouncedQuery,
-    fromDate,
-    activeCids,
-    activeDomains,
-    enabled: searchMode === 'keyword',
-  })
+  const { papers, total, hasMore, error, loadMore, isFiltering } =
+    usePaperBrowser({
+      query: debouncedQuery,
+      fromDate,
+      activeCids,
+      activeDomains,
+      enabled: searchMode === 'keyword',
+    })
 
   const {
     selectedId,
@@ -243,15 +244,16 @@ export default function StatsView() {
 
   const onHome = useLocation().pathname === '/'
   const isSmall = useMediaQuery('(max-width: 768px)')
-  const backLink = onHome || isSmall ? null : (
-    <Link
-      to='/'
-      className='shrink-0 px-2 py-1 rounded-md cursor-pointer bg-[#2a2a2a] border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors'
-      aria-label='Back to graph'
-    >
-      <Share2 size={18} />
-    </Link>
-  )
+  const backLink =
+    onHome || isSmall ? null : (
+      <Link
+        to='/'
+        className='shrink-0 px-2 py-1 rounded-md cursor-pointer bg-[#2a2a2a] border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors'
+        aria-label='Back to graph'
+      >
+        <Share2 size={18} />
+      </Link>
+    )
 
   const selectedSubgraph = subgraphs.find(
     (subgraph) => subgraph.id === selectedSubgraphId,
@@ -412,7 +414,7 @@ export default function StatsView() {
     </button>
   )
 
-  const subgraphControl = isCreatingSubgraph ? (
+  const newGraphInput = (
     <div className='shrink-0 flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#2a2a2a] border border-[#333333]'>
       <input
         autoFocus
@@ -443,25 +445,27 @@ export default function StatsView() {
         <X size={15} />
       </button>
     </div>
-  ) : subgraphs.length === 0 ? (
-    newGraphButton
-  ) : (
-    <div className='shrink-0 flex items-center gap-2'>
-      <Dropdown label={selectedSubgraph?.name ?? 'Select graph'}>
-        {subgraphs.map((subgraph) => (
-          <button
-            key={subgraph.id}
-            type='button'
-            onClick={() => setSelectedSubgraphId(subgraph.id)}
-            className='block w-full text-left px-3 py-2 text-sm text-neutral-300 hover:bg-[#333333] hover:text-neutral-100'
-          >
-            {subgraph.name}
-          </button>
-        ))}
-      </Dropdown>
-      {newGraphButton}
-    </div>
   )
+
+  const newGraphControl = isCreatingSubgraph ? newGraphInput : newGraphButton
+
+  const subgraphControl =
+    subgraphs.length === 0 ? null : (
+      <div className='shrink-0 flex items-center gap-2'>
+        <Dropdown label={selectedSubgraph?.name ?? 'Select graph'}>
+          {subgraphs.map((subgraph) => (
+            <button
+              key={subgraph.id}
+              type='button'
+              onClick={() => setSelectedSubgraphId(subgraph.id)}
+              className='block w-full text-left px-3 py-2 text-sm text-neutral-300 hover:bg-[#333333] hover:text-neutral-100'
+            >
+              {subgraph.name}
+            </button>
+          ))}
+        </Dropdown>
+      </div>
+    )
 
   const searchControls = (
     <>
@@ -596,6 +600,7 @@ export default function StatsView() {
         </span>
       </div>
       <div className='flex-1 flex justify-end items-center gap-2'>
+        {isBrowsing && newGraphControl}
         {filterBar && filterToggleButton}
         <button
           type='button'
@@ -635,6 +640,11 @@ export default function StatsView() {
         )}
       </div>
     </div>
+  ) : isBrowsing ? (
+    <div className='shrink-0 px-4 py-2.5 flex items-center justify-between gap-2 text-sm text-neutral-400'>
+      {newGraphControl}
+      {filterBar && filterToggleButton}
+    </div>
   ) : filterBar ? (
     <div className='shrink-0 px-4 py-2.5 flex items-center justify-end text-sm text-neutral-400'>
       {filterToggleButton}
@@ -643,7 +653,7 @@ export default function StatsView() {
 
   return (
     <div className='fixed inset-0 bg-neutral-950 text-[#e5e5e5] flex flex-col'>
-      <div className='hidden md:flex shrink-0 bg-neutral-950/90 backdrop-blur px-3 py-3 items-center gap-3 border-b border-neutral-800'>
+      <div className='hidden md:flex shrink-0 bg-neutral-950/90 backdrop-blur px-4 py-3 items-center gap-3 border-b border-neutral-800'>
         {backLink}
         {subgraphControl}
         <div className='flex-1 flex justify-center'>
@@ -711,8 +721,9 @@ export default function StatsView() {
                   {isBrowsing ? searchControls : subgraphSearchControls}
                 </div>
               </div>
-              {(selectedSubgraph || filterBar) && (
+              {(selectedSubgraph || filterBar || isBrowsing) && (
                 <div className='px-3 pb-2 flex items-center gap-2 text-sm text-neutral-400'>
+                  {!selectedSubgraph && isBrowsing && newGraphControl}
                   {selectedSubgraph && (
                     <span className='flex-1 min-w-0 truncate'>
                       {isBrowsing ? 'Adding papers to' : 'Viewing papers in'}{' '}
@@ -721,9 +732,10 @@ export default function StatsView() {
                       </span>
                     </span>
                   )}
-                  {filterBar && (
-                    <div className='ml-auto'>{filterToggleButton}</div>
-                  )}
+                  <div className='ml-auto flex items-center gap-2'>
+                    {filterBar && filterToggleButton}
+                    {selectedSubgraph && isBrowsing && newGraphControl}
+                  </div>
                 </div>
               )}
             </div>
@@ -845,8 +857,12 @@ export default function StatsView() {
                   enableHover
                   resetKey={`semantic|${debouncedQuery}`}
                   selectedId={selectedId ?? undefined}
-                  onAddToSubgraph={addToSelectedSubgraph}
-                  onRemoveFromSubgraph={removeFromSelectedSubgraph}
+                  onAddToSubgraph={
+                    selectedSubgraphId ? addToSelectedSubgraph : undefined
+                  }
+                  onRemoveFromSubgraph={
+                    selectedSubgraphId ? removeFromSelectedSubgraph : undefined
+                  }
                   subgraphPaperIds={selectedSubgraphPaperIds}
                   subgraphName={selectedSubgraph?.name}
                 />
@@ -864,8 +880,14 @@ export default function StatsView() {
                     hasMore={hasMore}
                     onLoadMore={loadMore}
                     selectedId={selectedId ?? undefined}
-                    onAddToSubgraph={addToSelectedSubgraph}
-                    onRemoveFromSubgraph={removeFromSelectedSubgraph}
+                    onAddToSubgraph={
+                      selectedSubgraphId ? addToSelectedSubgraph : undefined
+                    }
+                    onRemoveFromSubgraph={
+                      selectedSubgraphId
+                        ? removeFromSelectedSubgraph
+                        : undefined
+                    }
                     subgraphPaperIds={selectedSubgraphPaperIds}
                     subgraphName={selectedSubgraph?.name}
                   />
@@ -900,9 +922,17 @@ export default function StatsView() {
               onClose={close}
               onSelectPaper={handleSelectRelated}
               onNavigateTo={navigateTo}
-              onAddToSubgraph={isBrowsing ? addToSelectedSubgraph : undefined}
+              onAddToSubgraph={
+                isBrowsing && selectedSubgraphId
+                  ? addToSelectedSubgraph
+                  : undefined
+              }
               onRemoveFromSubgraph={
-                isBrowsing ? removeFromSelectedSubgraph : removeFromSubgraphView
+                isBrowsing
+                  ? selectedSubgraphId
+                    ? removeFromSelectedSubgraph
+                    : undefined
+                  : removeFromSubgraphView
               }
               subgraphPaperIds={
                 isBrowsing ? selectedSubgraphPaperIds : subgraphNodeIds
