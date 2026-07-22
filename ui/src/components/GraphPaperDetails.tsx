@@ -167,8 +167,9 @@ export default function GraphPaperDetails({
         </div>
 
         {relatedLoading && (
-          <div className='text-[13px] italic text-neutral-400 mb-1.5'>
-            Loading…
+          <div className='flex items-center gap-2 text-[13px] text-neutral-400 mb-1.5'>
+            <span className='h-3 w-3 shrink-0 rounded-full border-2 border-neutral-600 border-t-neutral-300 animate-spin' />
+            Loading related papers…
           </div>
         )}
 

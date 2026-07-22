@@ -580,6 +580,17 @@ export default function ArxivGraph({
     ctx.lineWidth = 0.5
     ctx.strokeStyle = 'rgba(255,255,255,0.7)'
     ctx.stroke()
+    if (relatedLoading && selectedId === n.id) {
+      const angle = (Date.now() / 300) % (Math.PI * 2)
+      ctx.save()
+      ctx.globalAlpha = 1
+      ctx.strokeStyle = '#4ea8de'
+      ctx.lineWidth = 1.5
+      ctx.beginPath()
+      ctx.arc(n.x as number, n.y as number, r + 4, angle, angle + Math.PI * 1.3)
+      ctx.stroke()
+      ctx.restore()
+    }
     const drawLabel = neighborSet?.has(n.id) || selectedId === n.id
     if (drawLabel && globalScale > 0.8) {
       const label = n.t.length > 80 ? n.t.slice(0, 77) + '…' : n.t
@@ -633,6 +644,7 @@ export default function ArxivGraph({
           linkSource='s'
           linkTarget='t'
           cooldownTicks={data.meta.coords.included ? 0 : 90}
+          autoPauseRedraw={!relatedLoading}
           enableNodeDrag={false}
           nodeCanvasObject={nodeCanvasObject}
           nodeLabel={nodeLabel}
