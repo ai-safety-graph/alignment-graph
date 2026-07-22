@@ -40,7 +40,7 @@ export default function Dropdown({
       {canOpen && isOpen && (
         <div
           onClick={() => setIsOpen(false)}
-          className='absolute top-full mt-1 left-0 bg-[#2a2a2a] border border-[#333333] rounded-xl overflow-hidden shadow-lg min-w-[160px]'
+          className='absolute top-full mt-1 left-0 z-40 bg-[#2a2a2a] border border-[#333333] rounded-xl overflow-hidden shadow-lg min-w-[160px]'
         >
           {children}
         </div>

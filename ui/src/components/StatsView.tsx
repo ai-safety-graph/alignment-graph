@@ -653,7 +653,7 @@ export default function StatsView() {
 
   return (
     <div className='fixed inset-0 bg-neutral-950 text-[#e5e5e5] flex flex-col'>
-      <div className='hidden md:flex shrink-0 bg-neutral-950/90 backdrop-blur px-4 py-3 items-center gap-3 border-b border-neutral-800'>
+      <div className='hidden md:flex relative z-20 shrink-0 bg-neutral-950/90 backdrop-blur px-4 py-3 items-center gap-3 border-b border-neutral-800'>
         {backLink}
         {subgraphControl}
         <div className='flex-1 flex justify-center'>
@@ -710,7 +710,7 @@ export default function StatsView() {
 
             <div
               ref={searchBarRef}
-              className='md:hidden sticky top-0 z-10 bg-neutral-950/90 backdrop-blur'
+              className='md:hidden sticky top-0 z-20 bg-neutral-950/90 backdrop-blur'
             >
               <div className='p-3 flex flex-col gap-2'>
                 <div className='flex items-center gap-3'>
