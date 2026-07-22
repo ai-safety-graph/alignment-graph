@@ -762,22 +762,34 @@ export default function ArxivGraph({
       </div>
 
       {/* Overlays */}
-      {query && (searchResults.length > 0 || isSearching) && (
-        <SearchResultsOverlay
-          results={searchResults}
-          onSelect={onSearchPick}
-          clusters={clusterLabels}
-          isLoading={isSearching}
-          onAddToSubgraph={activeSavedGraph ? addToActiveSavedGraph : undefined}
-          onRemoveFromSubgraph={
-            activeSavedGraph ? removeFromActiveSavedGraph : undefined
-          }
-          subgraphPaperIds={
-            activeSavedGraph ? new Set(activeSavedGraph.paperIds) : undefined
-          }
-          subgraphName={activeSavedGraph?.name}
-        />
-      )}
+      {/* Search results overlay flexes to fill the space above the cluster
+          legend, so its bottom edge always meets the legend's top edge
+          regardless of the legend's (dynamic) height. */}
+      <div className='fixed left-4 top-[72px] bottom-4 z-10 flex flex-col items-start justify-end gap-3 pointer-events-none'>
+        {query && (searchResults.length > 0 || isSearching) && (
+          <div className='flex-1 min-h-0 w-[360px] pointer-events-auto'>
+            <SearchResultsOverlay
+              results={searchResults}
+              onSelect={onSearchPick}
+              clusters={clusterLabels}
+              isLoading={isSearching}
+              onAddToSubgraph={
+                activeSavedGraph ? addToActiveSavedGraph : undefined
+              }
+              onRemoveFromSubgraph={
+                activeSavedGraph ? removeFromActiveSavedGraph : undefined
+              }
+              subgraphPaperIds={
+                activeSavedGraph ? new Set(activeSavedGraph.paperIds) : undefined
+              }
+              subgraphName={activeSavedGraph?.name}
+            />
+          </div>
+        )}
+        <div className='shrink-0 pointer-events-auto'>
+          <ClusterLegendOverlay clusters={clusters} />
+        </div>
+      </div>
 
       {selected && (
         <GraphPaperDetails
@@ -868,7 +880,6 @@ export default function ArxivGraph({
         </Link> */}
       </div>
 
-      <ClusterLegendOverlay clusters={clusters} />
       <div className='fixed right-4 top-4 z-10'>
         <a
           target='_blank'

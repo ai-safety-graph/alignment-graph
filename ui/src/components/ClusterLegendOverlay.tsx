@@ -9,7 +9,7 @@ export default function ClusterLegendOverlay({
   if (!clusters || Object.keys(clusters).length === 0) return null
 
   return (
-    <div className='fixed left-4 bottom-4 z-10 bg-[#242424] backdrop-blur-md border border-[#333333] rounded-xl p-3 w-[360px] max-h-[40vh] overflow-auto text-neutral-200'>
+    <div className='bg-[#242424] backdrop-blur-md border border-[#333333] rounded-xl p-3 w-[360px] max-h-[40vh] overflow-auto text-neutral-200'>
       <h4 className='m-0 mb-2 font-semibold text-sm text-[#e5e5e5]'>
         Clusters
       </h4>

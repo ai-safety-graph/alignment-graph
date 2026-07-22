@@ -30,7 +30,7 @@ export default function SearchResultsOverlay({
   if (!isLoading && !results?.length) return null
 
   return (
-    <aside className='scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent scrollbar-hover:scrollbar-thumb-[#666] fixed top-[72px] left-4 bottom-[208px] w-[360px] z-10 bg-[#262626] backdrop-blur-md border border-[#333333] rounded-xl p-3 overflow-auto text-[#e5e5e5]'>
+    <aside className='scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent scrollbar-hover:scrollbar-thumb-[#666] w-[360px] h-full bg-[#262626] backdrop-blur-md border border-[#333333] rounded-xl p-3 overflow-auto text-[#e5e5e5]'>
       <div className='flex items-center mb-2'>
         <h3 className='m-0 flex-1 text-base font-semibold text-[#f5f5f5]'>
           Search Results
