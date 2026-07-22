@@ -136,7 +136,7 @@ export default function StatsView() {
     toggleDomain,
   } = useServerFilters(clusters)
 
-  const { papers, total, hasMore, error, loadMore } = usePaperBrowser({
+  const { papers, total, hasMore, error, loadMore, isFiltering } = usePaperBrowser({
     query: debouncedQuery,
     fromDate,
     activeCids,
@@ -738,8 +738,13 @@ export default function StatsView() {
             )}
 
             {isBrowsing && searchMode === 'keyword' && papers && total > 0 && (
-              <div className='px-4 py-1.5 text-xs text-neutral-500'>
-                Showing {papers.length} of {total.toLocaleString()} papers
+              <div className='px-4 py-1.5 text-xs text-neutral-500 flex items-center gap-2'>
+                <span>
+                  Showing {papers.length} of {total.toLocaleString()} papers
+                </span>
+                {isFiltering && (
+                  <span className='h-3 w-3 shrink-0 rounded-full border-2 border-neutral-600 border-t-neutral-300 animate-spin' />
+                )}
               </div>
             )}
 
@@ -846,21 +851,25 @@ export default function StatsView() {
                   subgraphName={selectedSubgraph?.name}
                 />
               ) : (
-                <PaperList
-                  items={items}
-                  clusters={clusters}
-                  clustersLoading={clustersLoading}
-                  onSelectId={selectFromList}
-                  enableHover
-                  resetKey={resetKey}
-                  hasMore={hasMore}
-                  onLoadMore={loadMore}
-                  selectedId={selectedId ?? undefined}
-                  onAddToSubgraph={addToSelectedSubgraph}
-                  onRemoveFromSubgraph={removeFromSelectedSubgraph}
-                  subgraphPaperIds={selectedSubgraphPaperIds}
-                  subgraphName={selectedSubgraph?.name}
-                />
+                <div
+                  className={`transition-opacity duration-150 ${isFiltering ? 'opacity-50' : ''}`}
+                >
+                  <PaperList
+                    items={items}
+                    clusters={clusters}
+                    clustersLoading={clustersLoading}
+                    onSelectId={selectFromList}
+                    enableHover
+                    resetKey={resetKey}
+                    hasMore={hasMore}
+                    onLoadMore={loadMore}
+                    selectedId={selectedId ?? undefined}
+                    onAddToSubgraph={addToSelectedSubgraph}
+                    onRemoveFromSubgraph={removeFromSelectedSubgraph}
+                    subgraphPaperIds={selectedSubgraphPaperIds}
+                    subgraphName={selectedSubgraph?.name}
+                  />
+                </div>
               )
             ) : (
               <PaperList

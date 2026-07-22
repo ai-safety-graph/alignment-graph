@@ -21,6 +21,9 @@ type PaperBrowser = {
   hasMore: boolean
   error: string | null
   loadMore: () => void
+  /** True while a filter/query change is refetching page 1 (stale results from
+   * the previous combo are still shown via `keepPreviousData` in the meantime). */
+  isFiltering: boolean
 }
 
 function errMessage(e: unknown): string {
@@ -52,6 +55,8 @@ export function usePaperBrowser({
     hasNextPage,
     fetchNextPage,
     status,
+    isFetching,
+    isFetchingNextPage,
     error: queryError,
   } = useInfiniteQuery({
     queryKey: ['papers', query, fromDate ?? '', cidsKey, domainsKey],
@@ -96,5 +101,6 @@ export function usePaperBrowser({
     loadMore: () => {
       if (enabled) fetchNextPage()
     },
+    isFiltering: isFetching && !isFetchingNextPage,
   }
 }
