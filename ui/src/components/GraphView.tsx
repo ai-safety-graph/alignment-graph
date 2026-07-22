@@ -179,6 +179,16 @@ export default function ArxivGraph({
     ? `Failed to load graph: ${queryError.message}`
     : null
 
+  // Full cluster legend, independent of which papers are currently loaded.
+  const { data: allClusters } = useQuery({
+    queryKey: ['clusters'],
+    queryFn: async () => {
+      const { fetchClusters } = await import('../lib/api')
+      return fetchClusters()
+    },
+    staleTime: Infinity,
+  })
+
   // Prepare simulation nodes (mutable x/y)
   const simNodes = useMemo(() => {
     if (!data) return [] as (NodeCompact & { x: number; y: number })[]
@@ -244,6 +254,8 @@ export default function ArxivGraph({
     for (const n of relatedGhostNodes) byId.set(n.id, n)
     return { byId, adj, clusters: data.clusters }
   }, [data, ghostSimNodes, relatedGhostNodes])
+
+  const clusterLabels = allClusters ?? ({} as ClustersLegend)
 
   // Debounced backend search
   const searchTimerRef = useRef<number | null>(null)
@@ -754,7 +766,7 @@ export default function ArxivGraph({
         <SearchResultsOverlay
           results={searchResults}
           onSelect={onSearchPick}
-          clusters={clusters}
+          clusters={clusterLabels}
           isLoading={isSearching}
           onAddToSubgraph={activeSavedGraph ? addToActiveSavedGraph : undefined}
           onRemoveFromSubgraph={
@@ -770,7 +782,7 @@ export default function ArxivGraph({
       {selected && (
         <GraphPaperDetails
           paper={selected}
-          clusters={clusters}
+          clusters={clusterLabels}
           related={related}
           relatedLoading={relatedLoading}
           onClose={onBackgroundClick}
