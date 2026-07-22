@@ -161,7 +161,11 @@ export default function ArxivGraph({
 
   // Data fetch. Cached by ids so revisiting the same graph (e.g. navigating
   // away to /stats and back) doesn't refire /api/graph/subset.
-  const { data, error: queryError } = useQuery({
+  const {
+    data,
+    error: queryError,
+    isLoading: isGraphLoading,
+  } = useQuery({
     queryKey: ['subgraph', ids],
     queryFn: async () => {
       const { fetchSubgraph } = await import('../lib/api')
@@ -598,6 +602,12 @@ export default function ArxivGraph({
 
   return (
     <div className='fixed inset-0 bg-neutral-950 text-[#e5e5e5]'>
+      {isGraphLoading && ids.length > 0 && (
+        <div className='absolute inset-0 flex flex-col items-center justify-center gap-3'>
+          <span className='h-8 w-8 rounded-full border-2 border-neutral-700 border-t-neutral-300 animate-spin' />
+          <p className='text-sm text-neutral-500'>Loading graph…</p>
+        </div>
+      )}
       {isEmptySavedGraph && (
         <div className='absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center'>
           <p className='text-lg text-neutral-300'>
