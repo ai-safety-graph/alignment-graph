@@ -19,13 +19,6 @@ import MobilePaperDetails from './MobilePaperDetails'
 import PaperList from './PaperList'
 import FilterBar from './FilterBar'
 import Dropdown from './Dropdown'
-import {
-  createSavedGraph,
-  deleteSavedGraph,
-  listSavedGraphs,
-  updateSavedGraph,
-  type SavedGraph,
-} from '../lib/storage'
 import type { NodeCompact } from '../lib/types'
 import { useServerFilters } from '../hooks/useServerFilters'
 import { useMediaQuery } from '../hooks/useMediaQuery'
@@ -36,6 +29,7 @@ import { usePaperBrowser } from '../hooks/usePaperBrowser'
 import { usePaperDetail } from '../hooks/usePaperDetail'
 import { useNavHistory } from '../hooks/useNavHistory'
 import { useCapabilities } from '../hooks/useCapabilities'
+import { useSubgraphManager } from '../hooks/useSubgraphManager'
 
 export default function StatsView() {
   const {
@@ -53,75 +47,44 @@ export default function StatsView() {
     null,
   )
   const [semanticLoading, setSemanticLoading] = useState(false)
-  const [subgraphs, setSubgraphs] = useState<SavedGraph[]>(() =>
-    listSavedGraphs(),
-  )
-  const [selectedSubgraphId, setSelectedSubgraphId] = useState<string | null>(
-    () =>
-      subgraphs.reduce(
-        (latest, s) => (!latest || s.createdAt > latest.createdAt ? s : latest),
-        null as SavedGraph | null,
-      )?.id ?? null,
-  )
-  const [isCreatingSubgraph, setIsCreatingSubgraph] = useState(false)
-  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
-  const [newSubgraphName, setNewSubgraphName] = useState('')
-  const [viewMode, setViewMode] = useState<'browse' | 'subgraph'>('browse')
   const [filterExpanded, setFilterExpanded] = useState(true)
-  const [subgraphNodes, setSubgraphNodes] = useState<NodeCompact[] | null>(null)
-  const [subgraphError, setSubgraphError] = useState<string | null>(null)
-  const [subgraphQuery, setSubgraphQuery] = useState('')
-  const debouncedSubgraphQuery = useDebouncedValue(subgraphQuery, 300)
-  const [subgraphActiveCids, setSubgraphActiveCids] = useState<Set<number>>(
-    new Set(),
-  )
-  const [subgraphActiveDomains, setSubgraphActiveDomains] = useState<
-    Set<string>
-  >(new Set())
 
-  const createSubgraph = (name: string) => {
-    const subgraph = createSavedGraph(name, [])
-    setSubgraphs((prev) => [...prev, subgraph])
-    setSelectedSubgraphId(subgraph.id)
-  }
-
-  const addToSelectedSubgraph = (aid: string) => {
-    if (!selectedSubgraphId) return
-    const current = subgraphs.find((s) => s.id === selectedSubgraphId)
-    if (!current || current.paperIds.includes(aid)) return
-    const updated = updateSavedGraph(selectedSubgraphId, {
-      paperIds: [...current.paperIds, aid],
-    })
-    setSubgraphs((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
-  }
-
-  const removeFromSelectedSubgraph = (aid: string) => {
-    if (!selectedSubgraphId) return
-    const current = subgraphs.find((s) => s.id === selectedSubgraphId)
-    if (!current) return
-    const updated = updateSavedGraph(selectedSubgraphId, {
-      paperIds: current.paperIds.filter((id) => id !== aid),
-    })
-    setSubgraphs((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
-  }
-
-  const startCreatingSubgraph = () => {
-    setNewSubgraphName('')
-    setIsCreatingSubgraph(true)
-  }
-
-  const cancelCreatingSubgraph = () => {
-    setIsCreatingSubgraph(false)
-    setNewSubgraphName('')
-  }
-
-  const confirmCreateSubgraph = () => {
-    const name = newSubgraphName.trim()
-    if (!name) return
-    createSubgraph(name)
-    setIsCreatingSubgraph(false)
-    setNewSubgraphName('')
-  }
+  const {
+    subgraphs,
+    selectedSubgraphId,
+    setSelectedSubgraphId,
+    selectedSubgraph,
+    selectedSubgraphPaperIds,
+    isCreatingSubgraph,
+    newSubgraphName,
+    setNewSubgraphName,
+    startCreatingSubgraph,
+    cancelCreatingSubgraph,
+    confirmCreateSubgraph,
+    isConfirmingDelete,
+    setIsConfirmingDelete,
+    confirmDeleteSubgraph,
+    viewMode,
+    toggleViewMode,
+    subgraphNodes,
+    subgraphError,
+    addToSelectedSubgraph,
+    removeFromSelectedSubgraph,
+    removeFromSubgraphView,
+    subgraphQuery,
+    setSubgraphQuery,
+    debouncedSubgraphQuery,
+    subgraphActiveCids,
+    subgraphActiveDomains,
+    toggleSubgraphCluster,
+    toggleSubgraphDomain,
+    clearSubgraphFilters,
+    hasActiveSubgraphFilters,
+    subgraphClusterEntries,
+    subgraphAvailableDomains,
+    subgraphItems,
+    subgraphNodeIds,
+  } = useSubgraphManager(clusters)
 
   const {
     fromDate,
@@ -195,6 +158,7 @@ export default function StatsView() {
   const autoSelectedRef = useRef(false)
   const searchBarRef = useRef<HTMLDivElement | null>(null)
   const [searchHeight, setSearchHeight] = useState(0)
+  const isSmall = useMediaQuery('(max-width: 768px)')
 
   useEffect(() => {
     if (
@@ -203,11 +167,11 @@ export default function StatsView() {
       papers.length > 0 &&
       selectedId === null
     ) {
-      if (!window.matchMedia('(min-width: 768px)').matches) return
+      if (isSmall !== false) return
       autoSelectedRef.current = true
       selectFromList(papers[0].aid)
     }
-  }, [papers, selectedId, selectFromList])
+  }, [papers, selectedId, selectFromList, isSmall])
 
   const items = useMemo(() => (papers ?? []).map((n) => ({ n })), [papers])
 
@@ -243,7 +207,6 @@ export default function StatsView() {
   }, [])
 
   const onHome = useLocation().pathname === '/'
-  const isSmall = useMediaQuery('(max-width: 768px)')
   const backLink =
     onHome || isSmall ? null : (
       <Link
@@ -254,154 +217,6 @@ export default function StatsView() {
         <Share2 size={18} />
       </Link>
     )
-
-  const selectedSubgraph = subgraphs.find(
-    (subgraph) => subgraph.id === selectedSubgraphId,
-  )
-
-  const selectedSubgraphPaperIds = useMemo(
-    () => new Set(selectedSubgraph?.paperIds ?? []),
-    [selectedSubgraph],
-  )
-
-  useEffect(() => {
-    if (viewMode !== 'subgraph' || !selectedSubgraphId) return
-    const paperIds = selectedSubgraph?.paperIds ?? []
-    if (paperIds.length === 0) {
-      setSubgraphNodes([])
-      return
-    }
-    let alive = true
-    setSubgraphNodes(null)
-    setSubgraphError(null)
-    ;(async () => {
-      try {
-        const { fetchSubgraph } = await import('../lib/api')
-        const data = await fetchSubgraph(paperIds)
-        if (alive) setSubgraphNodes(data.nodes)
-      } catch (e: unknown) {
-        if (alive)
-          setSubgraphError(
-            e instanceof Error ? e.message : 'Failed to load graph',
-          )
-      }
-    })()
-    return () => {
-      alive = false
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewMode, selectedSubgraphId])
-
-  const toggleViewMode = () => {
-    if (!selectedSubgraphId) return
-    setViewMode((m) => (m === 'subgraph' ? 'browse' : 'subgraph'))
-  }
-
-  const confirmDeleteSubgraph = () => {
-    if (!selectedSubgraphId) return
-    deleteSavedGraph(selectedSubgraphId)
-    const remaining = subgraphs.filter((s) => s.id !== selectedSubgraphId)
-    setSubgraphs(remaining)
-    setSelectedSubgraphId(
-      remaining.reduce(
-        (latest, s) => (!latest || s.createdAt > latest.createdAt ? s : latest),
-        null as SavedGraph | null,
-      )?.id ?? null,
-    )
-    setSubgraphNodes(null)
-    setViewMode('browse')
-    setIsConfirmingDelete(false)
-  }
-
-  const removeFromSubgraphView = (aid: string) => {
-    removeFromSelectedSubgraph(aid)
-    setSubgraphNodes((prev) => (prev ?? []).filter((n) => n.aid !== aid))
-  }
-
-  useEffect(() => {
-    setSubgraphQuery('')
-    setSubgraphActiveCids(new Set())
-    setSubgraphActiveDomains(new Set())
-    setSubgraphError(null)
-  }, [selectedSubgraphId])
-
-  const subgraphClusterEntries = useMemo(() => {
-    const counts = new Map<number, number>()
-    for (const n of subgraphNodes ?? []) {
-      counts.set(n.cid, (counts.get(n.cid) ?? 0) + 1)
-    }
-    return [...counts.entries()].map(
-      ([cid, size]) =>
-        [String(cid), { label: clusters[cid]?.label, size }] as [
-          string,
-          { label?: string | null; size: number },
-        ],
-    )
-  }, [subgraphNodes, clusters])
-
-  const subgraphAvailableDomains = useMemo(
-    () => [...new Set((subgraphNodes ?? []).map((n) => n.dm))].sort(),
-    [subgraphNodes],
-  )
-
-  const hasActiveSubgraphFilters =
-    subgraphActiveCids.size > 0 || subgraphActiveDomains.size > 0
-
-  const toggleSubgraphCluster = (cid: number) => {
-    setSubgraphActiveCids((prev) => {
-      const next = new Set(prev)
-      if (next.has(cid)) next.delete(cid)
-      else next.add(cid)
-      return next
-    })
-  }
-
-  const toggleSubgraphDomain = (dm: string) => {
-    setSubgraphActiveDomains((prev) => {
-      const next = new Set(prev)
-      if (next.has(dm)) next.delete(dm)
-      else next.add(dm)
-      return next
-    })
-  }
-
-  const clearSubgraphFilters = () => {
-    setSubgraphQuery('')
-    setSubgraphActiveCids(new Set())
-    setSubgraphActiveDomains(new Set())
-  }
-
-  const filteredSubgraphNodes = useMemo(() => {
-    const q = debouncedSubgraphQuery.trim().toLowerCase()
-    return (subgraphNodes ?? []).filter((n) => {
-      if (
-        q &&
-        !n.t.toLowerCase().includes(q) &&
-        !n.au.toLowerCase().includes(q)
-      )
-        return false
-      if (subgraphActiveCids.size > 0 && !subgraphActiveCids.has(n.cid))
-        return false
-      if (subgraphActiveDomains.size > 0 && !subgraphActiveDomains.has(n.dm))
-        return false
-      return true
-    })
-  }, [
-    subgraphNodes,
-    debouncedSubgraphQuery,
-    subgraphActiveCids,
-    subgraphActiveDomains,
-  ])
-
-  const subgraphItems = useMemo(
-    () => filteredSubgraphNodes.map((n) => ({ n })),
-    [filteredSubgraphNodes],
-  )
-
-  const subgraphNodeIds = useMemo(
-    () => new Set((subgraphNodes ?? []).map((n) => n.aid)),
-    [subgraphNodes],
-  )
 
   const newGraphButton = (
     <button
@@ -602,19 +417,6 @@ export default function StatsView() {
       <div className='flex-1 flex justify-end items-center gap-2'>
         {isBrowsing && newGraphControl}
         {filterBar && filterToggleButton}
-        <button
-          type='button'
-          onClick={toggleViewMode}
-          title={
-            viewMode === 'subgraph' ? 'Browse all papers' : 'View subgraph'
-          }
-          aria-label={
-            viewMode === 'subgraph' ? 'Back to all papers' : 'View graph papers'
-          }
-          className={`shrink-0 px-1.5 py-1 rounded-md cursor-pointer border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors ${filterExpanded ? 'bg-neutral-950' : 'bg-[#2a2a2a]'}`}
-        >
-          {viewMode === 'subgraph' ? <Globe size={15} /> : <List size={15} />}
-        </button>
         {viewMode === 'subgraph' && (
           <Link
             to={`/subgraph/${selectedSubgraphId}`}
@@ -638,6 +440,19 @@ export default function StatsView() {
             <Trash2 size={15} />
           </button>
         )}
+        <button
+          type='button'
+          onClick={toggleViewMode}
+          title={
+            viewMode === 'subgraph' ? 'Browse all papers' : 'View subgraph'
+          }
+          aria-label={
+            viewMode === 'subgraph' ? 'Back to all papers' : 'View graph papers'
+          }
+          className={`shrink-0 px-1.5 py-1 rounded-md cursor-pointer border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors ${filterExpanded ? 'bg-neutral-950' : 'bg-[#2a2a2a]'}`}
+        >
+          {viewMode === 'subgraph' ? <Globe size={15} /> : <List size={15} />}
+        </button>
       </div>
     </div>
   ) : isBrowsing ? (
@@ -991,7 +806,7 @@ export default function StatsView() {
             onClick={() => setIsConfirmingDelete(false)}
             className='absolute inset-0'
           />
-          <div className='relative z-10 w-full max-w-sm rounded-2xl bg-[#1f1f1f] border border-[#333333] shadow-2xl p-5 space-y-4'>
+          <div className='relative z-10 w-full max-w-sm rounded-md bg-[#1f1f1f] border border-[#333333] shadow-2xl p-5 space-y-4'>
             <div className='space-y-1'>
               <h2 className='text-base font-medium text-neutral-100'>
                 Delete graph
@@ -1008,14 +823,14 @@ export default function StatsView() {
               <button
                 type='button'
                 onClick={() => setIsConfirmingDelete(false)}
-                className='px-3 py-1.5 rounded-full text-sm text-neutral-300 bg-[#2a2a2a] border border-[#333333] hover:text-neutral-100 cursor-pointer'
+                className='px-3 py-1.5 rounded-md text-sm text-neutral-300 bg-[#2a2a2a] border border-[#333333] hover:text-neutral-100 cursor-pointer'
               >
                 Cancel
               </button>
               <button
                 type='button'
                 onClick={confirmDeleteSubgraph}
-                className='px-3 py-1.5 rounded-full text-sm text-white bg-red-600 hover:bg-red-500 cursor-pointer'
+                className='px-3 py-1.5 rounded-md text-sm text-white bg-red-600 hover:bg-red-500 cursor-pointer'
               >
                 Delete
               </button>

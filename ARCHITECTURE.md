@@ -4,13 +4,12 @@
 
 This repository builds an AI-safety literature exploration system with two major parts:
 
-1. A **Python pipeline** that harvests arXiv metadata, stores it in SQLite or PostgreSQL, computes embeddings, filters papers, clusters them, labels clusters, and (in legacy mode) exports JSON artifacts.
+1. A **Python pipeline** that harvests arXiv metadata, stores it in PostgreSQL, computes embeddings, filters papers, clusters them, and labels clusters.
 2. A **React/Vite UI** that loads all data from a live FastAPI backend.
 
-The active deployment mode is **API mode**:
+The active and only supported deployment mode is **API mode**: pipeline → PostgreSQL + pgvector → FastAPI → frontend. See top-level `CLAUDE.md`.
 
-- **API mode** (production / active target): pipeline → PostgreSQL + pgvector → FastAPI → frontend
-- **Static mode** (legacy): pipeline → SQLite → JSON artifacts → frontend. The pipeline still exports `graph.json` / `summaries.json`, but the UI no longer targets them — only `lib/summaries.ts` retains a `summaries.json` fallback. New work assumes the API (see top-level `CLAUDE.md`).
+The pipeline can still export SQLite / JSON artifacts (`export-graph`, `export-summaries`) and the UI retains a `summaries.json` fallback in `lib/summaries.ts`, but this static path is legacy — it is not the deployment target and new work should not extend it.
 
 ---
 
@@ -24,9 +23,9 @@ arXiv OAI-PMH
   -> stage-2 keep / reject decisions
   -> clustering assignments
   -> cluster labels + graph coords (graph_x, graph_y stored in papers table)
-  -> FastAPI backend (API mode)     -> React frontend
-  -> export_graph.py  (static mode) -> ui/public/graph.json
-  -> export_summaries.py (static)   -> ui/public/summaries.json
+  -> FastAPI backend                -> React frontend
+  -> export_graph.py  (legacy)      -> ui/public/graph.json
+  -> export_summaries.py (legacy)   -> ui/public/summaries.json
 ```
 
 Canonical CLI workflow:
@@ -39,7 +38,7 @@ aisafety-pipeline filter
 aisafety-pipeline cluster
 aisafety-pipeline label
 aisafety-pipeline export-graph   # also persists graph_x/y to DB
-aisafety-pipeline serve          # start FastAPI (API mode only)
+aisafety-pipeline serve          # start FastAPI
 ```
 
 ---
@@ -94,7 +93,7 @@ One-time migration utilities:
 
 Runtime state and local persistence:
 
-- `arxiv_papers.db`: SQLite database (used in local/static mode)
+- `arxiv_papers.db`: SQLite database (local pipeline development only)
 - `last_run.txt`: harvest state/checkpointing
 
 ### `archive/`
@@ -121,13 +120,13 @@ The public orchestration surface is defined in `src/aisafety_pipeline/utils.py`:
 
 ## Database Backends
 
-### SQLite (local / static mode)
+### SQLite (local pipeline runs only)
 
 Tables: `papers_raw`, `papers`, `embeddings` (BLOB), `cluster_meta`
 
-Activated when `DATABASE_URL` is unset. Used for local pipeline runs and static artifact export. `db.connect()` returns a `SqliteConnection` wrapper.
+Activated when `DATABASE_URL` is unset. Only used for local pipeline development and legacy static artifact export — not part of the deployed system. `db.connect()` returns a `SqliteConnection` wrapper.
 
-### PostgreSQL + pgvector (production / API mode)
+### PostgreSQL + pgvector (production)
 
 Tables: `papers_raw`, `papers` (includes `embedding vector(768)`, `graph_x`, `graph_y`), `cluster_meta`
 
@@ -137,14 +136,9 @@ Both backends share the same `Connection` interface so all pipeline modules are 
 
 ---
 
-## Frontend Artifacts (static mode)
+## Legacy Static Artifacts
 
-When `VITE_API_URL` is not set, the UI falls back to static files in `ui/public/`:
-
-- `graph.json` — compact graph with nodes, links, clusters, and coords
-- `summaries.json` — summary lookup keyed by arXiv abs URL
-
-These are produced by `export-graph` and `export-summaries` respectively.
+The pipeline can still produce static files in `ui/public/` via `export-graph` / `export-summaries` (`graph.json`, `summaries.json`), and `lib/summaries.ts` retains a fallback that reads `summaries.json` when the API has no data for a paper. This predates API mode and is not exercised by the deployed UI, which always has `VITE_API_URL` set — do not build new features against it (see top-level `CLAUDE.md`).
 
 ---
 
@@ -153,8 +147,8 @@ These are produced by `export-graph` and `export-summaries` respectively.
 | Component             | Service          | Notes                                                                 |
 | --------------------- | ---------------- | --------------------------------------------------------------------- |
 | PostgreSQL + pgvector | Supabase         | Native pgvector, connection pooling                                   |
-| FastAPI API           | Render / Railway | `DATABASE_URL` env var required; `aisafety-pipeline serve` entrypoint |
-| Frontend              | Netlify          | Set `VITE_API_URL` to API URL; falls back to static JSON if unset     |
+| FastAPI API           | Railway          | `DATABASE_URL` env var required; `aisafety-pipeline serve` entrypoint |
+| Frontend              | Netlify          | `VITE_API_URL` set to the API URL via Netlify's env vars              |
 
 ---
 
@@ -197,11 +191,11 @@ AI should be careful around:
 
 ## Cross-Subsystem Risks
 
-1. **Artifact schema drift**: changes to `export_graph.py` field names silently break the UI in static mode.
-2. **Cluster-method mismatch**: API and static export both assume k-means; changing this requires coordinated updates.
+1. **Artifact schema drift**: changes to `export_graph.py` field names silently break the legacy static export path (not the deployed UI).
+2. **Cluster-method mismatch**: the API and legacy static export both assume k-means; changing this requires coordinated updates.
 3. **Identifier mismatch**: arXiv abs URL format must remain stable across pipeline and UI. The frontend assigns ephemeral numeric `id` values by index; `aid` (the arXiv URL) is the durable key.
-4. **Static artifact staleness**: in static mode, pipeline changes have no effect until fresh JSON is exported and redeployed.
-5. **API dependency in UI**: semantic search, related papers, subset graph, and paper listing all require `VITE_API_URL`. `GraphView` and `StatsView` will not load without it; only the `summaries.json` fallback survives offline.
+4. **Legacy artifact staleness**: if `graph.json` / `summaries.json` are ever regenerated for local/offline use, they go stale the moment pipeline data changes unless re-exported — not a concern for the deployed UI, which doesn't read them.
+5. **API dependency in UI**: semantic search, related papers, subset graph, and paper listing all require `VITE_API_URL`. `GraphView` and `StatsView` will not load without it.
 6. **Graph coordinate alignment**: the desktop graph places search/related "ghost" nodes by re-applying the loaded subset's normalisation to each paper's raw coords. This is a contract spanning `graph.py`/`papers.py` (which expose `meta.coords.bounds` and raw `rx`/`ry`) and `GraphView.tsx`'s `ghostCoord()` (which mirrors the backend canvas-mapping formula). Changing the normalisation on either side without the other misplaces ghost nodes.
 
 ---
@@ -212,7 +206,7 @@ When editing this repository, treat it as four layers:
 
 1. **Ingest and analysis** (`src/aisafety_pipeline/` pipeline modules)
 2. **Persistence** (`db.py` — SQLite or PostgreSQL)
-3. **Serving / artifact contract** (API routes or `graph.json` / `summaries.json`)
+3. **Serving contract** (API routes; legacy `graph.json` / `summaries.json` export)
 4. **Presentation** (`ui/`)
 
 Most safe changes stay within a layer. Cross-layer changes should be intentional and documented.
