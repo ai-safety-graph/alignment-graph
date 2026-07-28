@@ -9,9 +9,8 @@ from typing import Dict, List, Tuple, Optional
 
 import numpy as np
 
-from .config import DB_PATH, GREEN, RESET
+from .config import GREEN, RESET
 from .config import EMB_MODEL, EMB_DIMS
-from .embeddings import vec_from_bytes
 
 
 def _to_jsonable(obj):
@@ -38,7 +37,7 @@ def _trim(s: Optional[str], max_len: int = 500) -> Optional[str]:
 
 
 def export_json_graph(
-    db_path: str = DB_PATH,
+    db_path: str | None = None,
     out_path: str = "force_graph.json",
     # Size/UX controls
     compact: bool = True,
@@ -107,7 +106,7 @@ def export_json_graph(
                         "label": r["label"],
                         "confidence": float(r["confidence"] or 0.0)
                     }
-        except sqlite3.OperationalError:
+        except Exception:
             pass
 
         # 3) Paper records + indices
@@ -130,31 +129,17 @@ def export_json_graph(
             ids.append(r["id"]); cluster_ids.append(cid); cluster_counts[cid] += 1
 
         # 4) Embeddings (neighbors + optional coords)
-        if conn.is_pg:
-            emb_rows = conn.execute(
-                "SELECT id, embedding FROM papers WHERE embedding IS NOT NULL AND id = ANY(%s)",
-                (ids,),
-            ).fetchall()
-            vec_by_id = {}
-            dim = EMB_DIMS
-            for pid, vec in emb_rows:
-                if vec is not None:
-                    v = np.array(vec, dtype=np.float32)
-                    v /= (np.linalg.norm(v) + 1e-12)
-                    vec_by_id[pid] = v
-        else:
-            placeholders = ",".join(["?"] * len(ids))
-            emb_rows = conn.execute(
-                f"SELECT paper_id, dim, vector FROM embeddings WHERE model=? AND paper_id IN ({placeholders})",
-                (EMB_MODEL, *ids)
-            ).fetchall()
-            vec_by_id = {}
-            dim = None
-            for pid, d, blob in emb_rows:
-                v = vec_from_bytes(blob, d).astype(np.float32)
+        emb_rows = conn.execute(
+            "SELECT id, embedding FROM papers WHERE embedding IS NOT NULL AND id = ANY(%s)",
+            (ids,),
+        ).fetchall()
+        vec_by_id = {}
+        dim = EMB_DIMS
+        for pid, vec in emb_rows:
+            if vec is not None:
+                v = np.array(vec, dtype=np.float32)
                 v /= (np.linalg.norm(v) + 1e-12)
                 vec_by_id[pid] = v
-                dim = d
         missing = [pid for pid in ids if pid not in vec_by_id]
         if missing:
             raise RuntimeError(f"{len(missing)} papers missing embeddings; run embed/cluster.")

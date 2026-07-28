@@ -3,7 +3,7 @@ import numpy as np, pandas as pd
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import normalize
 from .config import GREEN, YELLOW, BLUE, RESET
-from .embeddings import vec_from_bytes, upsert_embedding, fetch_existing_embeddings, EmbeddingGenerator
+from .embeddings import upsert_embedding, fetch_existing_embeddings, EmbeddingGenerator
 
 ## Contributed by mnm-matin
 class ClusterManager:
@@ -47,19 +47,11 @@ def compute_and_store_missing_embeddings(conn, df: pd.DataFrame, device="auto"):
 
 def load_embeddings_for_df(conn, df: pd.DataFrame) -> np.ndarray:
     ids = df["id"].tolist()
-    if conn.is_pg:
-        rows = conn.execute(
-            "SELECT id, embedding FROM papers WHERE embedding IS NOT NULL AND id = ANY(%s)",
-            (ids,),
-        ).fetchall()
-        by_id = {row[0]: np.array(row[1], dtype=np.float32) for row in rows}
-    else:
-        placeholders = ",".join(["?"] * len(ids))
-        rows = conn.execute(
-            f"SELECT paper_id, dim, vector FROM embeddings WHERE model=? AND paper_id IN ({placeholders})",
-            ("specter2", *ids)
-        ).fetchall()
-        by_id = {pid: vec_from_bytes(blob, dim) for (pid, dim, blob) in rows}
+    rows = conn.execute(
+        "SELECT id, embedding FROM papers WHERE embedding IS NOT NULL AND id = ANY(%s)",
+        (ids,),
+    ).fetchall()
+    by_id = {row[0]: np.array(row[1], dtype=np.float32) for row in rows}
     mat = np.vstack([by_id[pid] for pid in ids])
     return mat
 

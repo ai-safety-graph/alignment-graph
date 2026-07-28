@@ -9,7 +9,7 @@ This repository builds an AI-safety literature exploration system with two major
 
 The active and only supported deployment mode is **API mode**: pipeline → PostgreSQL + pgvector → FastAPI → frontend. See top-level `CLAUDE.md`.
 
-The pipeline can still export SQLite / JSON artifacts (`export-graph`, `export-summaries`) and the UI retains a `summaries.json` fallback in `lib/summaries.ts`, but this static path is legacy — it is not the deployment target and new work should not extend it.
+The pipeline can still export static JSON artifacts (`export-graph`, `export-summaries`) and the UI retains a `summaries.json` fallback in `lib/summaries.ts`, but this static path is legacy — it is not the deployment target and new work should not extend it.
 
 ---
 
@@ -17,9 +17,9 @@ The pipeline can still export SQLite / JSON artifacts (`export-graph`, `export-s
 
 ```text
 arXiv OAI-PMH
-  -> papers_raw (SQLite or PostgreSQL)
+  -> papers_raw (PostgreSQL)
   -> papers (working set / pipeline state)
-  -> embeddings (SPECTER2 vectors — BLOB in SQLite, vector(768) in PostgreSQL)
+  -> embeddings (SPECTER2 vectors — vector(768) in PostgreSQL/pgvector)
   -> stage-2 keep / reject decisions
   -> clustering assignments
   -> cluster labels + graph coords (graph_x, graph_y stored in papers table)
@@ -50,7 +50,7 @@ aisafety-pipeline serve          # start FastAPI
 Primary backend package. Owns:
 
 - arXiv/OAI harvesting
-- Dual-mode persistence (SQLite via `SqliteConnection`, PostgreSQL via `PgConnection`)
+- Persistence (PostgreSQL + pgvector via `PgConnection`)
 - Embedding generation and storage
 - Filtering (regex + semantic centroid)
 - Clustering (k-means, agglomerative, HDBSCAN)
@@ -85,15 +85,14 @@ Frontend application built with Vite/React. Owns:
 
 ### `migrations/`
 
-One-time migration utilities:
+Postgres-specific setup utilities:
 
-- `sqlite_to_postgres.py`: migrates existing SQLite database to PostgreSQL, converts embedding BLOBs to pgvector, verifies row counts.
+- `enable_rls.sql`: Supabase row-level-security setup.
 
 ### `data/`
 
 Runtime state and local persistence:
 
-- `arxiv_papers.db`: SQLite database (local pipeline development only)
 - `last_run.txt`: harvest state/checkpointing
 
 ### `archive/`
@@ -118,21 +117,13 @@ The public orchestration surface is defined in `src/aisafety_pipeline/utils.py`:
 
 ---
 
-## Database Backends
+## Database Backend
 
-### SQLite (local pipeline runs only)
-
-Tables: `papers_raw`, `papers`, `embeddings` (BLOB), `cluster_meta`
-
-Activated when `DATABASE_URL` is unset. Only used for local pipeline development and legacy static artifact export — not part of the deployed system. `db.connect()` returns a `SqliteConnection` wrapper.
-
-### PostgreSQL + pgvector (production)
+### PostgreSQL + pgvector (only supported backend)
 
 Tables: `papers_raw`, `papers` (includes `embedding vector(768)`, `graph_x`, `graph_y`), `cluster_meta`
 
-Activated when `DATABASE_URL` env var is set to a valid PostgreSQL DSN. `db.connect()` returns a `PgConnection` wrapper. Vector search uses an HNSW index (`vector_cosine_ops`).
-
-Both backends share the same `Connection` interface so all pipeline modules are backend-agnostic.
+Requires the `DATABASE_URL` env var to be set to a valid PostgreSQL DSN — `db.connect()` raises `RuntimeError` otherwise. Vector search uses an HNSW index (`vector_cosine_ops`). Run `aisafety-pipeline init-db` (or any pipeline command — `harvest` already bootstraps the schema) against a fresh database to create tables/extensions.
 
 ---
 
@@ -180,11 +171,10 @@ AI may safely modify:
 
 AI should be careful around:
 
-- PostgreSQL/SQLite schema changes
+- PostgreSQL schema changes
 - Paper id normalization
 - Compact graph field names (`id`, `aid`, `t`, `au`, `pd`, `dm`, `ln`, `cid`)
 - Cluster id semantics
-- `is_pg` branching in pipeline modules
 - pgvector operator syntax (`<=>`)
 
 ---
@@ -205,7 +195,7 @@ AI should be careful around:
 When editing this repository, treat it as four layers:
 
 1. **Ingest and analysis** (`src/aisafety_pipeline/` pipeline modules)
-2. **Persistence** (`db.py` — SQLite or PostgreSQL)
+2. **Persistence** (`db.py` — PostgreSQL)
 3. **Serving contract** (API routes; legacy `graph.json` / `summaries.json` export)
 4. **Presentation** (`ui/`)
 

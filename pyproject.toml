@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "aisafety-pipeline"
 version = "0.1.0"
-description = "Staged arXiv → SQLite → Embeddings → Filter → Clustering → labeling → JSON exports"
+description = "Staged arXiv → PostgreSQL → Embeddings → Filter → Clustering → labeling → JSON exports"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { text = "MIT" }

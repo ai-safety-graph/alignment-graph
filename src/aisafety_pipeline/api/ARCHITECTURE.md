@@ -4,7 +4,7 @@
 
 FastAPI backend that serves live data from a PostgreSQL + pgvector database to the React frontend. Replaces static JSON artifact loading with dynamic, queryable endpoints.
 
-Requires `DATABASE_URL` env var pointing to a PostgreSQL instance with pgvector and a fully-migrated schema (run `migrations/sqlite_to_postgres.py` first, then the full pipeline).
+Requires `DATABASE_URL` env var pointing to a PostgreSQL instance with pgvector (run `aisafety-pipeline init-db`, then the full pipeline, to populate it).
 
 ---
 

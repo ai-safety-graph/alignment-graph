@@ -10,7 +10,7 @@ Its core job is to manage a staged literature-processing pipeline:
 harvest -> stage1 -> embed -> filter -> cluster -> label -> export / serve
 ```
 
-The package supports two database backends transparently: **SQLite** (local / static) and **PostgreSQL + pgvector** (production / API).
+The package is PostgreSQL + pgvector only — every pipeline command and the API require `DATABASE_URL` to be set.
 
 ---
 
@@ -20,27 +20,23 @@ The package supports two database backends transparently: **SQLite** (local / st
 
 Central configuration:
 
-- `DB_PATH` — SQLite path (local dev)
-- `DATABASE_URL` — PostgreSQL DSN (production; activates `PgConnection`)
+- `DATABASE_URL` — PostgreSQL DSN (required by every pipeline command and the API)
 - `API_HOST`, `API_PORT`, `API_CORS_ORIGINS`
 - Embedding model metadata, OAI-PMH settings, logging colors
 
 ### `db.py`
 
-Owns database connection setup and schema initialization for both backends.
+Owns database connection setup and schema initialization.
 
 Key exports:
 
-- `connect(db_arg)` — returns `SqliteConnection` or `PgConnection` based on `DATABASE_URL`
-- `init_db(db_arg)` — creates schema for the detected backend
-- `SqliteConnection` / `PgConnection` — unified wrapper pair with `is_pg` flag
+- `connect(db_arg)` — returns a `PgConnection`; raises `RuntimeError` if neither `db_arg` (a `postgresql://`/`postgres://` DSN) nor `DATABASE_URL` is set
+- `init_db(db_arg)` — creates the schema (tables, `vector` extension, HNSW index)
+- `PgConnection` — thin wrapper around psycopg2
 
-Both wrappers implement the same cursor interface. `PgConnection` uses psycopg2 with `DictCursor` and intercepts `BEGIN`/`COMMIT`/`ROLLBACK` strings to map them to connection-level calls. Parameter placeholders (`?`, `:name`) are translated to psycopg2 format (`%s`, `%(name)s`) automatically.
+`PgConnection` uses psycopg2 with `DictCursor` and intercepts `BEGIN`/`COMMIT`/`ROLLBACK` strings to map them to connection-level calls. Parameter placeholders (`?`, `:name`) are translated to psycopg2 format (`%s`, `%(name)s`) automatically via `_to_pg_sql()`.
 
-Schema variants:
-
-- **SQLite**: `papers_raw`, `papers`, `embeddings` (BLOB), `cluster_meta`
-- **PostgreSQL**: `papers_raw`, `papers` (with `embedding vector(768)`, `graph_x`, `graph_y`), `cluster_meta` + HNSW index
+Schema: `papers_raw`, `papers` (with `embedding vector(768)`, `graph_x`, `graph_y`), `cluster_meta` + HNSW index.
 
 ### `oai.py`
 
@@ -53,24 +49,17 @@ Implements filtering stages:
 - **stage 1**: regex/keyword gating into `papers`
 - **stage 2**: semantic filtering using centroid or logistic regression
 
-Dual-mode for vector loading: PostgreSQL reads `papers.embedding`, SQLite reads `embeddings` table.
+Vector loading reads `papers.embedding` via `id = ANY(%s)`.
 
 ### `embeddings.py`
 
-Generates SPECTER2 embeddings and stores them.
-
-Dual-mode storage:
-
-- PostgreSQL: `UPDATE papers SET embedding = %s WHERE id = %s`
-- SQLite: INSERT into separate `embeddings` BLOB table
-
-Provides `bytes_from_vec` / `vec_from_bytes` helpers for SQLite BLOB encoding.
+Generates SPECTER2 embeddings and stores them via `UPDATE papers SET embedding = %s WHERE id = %s`.
 
 ### `clustering.py`
 
 Assigns clusters to kept papers. Supports k-means, agglomerative, HDBSCAN.
 
-Dual-mode: PostgreSQL reads `papers.embedding`, SQLite reads `embeddings` table.
+Reads `papers.embedding` via `id = ANY(%s)`.
 Uses cursor-based fetch + `pd.DataFrame([list(r) for r in rows], ...)` instead of `pd.read_sql_query` (incompatible with the connection wrapper).
 
 ### `labeling.py`
@@ -81,11 +70,11 @@ Assigns cluster labels and terms into `cluster_meta`. Uses cursor-based DataFram
 
 Exports frontend graph JSON from filtered + clustered papers. Also persists `graph_x` / `graph_y` back to the `papers` table after layout computation.
 
-Dual-mode embedding loading for neighbor-link calculation.
+Loads embeddings for neighbor-link calculation via `id = ANY(%s)`.
 
 ### `export_summaries.py`
 
-Exports summary lookup JSON. Dual-mode WHERE clause for id whitelist.
+Exports summary lookup JSON. WHERE clause for id whitelist uses `id = ANY(%s)`.
 
 ### `api/`
 
@@ -113,7 +102,7 @@ aisafety-pipeline export-summaries
 aisafety-pipeline serve          # FastAPI (DATABASE_URL required)
 ```
 
-Each pipeline stage persists its outputs back into the database. `serve` requires PostgreSQL.
+Each pipeline stage persists its outputs back into the database. `serve` requires PostgreSQL — as does every other command.
 
 ---
 
@@ -121,38 +110,27 @@ Each pipeline stage persists its outputs back into the database. `serve` require
 
 ### Connection model
 
-`db.connect()` auto-detects backend:
+`db.connect(db_arg)` returns a `PgConnection` (psycopg2, DictCursor, pgvector registered). It raises `RuntimeError` unless a DSN is available — either `db_arg` (when it looks like a `postgresql://`/`postgres://` DSN, e.g. via each subcommand's `--db` flag) or the `DATABASE_URL` env var.
 
-- `DATABASE_URL` set → `PgConnection` (psycopg2, DictCursor, pgvector registered)
-- `DATABASE_URL` unset → `SqliteConnection` (sqlite3, row_factory=Row, foreign keys ON)
+The wrapper exposes `.cursor()`, `.commit()`, `.rollback()`, `.execute()`, `.close()`.
 
-Both return a wrapper with `.cursor()`, `.commit()`, `.rollback()`, `.execute()`, `.close()`, and `.is_pg` flag.
+A fresh database is bootstrapped by running `aisafety-pipeline init-db` (or any command that happens to call `db.init_db()` internally, like `harvest`).
 
-### SQLite tables
+### `papers_raw`
 
-**`papers_raw`**: raw upstream metadata from OAI harvest.
+Raw upstream metadata from OAI harvest.
 
-**`papers`**: working set and pipeline state.
+### `papers`
 
-Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `kmeans_cluster`, `agg_cluster`, `hdbscan_cluster`, `ai_regex_hit`, `ai_sem_sim`, `ai_stage2_keep`, `ai_stage2_reason`, `domain_tag`, `graph_x`, `graph_y`
+Working set and pipeline state.
 
-**`embeddings`**: separate BLOB table — `paper_id`, `model`, `dim`, `vector`, `created_at`.
+Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `kmeans_cluster`, `agg_cluster`, `hdbscan_cluster`, `ai_regex_hit`, `ai_sem_sim`, `ai_stage2_keep`, `ai_stage2_reason`, `domain_tag`, `graph_x`, `graph_y`, `embedding vector(768)`
 
-**`cluster_meta`**: `(method, cluster_id)` → `label`, `confidence`, `terms`.
+`CREATE EXTENSION IF NOT EXISTS vector` is run automatically by `init_db()`, along with an HNSW index: `CREATE INDEX ON papers USING hnsw (embedding vector_cosine_ops)`.
 
-### PostgreSQL tables
+### `cluster_meta`
 
-Same as SQLite except:
-
-- `papers` includes `embedding vector(768)` (replaces the `embeddings` table)
-- `papers` includes `graph_x REAL`, `graph_y REAL`
-- No separate `embeddings` table
-- `CREATE EXTENSION IF NOT EXISTS vector` required
-- HNSW index: `CREATE INDEX ON papers USING hnsw (embedding vector_cosine_ops)`
-
-### Dual-mode invariant
-
-All pipeline modules use `conn.is_pg` to branch between vector storage strategies. No module imports `sqlite3` or `psycopg2` directly — they use `db.connect()`.
+`(method, cluster_id)` → `label`, `confidence`, `terms`.
 
 ---
 
@@ -160,7 +138,7 @@ All pipeline modules use `conn.is_pg` to branch between vector storage strategie
 
 1. **Harvest** → `papers_raw`
 2. **Stage 1** → `papers` (regex filter, `ai_regex_hit`)
-3. **Embedding** → `papers.embedding` (PostgreSQL) or `embeddings` (SQLite)
+3. **Embedding** → `papers.embedding`
 4. **Stage 2 filter** → `papers` (`ai_sem_sim`, `ai_stage2_keep`, `ai_stage2_reason`)
 5. **Clustering** → `papers` (`kmeans_cluster`, `agg_cluster`, `hdbscan_cluster`)
 6. **Labeling** → `cluster_meta`
@@ -206,8 +184,8 @@ Notable defaults:
 - Paper ids are canonical arXiv abs URLs
 - `papers` is the central state table — changes affect all downstream stages
 - `cid` in exports means k-means cluster id
-- Embedding storage location differs by backend (`papers.embedding` vs `embeddings` table)
-- `graph_x/y` are always stored back to DB by `export-graph`, regardless of backend
+- Embeddings live in `papers.embedding` (pgvector)
+- `graph_x/y` are always stored back to DB by `export-graph`
 
 ---
 
@@ -222,9 +200,7 @@ Safe:
 
 Be careful around:
 
-- SQL schema changes (either backend)
-- `is_pg` branching logic in pipeline modules
-- Embedding serialization format (`bytes_from_vec` / `vec_from_bytes`)
+- SQL schema changes
 - Canonical paper id normalization
 - Compact graph field names
 - `_to_pg_sql()` param translation in `db.py`
@@ -237,7 +213,6 @@ Be careful around:
 1. **Schema migrations are implicit**: `db.py` does `CREATE TABLE IF NOT EXISTS` + `ALTER TABLE ADD COLUMN` for new columns, but has no formal migration framework.
 2. **Duplicate metadata in exports**: graph and summaries overlap; changes must stay consistent.
 3. **Export failures occur late**: missing embeddings only caught at export time.
-4. **`serve` requires PostgreSQL**: the FastAPI backend has no SQLite fallback.
 
 ---
 

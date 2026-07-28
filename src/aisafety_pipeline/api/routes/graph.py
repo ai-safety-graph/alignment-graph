@@ -26,9 +26,6 @@ class SubsetRequest(BaseModel):
 
 
 def _build_subgraph(conn, paper_ids: List[str]) -> dict:
-    if not conn.is_pg:
-        raise RuntimeError("Subset graph endpoint requires a PostgreSQL connection")
-
     rows = conn.execute("""
         SELECT id, title, authors, published, link, domain_tag, kmeans_cluster,
                graph_x, graph_y

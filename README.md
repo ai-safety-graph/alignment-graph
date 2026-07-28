@@ -1,13 +1,13 @@
 # AI Safety Pipeline & Visualisation
 
-A staged pipeline for harvesting **arXiv** papers → storing in **SQLite or PostgreSQL** → generating **SPECTER2 embeddings** → applying filters → clustering → serving via **FastAPI** or exporting **JSON artifacts** for visualization.
+A staged pipeline for harvesting **arXiv** papers → storing in **PostgreSQL + pgvector** → generating **SPECTER2 embeddings** → applying filters → clustering → serving via **FastAPI** or exporting **JSON artifacts** for visualization.
 
 [Live Web App](https://alignment-graph.netlify.app/)
 
 ## Features
 
 - 🔄 OAI-PMH harvest from arXiv (`cs`, `stat`, `econ`)
-- 🗄️ Dual-mode storage: **SQLite** (local dev) or **PostgreSQL + pgvector** (production)
+- 🗄️ Storage: **PostgreSQL + pgvector**
 - 🧠 Embeddings via [SPECTER2](https://huggingface.co/allenai/specter2)
 - 🧹 Two-stage filtering: regex + semantic centroid/logreg
 - 📊 Clustering (k-means, agglomerative, HDBSCAN)
@@ -41,102 +41,96 @@ uv pip install torch --index-url https://download.pytorch.org/whl/cpu
 
 ---
 
+## Database Setup (PostgreSQL + pgvector — required)
+
+Every pipeline command and the API require a PostgreSQL + pgvector database. Pick one:
+
+**Option A — local, via Docker Compose (recommended for self-hosting):**
+
+```bash
+cp .env.example .env       # DATABASE_URL already points at the compose service
+docker compose up -d       # starts pgvector/pgvector:pg16 on localhost:5432
+```
+
+**Option B — hosted (e.g. [Supabase](https://supabase.com), free tier, pgvector built-in):**
+
+```bash
+export DATABASE_URL=postgresql://user:password@host:5432/dbname
+# or add DATABASE_URL to .env in the project root (loaded automatically)
+```
+
+Then, either way, create the schema:
+
+```bash
+aisafety-pipeline init-db
+```
+
+---
+
 ## CLI Usage
 
 ```bash
 aisafety-pipeline --help
 ```
 
+All commands read `DATABASE_URL` from the environment/`.env` by default; pass `--db postgresql://...` to point at a different database.
+
 ### Common workflow
 
 **1. Harvest arXiv metadata**
 
 ```bash
-aisafety-pipeline harvest --from 2024-01-01 --until 2024-12-31 --db data/arxiv_papers.db
+aisafety-pipeline harvest --from 2024-01-01 --until 2024-12-31
 ```
 
 **2. Regex / keyword stage-1 filter**
 
 ```bash
-aisafety-pipeline stage1 --db data/arxiv_papers.db
+aisafety-pipeline stage1
 ```
 
 **3. Generate SPECTER2 embeddings**
 
 ```bash
-aisafety-pipeline embed --db data/arxiv_papers.db --device auto
+aisafety-pipeline embed --device auto
 ```
 
 **4. Stage-2 semantic filter**
 
 ```bash
-aisafety-pipeline filter --db data/arxiv_papers.db --method centroid --seeds seeds.txt --tau 0.92
+aisafety-pipeline filter --method centroid --seeds seeds.txt --tau 0.92
 ```
 
 **5. Cluster**
 
 ```bash
-aisafety-pipeline cluster --db data/arxiv_papers.db --kmeans 8 --agg 8 --hdbscan-min 5
+aisafety-pipeline cluster --kmeans 8
 ```
 
 **6. Auto-label clusters**
 
 ```bash
-aisafety-pipeline label --db data/arxiv_papers.db
+aisafety-pipeline label
 ```
 
 **7a. Export static artifacts (static / Netlify mode)**
 
 ```bash
-aisafety-pipeline export-graph --db data/arxiv_papers.db --out ui/public/graph.json --coords fr
-aisafety-pipeline export-summaries --db data/arxiv_papers.db --out ui/public/summaries.json
+aisafety-pipeline export-graph --out ui/public/graph.json --coords fr
+aisafety-pipeline export-summaries --out ui/public/summaries.json
 ```
 
-**7b. Start the API (PostgreSQL mode)**
+**7b. Start the API**
 
 ```bash
-DATABASE_URL=postgresql://... aisafety-pipeline serve --reload
-```
-
----
-
-## PostgreSQL + pgvector Setup (API mode)
-
-### 1. Provision PostgreSQL with pgvector
-
-Use [Supabase](https://supabase.com) (free tier, pgvector built-in) or a local Docker instance:
-
-```bash
-docker run -e POSTGRES_PASSWORD=pw -p 5432:5432 pgvector/pgvector:pg16
-```
-
-### 2. Set environment variable
-
-```bash
-export DATABASE_URL=postgresql://user:password@host:5432/dbname
-```
-
-Or add to `.env` in the project root (loaded automatically).
-
-### 3. Migrate existing SQLite data
-
-```bash
-python migrations/sqlite_to_postgres.py --db data/arxiv_papers.db
-```
-
-The script migrates `papers_raw`, `papers`, `cluster_meta`, and converts embedding BLOBs to pgvector format. Prints a verification table comparing SQLite vs PostgreSQL row counts.
-
-### 4. Start the API
-
-```bash
-aisafety-pipeline serve
+aisafety-pipeline serve --reload
 # or with custom host/port:
 aisafety-pipeline serve --host 0.0.0.0 --port 8000 --reload
 ```
 
 API docs available at `http://localhost:8000/docs`.
 
-### 5. Configure the frontend
+### Configure the frontend
 
 Set `VITE_API_URL` in `ui/.env.development` (or Netlify env vars for production):
 

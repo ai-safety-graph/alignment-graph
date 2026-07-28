@@ -40,27 +40,31 @@ def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description="Staged arXiv AI-safety pipeline")
     sp = ap.add_subparsers(dest="cmd", required=True)
 
+    idb = sp.add_parser("init-db", help="Create/upgrade the PostgreSQL schema (tables, extensions, indexes)")
+    idb.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
+    idb.set_defaults(func=_cmd_init_db)
+
     a = sp.add_parser("harvest", help="OAI-PMH harvest into papers_raw")
     a.add_argument("--from", dest="from_date", help="YYYY-MM-DD")
     a.add_argument("--until", dest="until_date", help="YYYY-MM-DD")
-    a.add_argument("--db", default=config.DB_PATH)
+    a.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
     a.add_argument("--state-file", default=config.STATE_FILE)
     a.set_defaults(func=oai.cmd_harvest)
 
     b = sp.add_parser("stage1", help="Regex/keyword gate into papers")
-    b.add_argument("--db", default=config.DB_PATH)
+    b.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
     b.add_argument("--keep-all-and-filter", action="store_true",
                    help="Copy all raw papers into `papers` (mark ai_regex_hit accordingly)")
     b.set_defaults(func=filters.cmd_stage1)
 
     c = sp.add_parser("embed", help="Ensure Specter2 embeddings for candidates")
-    c.add_argument("--db", default=config.DB_PATH)
+    c.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
     c.add_argument("--device", default="auto",
                    help="auto|cpu|mps|cuda|cuda:N (e.g. cuda:0)")
     c.set_defaults(func=embeddings.cmd_embed)
 
     d = sp.add_parser("filter", help="Stage-2 semantic filter")
-    d.add_argument("--db", default=config.DB_PATH)
+    d.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
     d.add_argument("--method", choices=["centroid", "logreg"], default="centroid")
     d.add_argument("--seeds", help="Path to seeds.txt (one arXiv id/url per line)")
     d.add_argument("--labels", help="labels.csv with columns: id,label (0/1)")
@@ -68,14 +72,14 @@ def build_parser() -> argparse.ArgumentParser:
     d.set_defaults(func=filters.cmd_filter)
 
     e = sp.add_parser("cluster", help="Cluster only kept papers")
-    e.add_argument("--db", default=config.DB_PATH)
+    e.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
     e.add_argument("--kmeans", type=int, default=8)
     e.add_argument("--reduce-dim", type=int, default=None)
     e.add_argument("--device", default="auto")
     e.set_defaults(func=clustering.cmd_cluster)
 
     fg = sp.add_parser("export-graph", help="Export nodes/links JSON for react-force-graph-2d")
-    fg.add_argument("--db", default=config.DB_PATH)
+    fg.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
     fg.add_argument("--out", required=True)
     fg.add_argument("--top-k", type=int, default=5)
     fg.add_argument("--min-sim", type=float, default=0.85)
@@ -96,7 +100,7 @@ def build_parser() -> argparse.ArgumentParser:
     fg.set_defaults(func=export_graph.cmd_export_graph)
 
     g = sp.add_parser("label", help="Auto-label clusters (default recipe)")
-    g.add_argument("--db", default=config.DB_PATH)
+    g.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
     g.add_argument("--topk", type=int, default=4)
     g.add_argument("--min-df", type=int, default=3)
     g.add_argument("--max-df", type=float, default=0.6)
@@ -104,7 +108,7 @@ def build_parser() -> argparse.ArgumentParser:
     g.set_defaults(func=labeling.cmd_label)
 
     es = sp.add_parser("export-summaries", help="Export a separate summaries JSON")
-    es.add_argument("--db", default=config.DB_PATH)
+    es.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
     es.add_argument("--out", required=True)
     es.add_argument("--ids")
     es.add_argument("--only-ids", action="store_true")
@@ -124,6 +128,13 @@ def build_parser() -> argparse.ArgumentParser:
     srv.set_defaults(func=_cmd_serve)
 
     return ap
+
+
+def _cmd_init_db(args):
+    from .db import init_db
+    conn = init_db(args.db)
+    conn.close()
+    print(f"{GREEN}init-db:{RESET} schema ready.")
 
 
 def _cmd_serve(args):

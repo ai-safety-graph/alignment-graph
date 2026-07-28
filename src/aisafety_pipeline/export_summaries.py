@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-from .config import DB_PATH, GREEN, RESET
+from .config import GREEN, RESET
 
 def _trim(s: Optional[str], max_len: int = 500) -> str:
     if not s:
@@ -55,7 +55,7 @@ def _normalize_arxiv_id_or_url(s: str) -> str:
 
 
 def export_summaries_json(
-    db_path: str = DB_PATH,
+    db_path: str | None = None,
     out_path: str = "paper_summaries.json",
     ids_path: Optional[str] = None,          # newline-delimited ids/urls to include
     include_all_kept: bool = True,           # include all ai_stage2_keep=1 if no ids
@@ -99,13 +99,8 @@ def export_summaries_json(
         params: list = []
 
         if id_whitelist:
-            if conn.is_pg:
-                where.append("id = ANY(%s)")
-                params.append(list(id_whitelist))
-            else:
-                placeholders = ",".join(["?"] * len(id_whitelist))
-                where.append(f"id IN ({placeholders})")
-                params.extend(sorted(id_whitelist))
+            where.append("id = ANY(%s)")
+            params.append(list(id_whitelist))
 
         if include_all_kept and not id_whitelist:
             where.append("ai_stage2_keep")

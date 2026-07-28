@@ -14,7 +14,6 @@ except ImportError:
 DATA_DIR = Path(os.getenv("AIS_DATA_DIR", Path.cwd() / "data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-DB_PATH = os.getenv("AIS_DB_PATH", str(DATA_DIR / "arxiv_papers.db"))
 DATABASE_URL = os.getenv("DATABASE_URL", "")  # PostgreSQL DSN when set
 STATE_FILE = os.getenv("AIS_STATE_FILE", str(DATA_DIR / "last_run.txt"))
 

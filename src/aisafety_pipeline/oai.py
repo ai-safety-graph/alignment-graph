@@ -149,7 +149,7 @@ def _oai_parse_record(rec) -> dict | None:
     }
 
 
-def harvest_arxiv_oai_to_sqlite_raw(conn, from_date: str | None = None, until_date: str | None = None, state_file: str = STATE_FILE):
+def harvest_arxiv_oai_to_papers_raw(conn, from_date: str | None = None, until_date: str | None = None, state_file: str = STATE_FILE):
     if not until_date:
         until_date = _today_iso()
     if not from_date:
@@ -192,7 +192,7 @@ def cmd_harvest(args):
     from .db import init_db
     conn = init_db(args.db)
     try:
-        scanned, saved = harvest_arxiv_oai_to_sqlite_raw(conn, from_date=args.from_date, until_date=args.until_date, state_file=args.state_file)
+        scanned, saved = harvest_arxiv_oai_to_papers_raw(conn, from_date=args.from_date, until_date=args.until_date, state_file=args.state_file)
         print(f"{GREEN}harvest complete:{RESET} scanned={scanned}, upserts={saved}")
     finally:
         conn.close()

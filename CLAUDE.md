@@ -11,7 +11,7 @@ When implementing any feature:
 - Assume `VITE_API_URL` is always set — all data comes from the FastAPI backend
 - Do **not** add static JSON fallback paths or load from `ui/public/graph.json` / `summaries.json`
 - Do **not** wrap new features in `hasApi()` guards — new features require the API
-- Database is PostgreSQL + pgvector — do not add SQLite branches to new code
+- Database is PostgreSQL + pgvector.
 - Use functions in `ui/src/lib/api.ts` for all UI data fetching
 
 ## Architecture Overview
