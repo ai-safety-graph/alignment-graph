@@ -131,7 +131,8 @@ export default function GraphPaperDetails({
         </div>
 
         {loading && !summaryText && (
-          <div className='text-[13px] italic text-neutral-400'>
+          <div className='flex items-center gap-2 text-[13px] italic text-neutral-400'>
+            <span className='h-3 w-3 shrink-0 rounded-full border-2 border-neutral-600 border-t-neutral-300 animate-spin' />
             Loading summary…
           </div>
         )}

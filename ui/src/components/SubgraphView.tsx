@@ -12,6 +12,7 @@ import { useClusterCatalog } from '../hooks/useClusterCatalog'
 import { usePaperDetail } from '../hooks/usePaperDetail'
 import { useRelatedPapers } from '../hooks/useRelatedPapers'
 import { useNavHistory } from '../hooks/useNavHistory'
+import LoadingIndicator from './LoadingIndicator'
 
 export default function SubgraphView() {
   const { id } = useParams<{ id: string }>()
@@ -111,11 +112,7 @@ export default function SubgraphView() {
       <div className='flex flex-row flex-1 overflow-hidden'>
         <div className='flex flex-col flex-1 overflow-hidden min-w-0'>
           <div className='flex-1 overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent'>
-            {!nodes && (
-              <div className='flex h-[60vh] items-center justify-center text-neutral-400'>
-                Loading…
-              </div>
-            )}
+            {!nodes && <LoadingIndicator label='Loading…' />}
 
             {nodes && items.length === 0 && (
               <div className='p-6 text-center text-neutral-400'>

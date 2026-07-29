@@ -19,6 +19,7 @@ import MobilePaperDetails from './MobilePaperDetails'
 import PaperList from './PaperList'
 import FilterBar from './FilterBar'
 import Dropdown from './Dropdown'
+import LoadingIndicator from './LoadingIndicator'
 import type { NodeCompact } from '../lib/types'
 import { useServerFilters } from '../hooks/useServerFilters'
 import { useMediaQuery } from '../hooks/useMediaQuery'
@@ -592,9 +593,7 @@ export default function StatsView() {
             )}
 
             {isBrowsing && searchMode === 'keyword' && !papers && (
-              <div className='flex h-[60vh] items-center justify-center text-neutral-400'>
-                Loading…
-              </div>
+              <LoadingIndicator label='Loading Papers…' />
             )}
 
             {isBrowsing &&
@@ -607,9 +606,7 @@ export default function StatsView() {
               )}
 
             {isBrowsing && searchMode === 'semantic' && semanticLoading && (
-              <div className='flex h-[60vh] items-center justify-center text-neutral-400'>
-                Searching…
-              </div>
+              <LoadingIndicator label='Searching…' />
             )}
 
             {isBrowsing &&
@@ -637,9 +634,7 @@ export default function StatsView() {
             )}
 
             {!isBrowsing && !subgraphNodes && !subgraphError && (
-              <div className='flex h-[60vh] items-center justify-center text-neutral-400'>
-                Loading…
-              </div>
+              <LoadingIndicator label='Loading Papers…' />
             )}
 
             {!isBrowsing && subgraphNodes && subgraphItems.length === 0 && (

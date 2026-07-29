@@ -39,7 +39,10 @@ export default function SearchResultsOverlay({
       </div>
 
       {isLoading && results.length === 0 && (
-        <p className='text-neutral-400 text-sm p-2'>Searching…</p>
+        <div className='flex items-center gap-2 text-neutral-400 text-sm p-2'>
+          <span className='h-3 w-3 shrink-0 rounded-full border-2 border-neutral-600 border-t-neutral-300 animate-spin' />
+          Searching…
+        </div>
       )}
 
       <ul className='list-none p-0 m-0'>

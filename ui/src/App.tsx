@@ -1,6 +1,7 @@
 import { Suspense, lazy } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import { useMediaQuery } from './hooks/useMediaQuery'
+import LoadingIndicator from './components/LoadingIndicator'
 
 const ArxivGraph = lazy(() => import('./components/GraphView'))
 const StatsPage = lazy(() => import('./components/StatsView'))
@@ -14,9 +15,10 @@ export default function App() {
   return (
     <Suspense
       fallback={
-        <div className='flex h-screen w-screen items-center justify-center bg-neutral-950 text-neutral-300'>
-          Loading View...
-        </div>
+        <LoadingIndicator
+          label='Loading view…'
+          className='h-screen w-screen bg-neutral-950'
+        />
       }
     >
       <Routes>
