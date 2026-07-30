@@ -2,6 +2,7 @@ from __future__ import annotations
 import re, numpy as np
 from pathlib import Path
 from .config import GREEN, YELLOW, BLUE, RESET
+from .arxiv_ids import normalize_arxiv_id_or_url
 
 _AI_SAFETY_PATTERNS = [
     r"\bAI safety\b", r"\bAI alignment\b", r"\bvalue alignment\b",
@@ -110,10 +111,14 @@ def load_vectors(conn, ids, *, model="specter2", chunk_size=900):
 def build_centroid(conn, seeds_path):
     from pathlib import Path
     import numpy as np
-    seed_ids = [ln.strip() for ln in Path(seeds_path).read_text().splitlines() if ln.strip()]
+    raw_lines = [ln.strip() for ln in Path(seeds_path).read_text().splitlines() if ln.strip()]
+    seed_ids = sorted({normalize_arxiv_id_or_url(ln) for ln in raw_lines} - {""})
     V = load_vectors(conn, seed_ids)
     if not V:
         raise RuntimeError("No seed embeddings found—ensure seeds exist in `papers` and are embedded.")
+    missing = [sid for sid in seed_ids if sid not in V]
+    if missing:
+        print(f"{YELLOW}filter:{RESET} {len(missing)} seed(s) not found/embedded in `papers`: {', '.join(missing)}")
     C = np.mean(np.vstack(list(V.values())), axis=0)
     return C / (np.linalg.norm(C)+1e-12)
 
@@ -140,7 +145,7 @@ def cmd_filter(args):
                     continue
                 sim = float(v @ C)
                 all_sims.append(sim)
-                keep = int(sim >= args.tau)
+                keep = bool(sim >= args.tau)
                 cur.execute("UPDATE papers SET ai_sem_sim=?, ai_stage2_keep=?, ai_stage2_reason=? WHERE id=?", (sim, keep, f"centroid tau={args.tau}", pid))
                 kept += keep; rej += (1-keep)
             if all_sims:

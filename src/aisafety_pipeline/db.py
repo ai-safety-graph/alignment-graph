@@ -89,11 +89,25 @@ class PgConnection:
         import psycopg2.extras
         self._conn = psycopg2.connect(dsn, cursor_factory=psycopg2.extras.DictCursor)
         self._conn.autocommit = False
+        self.try_register_vector()
+
+    def try_register_vector(self) -> bool:
+        """Register pgvector's type adapter on this connection, if available.
+
+        No-ops if pgvector isn't installed, or if the `vector` extension
+        hasn't been created in the database yet (e.g. before init_db() has
+        run its schema on a fresh database) -- callers that bootstrap a new
+        database should call this again after CREATE EXTENSION succeeds.
+        """
         try:
             from pgvector.psycopg2 import register_vector
             register_vector(self._conn)
+            return True
         except ImportError:
-            pass
+            return False
+        except Exception:
+            self._conn.rollback()
+            return False
 
     def execute(self, sql: str, params=None):
         norm = sql.strip().upper()
@@ -201,6 +215,8 @@ def init_db(db_arg: Optional[str] = None) -> PgConnection:
     cur = conn.cursor()
     for stmt in _PG_SCHEMA:
         cur.execute(stmt)
+    conn.commit()
+    conn.try_register_vector()  # extension now exists; register if __init__ couldn't
     try:
         cur.execute(_PG_VECTOR_INDEX)
     except Exception:
