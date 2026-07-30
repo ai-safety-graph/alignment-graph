@@ -2,12 +2,12 @@
 
 ## Purpose
 
-`src/aisafety_pipeline/` is the backend package that turns raw arXiv metadata into a filtered, clustered, labeled dataset served via FastAPI or exported as static JSON artifacts.
+`src/aisafety_pipeline/` is the backend package that turns raw arXiv metadata into a filtered, clustered, labeled dataset served live via FastAPI.
 
 Its core job is to manage a staged literature-processing pipeline:
 
 ```text
-harvest -> stage1 -> embed -> filter -> cluster -> label -> export / serve
+harvest -> stage1 -> embed -> filter -> cluster -> label -> compute-layout -> serve
 ```
 
 The package is PostgreSQL + pgvector only — every pipeline command and the API require `DATABASE_URL` to be set.
@@ -66,15 +66,9 @@ Uses cursor-based fetch + `pd.DataFrame([list(r) for r in rows], ...)` instead o
 
 Assigns cluster labels and terms into `cluster_meta`. Uses cursor-based DataFrame construction.
 
-### `export_graph.py`
+### `compute_layout.py`
 
-Exports frontend graph JSON from filtered + clustered papers. Also persists `graph_x` / `graph_y` back to the `papers` table after layout computation.
-
-Loads embeddings for neighbor-link calculation via `id = ANY(%s)`.
-
-### `export_summaries.py`
-
-Exports summary lookup JSON. WHERE clause for id whitelist uses `id = ANY(%s)`.
+Computes 2D layout coordinates (umap/pca) from embeddings of filtered + clustered papers, and persists `graph_x` / `graph_y` back to the `papers` table. No JSON output — purely a DB-persistence stage consumed live by `api/routes/graph.py`.
 
 ### `api/`
 
@@ -97,8 +91,7 @@ aisafety-pipeline embed          # SPECTER2 vectors
 aisafety-pipeline filter         # semantic stage-2
 aisafety-pipeline cluster        # k-means / agg / HDBSCAN
 aisafety-pipeline label          # cluster labels
-aisafety-pipeline export-graph   # JSON + persists graph_x/y to DB
-aisafety-pipeline export-summaries
+aisafety-pipeline compute-layout # persists graph_x/y to DB
 aisafety-pipeline serve          # FastAPI (DATABASE_URL required)
 ```
 
@@ -142,29 +135,20 @@ Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `kmeans_clust
 4. **Stage 2 filter** → `papers` (`ai_sem_sim`, `ai_stage2_keep`, `ai_stage2_reason`)
 5. **Clustering** → `papers` (`kmeans_cluster`, `agg_cluster`, `hdbscan_cluster`)
 6. **Labeling** → `cluster_meta`
-7. **Export graph** → `ui/public/graph.json` + `papers.graph_x/y`
-8. **Export summaries** → `ui/public/summaries.json`
-9. **Serve** → FastAPI reads from PostgreSQL live
+7. **Compute layout** → `papers.graph_x/y`
+8. **Serve** → FastAPI reads from PostgreSQL live
 
 ---
 
-## Export Contract
+## Layout Contract
 
-### `export_graph.py`
+### `compute_layout.py`
 
-Exports only rows where `ai_stage2_keep = 1` AND `kmeans_cluster IS NOT NULL`.
+Operates only on rows where `ai_stage2_keep = 1` AND `kmeans_cluster IS NOT NULL`.
 
-Uses `kmeans_cluster AS cid` — this is the production cluster id consumed by the UI.
+Computes a 2D projection (`umap` by default, `pca` fallback) of `papers.embedding`, then persists coords: `UPDATE papers SET graph_x=?, graph_y=? WHERE id=?`
 
-After layout computation, persists coords: `UPDATE papers SET graph_x=?, graph_y=? WHERE id=?`
-
-Compact node fields: `id`, `aid`, `t`, `au`, `pd`, `dm`, `ln`, `cid`, optional `sm`, `x`, `y`
-
-Edges: top-k cosine similarity neighbors, optional same-cluster and MST edges.
-
-### `export_summaries.py`
-
-All `ai_stage2_keep = 1` papers. Keyed by canonical arXiv abs URL.
+No JSON output, no neighbor-edge computation — `api/routes/graph.py` reads `graph_x`/`graph_y` live and re-normalizes per-request; it does not recompute layout.
 
 ---
 
@@ -173,8 +157,7 @@ All `ai_stage2_keep = 1` papers. Keyed by canonical arXiv abs URL.
 Notable defaults:
 
 - Stage-2 method: `centroid`
-- Graph export coords: `fr` (Fruchterman-Reingold)
-- Graph output: compact unless `--verbose`
+- Layout coords: `umap` (falls back to `pca` if UMAP is unavailable)
 - Serve: `--host 0.0.0.0 --port 8000`
 
 ---
@@ -183,9 +166,9 @@ Notable defaults:
 
 - Paper ids are canonical arXiv abs URLs
 - `papers` is the central state table — changes affect all downstream stages
-- `cid` in exports means k-means cluster id
+- `cid` in API responses means k-means cluster id
 - Embeddings live in `papers.embedding` (pgvector)
-- `graph_x/y` are always stored back to DB by `export-graph`
+- `graph_x/y` are always stored back to DB by `compute-layout`
 
 ---
 
@@ -195,7 +178,7 @@ Safe:
 
 - CLI help text and ergonomics
 - Internal helpers, logging
-- Export metadata fields (coordinated with UI)
+- API metadata fields (coordinated with UI)
 - Labeling heuristics
 
 Be careful around:
@@ -211,8 +194,7 @@ Be careful around:
 ## Known Architecture Weak Points
 
 1. **Schema migrations are implicit**: `db.py` does `CREATE TABLE IF NOT EXISTS` + `ALTER TABLE ADD COLUMN` for new columns, but has no formal migration framework.
-2. **Duplicate metadata in exports**: graph and summaries overlap; changes must stay consistent.
-3. **Export failures occur late**: missing embeddings only caught at export time.
+2. **Layout failures occur late**: missing embeddings only caught when `compute-layout` runs.
 
 ---
 
@@ -222,5 +204,5 @@ Four layers:
 
 1. **Ingest** (`oai.py`, `papers_raw`)
 2. **Stateful analysis** (`papers`, `embeddings` / `papers.embedding`, filters, clustering, labeling)
-3. **Artifact shaping / serving** (`export_graph.py`, `export_summaries.py`, `api/`)
+3. **Layout / serving** (`compute_layout.py`, `api/`)
 4. **CLI orchestration** (`utils.py`)

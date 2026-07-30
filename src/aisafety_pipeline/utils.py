@@ -3,7 +3,7 @@ import argparse, datetime as dt, re, json, os
 from pathlib import Path
 from typing import Optional
 from .config import GREEN, YELLOW, BLUE, RESET, API_HOST, API_PORT
-from . import oai, filters, embeddings, clustering, labeling, export_graph, export_summaries, config
+from . import oai, filters, embeddings, clustering, labeling, compute_layout, config
 
 # Labeling helpers (shared)
 GENERIC_LABEL_STOPLIST = {
@@ -78,26 +78,17 @@ def build_parser() -> argparse.ArgumentParser:
     e.add_argument("--device", default="auto")
     e.set_defaults(func=clustering.cmd_cluster)
 
-    fg = sp.add_parser("export-graph", help="Export nodes/links JSON for react-force-graph-2d")
-    fg.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
-    fg.add_argument("--out", required=True)
-    fg.add_argument("--top-k", type=int, default=5)
-    fg.add_argument("--min-sim", type=float, default=0.85)
-    fg.add_argument("--same-cluster-only", action="store_true")
-    fg.add_argument("--no-mst", action="store_true")
-    fg.add_argument("--coords", choices=["umap","pca","none","fr"], default="fr")
-    fg.add_argument("--umap-n-neighbors", type=int, default=15)
-    fg.add_argument("--umap-min-dist", type=float, default=0.10)
-    fg.add_argument("--umap-rand", type=int, default=42)
-    fg.add_argument("--pca-rand", type=int, default=42)
-    fg.add_argument("--canvas-w", type=int, default=1000)
-    fg.add_argument("--canvas-h", type=int, default=700)
-    fg.add_argument("--canvas-pad", type=int, default=24)
-    fg.add_argument("--include-summaries", action="store_true")
-    fg.add_argument("--max-summary-len", type=int, default=400)
-    fg.add_argument("--verbose", action="store_true")
-    fg.add_argument("--gzip", action="store_true")
-    fg.set_defaults(func=export_graph.cmd_export_graph)
+    cl = sp.add_parser("compute-layout", help="Compute 2D layout coordinates and persist graph_x/y to Postgres")
+    cl.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
+    cl.add_argument("--coords", choices=["umap", "pca", "none"], default="umap")
+    cl.add_argument("--umap-n-neighbors", type=int, default=15)
+    cl.add_argument("--umap-min-dist", type=float, default=0.10)
+    cl.add_argument("--umap-rand", type=int, default=42)
+    cl.add_argument("--pca-rand", type=int, default=42)
+    cl.add_argument("--canvas-w", type=int, default=1000)
+    cl.add_argument("--canvas-h", type=int, default=700)
+    cl.add_argument("--canvas-pad", type=int, default=24)
+    cl.set_defaults(func=compute_layout.cmd_compute_layout)
 
     g = sp.add_parser("label", help="Auto-label clusters (default recipe)")
     g.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
@@ -106,20 +97,6 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--max-df", type=float, default=0.6)
     g.add_argument("--extra", type=str, default=None)
     g.set_defaults(func=labeling.cmd_label)
-
-    es = sp.add_parser("export-summaries", help="Export a separate summaries JSON")
-    es.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
-    es.add_argument("--out", required=True)
-    es.add_argument("--ids")
-    es.add_argument("--only-ids", action="store_true")
-    es.add_argument("--only-clustered", action="store_true")
-    es.add_argument("--no-meta", action="store_true")
-    es.add_argument("--no-domain", action="store_true")
-    es.add_argument("--no-cid", action="store_true")
-    es.add_argument("--trim", action="store_true")
-    es.add_argument("--max-summary-len", type=int, default=1000)
-    es.add_argument("--gzip", action="store_true")
-    es.set_defaults(func=export_summaries.cmd_export_summaries)
 
     srv = sp.add_parser("serve", help="Start the FastAPI server (requires DATABASE_URL)")
     srv.add_argument("--host", default=API_HOST)

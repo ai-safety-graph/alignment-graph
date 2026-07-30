@@ -1,6 +1,6 @@
 # AI Safety Pipeline & Visualisation
 
-A staged pipeline for harvesting **arXiv** papers → storing in **PostgreSQL + pgvector** → generating **SPECTER2 embeddings** → applying filters → clustering → serving via **FastAPI** or exporting **JSON artifacts** for visualization.
+A staged pipeline for harvesting **arXiv** papers → storing in **PostgreSQL + pgvector** → generating **SPECTER2 embeddings** → applying filters → clustering → serving live via **FastAPI**.
 
 [Live Web App](https://alignment-graph.netlify.app/)
 
@@ -14,9 +14,7 @@ A staged pipeline for harvesting **arXiv** papers → storing in **PostgreSQL + 
 - 🏷️ Automatic cluster labeling (TF–IDF + semantic refinement)
 - 🔍 Semantic search via pgvector ANN (API mode)
 - 🚀 FastAPI backend with live paper listing, detail, and semantic search endpoints
-- 📤 Static export formats for Netlify deployment:
-  - Force-directed graph JSON (`export-graph`)
-  - Lazy-load summaries JSON (`export-summaries`)
+- 🗺️ 2D graph layout coordinates (UMAP/PCA) precomputed and served live from Postgres
 
 ---
 
@@ -113,11 +111,10 @@ aisafety-pipeline cluster --kmeans 8
 aisafety-pipeline label
 ```
 
-**7a. Export static artifacts (static / Netlify mode)**
+**7a. Compute graph layout**
 
 ```bash
-aisafety-pipeline export-graph --out ui/public/graph.json --coords fr
-aisafety-pipeline export-summaries --out ui/public/summaries.json
+aisafety-pipeline compute-layout --coords umap
 ```
 
 **7b. Start the API**
@@ -137,8 +134,6 @@ Set `VITE_API_URL` in `ui/.env.development` (or Netlify env vars for production)
 ```
 VITE_API_URL=http://localhost:8000
 ```
-
-Without this, the frontend falls back to static `graph.json` / `summaries.json`.
 
 ---
 

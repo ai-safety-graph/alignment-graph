@@ -161,7 +161,7 @@ Central API client. Key exports:
 
 ### Compact schema is the contract
 
-Do not rename compact fields without updating `export_graph.py` and API route responses.
+Do not rename compact fields without updating API route responses (`api/routes/graph.py`, `api/routes/papers.py`).
 
 ### `cid` means k-means cluster id
 

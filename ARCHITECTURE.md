@@ -9,7 +9,7 @@ This repository builds an AI-safety literature exploration system with two major
 
 The active and only supported deployment mode is **API mode**: pipeline → PostgreSQL + pgvector → FastAPI → frontend. See top-level `CLAUDE.md`.
 
-The pipeline can still export static JSON artifacts (`export-graph`, `export-summaries`) and the UI retains a `summaries.json` fallback in `lib/summaries.ts`, but this static path is legacy — it is not the deployment target and new work should not extend it.
+The legacy static-JSON export path has been removed from the pipeline. It now persists everything — including graph layout coordinates — to PostgreSQL, and the FastAPI backend is the sole data source for the frontend.
 
 ---
 
@@ -24,8 +24,6 @@ arXiv OAI-PMH
   -> clustering assignments
   -> cluster labels + graph coords (graph_x, graph_y stored in papers table)
   -> FastAPI backend                -> React frontend
-  -> export_graph.py  (legacy)      -> ui/public/graph.json
-  -> export_summaries.py (legacy)   -> ui/public/summaries.json
 ```
 
 Canonical CLI workflow:
@@ -37,8 +35,8 @@ aisafety-pipeline embed
 aisafety-pipeline filter
 aisafety-pipeline cluster
 aisafety-pipeline label
-aisafety-pipeline export-graph   # also persists graph_x/y to DB
-aisafety-pipeline serve          # start FastAPI
+aisafety-pipeline compute-layout   # persists graph_x/y to DB
+aisafety-pipeline serve            # start FastAPI
 ```
 
 ---
@@ -55,7 +53,7 @@ Primary backend package. Owns:
 - Filtering (regex + semantic centroid)
 - Clustering (k-means, agglomerative, HDBSCAN)
 - Cluster labeling
-- Artifact export (JSON) and graph coord persistence
+- Graph layout computation (UMAP/PCA) and coordinate persistence to PostgreSQL
 
 See `src/aisafety_pipeline/ARCHITECTURE.md` for module-level details.
 
@@ -111,8 +109,7 @@ The public orchestration surface is defined in `src/aisafety_pipeline/utils.py`:
 - `filter` — semantic stage-2 filter
 - `cluster` — k-means / agg / HDBSCAN assignments
 - `label` — cluster labels into `cluster_meta`
-- `export-graph` — JSON artifact + persists `graph_x/y` to DB
-- `export-summaries` — summary lookup JSON artifact
+- `compute-layout` — persists `graph_x/y` to DB (UMAP/PCA)
 - `serve` — start FastAPI with uvicorn (`--host`, `--port`, `--reload`)
 
 ---
@@ -124,12 +121,6 @@ The public orchestration surface is defined in `src/aisafety_pipeline/utils.py`:
 Tables: `papers_raw`, `papers` (includes `embedding vector(768)`, `graph_x`, `graph_y`), `cluster_meta`
 
 Requires the `DATABASE_URL` env var to be set to a valid PostgreSQL DSN — `db.connect()` raises `RuntimeError` otherwise. Vector search uses an HNSW index (`vector_cosine_ops`). Run `aisafety-pipeline init-db` (or any pipeline command — `harvest` already bootstraps the schema) against a fresh database to create tables/extensions.
-
----
-
-## Legacy Static Artifacts
-
-The pipeline can still produce static files in `ui/public/` via `export-graph` / `export-summaries` (`graph.json`, `summaries.json`), and `lib/summaries.ts` retains a fallback that reads `summaries.json` when the API has no data for a paper. This predates API mode and is not exercised by the deployed UI, which always has `VITE_API_URL` set — do not build new features against it (see top-level `CLAUDE.md`).
 
 ---
 
@@ -147,11 +138,11 @@ The pipeline can still produce static files in `ui/public/` via `export-graph` /
 
 ### Cluster namespace
 
-Export and API routes use `kmeans_cluster` as the production cluster id (`cid`). `agg_cluster` and `hdbscan_cluster` are stored but not currently exposed.
+API routes use `kmeans_cluster` as the production cluster id (`cid`). `agg_cluster` and `hdbscan_cluster` are stored but not currently exposed.
 
 ### Canonical paper identity
 
-Paper ids are canonical arXiv abs URLs, e.g. `https://arxiv.org/abs/2401.01234`. This is the join key across all tables and artifacts.
+Paper ids are canonical arXiv abs URLs, e.g. `https://arxiv.org/abs/2401.01234`. This is the join key across all tables.
 
 ### Reproducibility of stage-2 filtering
 
@@ -165,7 +156,7 @@ AI may safely modify:
 
 - Documentation
 - UI rendering logic
-- Export formatting (coordinated with UI)
+- API response formatting (coordinated with UI)
 - Pipeline internal helpers
 - CLI help text
 
@@ -181,12 +172,11 @@ AI should be careful around:
 
 ## Cross-Subsystem Risks
 
-1. **Artifact schema drift**: changes to `export_graph.py` field names silently break the legacy static export path (not the deployed UI).
-2. **Cluster-method mismatch**: the API and legacy static export both assume k-means; changing this requires coordinated updates.
-3. **Identifier mismatch**: arXiv abs URL format must remain stable across pipeline and UI. The frontend assigns ephemeral numeric `id` values by index; `aid` (the arXiv URL) is the durable key.
-4. **Legacy artifact staleness**: if `graph.json` / `summaries.json` are ever regenerated for local/offline use, they go stale the moment pipeline data changes unless re-exported — not a concern for the deployed UI, which doesn't read them.
-5. **API dependency in UI**: semantic search, related papers, subset graph, and paper listing all require `VITE_API_URL`. `GraphView` and `StatsView` will not load without it.
-6. **Graph coordinate alignment**: the desktop graph places search/related "ghost" nodes by re-applying the loaded subset's normalisation to each paper's raw coords. This is a contract spanning `graph.py`/`papers.py` (which expose `meta.coords.bounds` and raw `rx`/`ry`) and `GraphView.tsx`'s `ghostCoord()` (which mirrors the backend canvas-mapping formula). Changing the normalisation on either side without the other misplaces ghost nodes.
+1. **Cluster-method mismatch**: the API assumes k-means; changing this requires coordinated updates across `compute_layout.py`, `api/routes/graph.py`, and the UI.
+2. **Identifier mismatch**: arXiv abs URL format must remain stable across pipeline and UI. The frontend assigns ephemeral numeric `id` values by index; `aid` (the arXiv URL) is the durable key.
+3. **Layout staleness**: `graph_x`/`graph_y` only reflect the last `compute-layout` run — new papers added to `papers` after that (via later harvest/filter/cluster runs) have no coords until `compute-layout` runs again.
+4. **API dependency in UI**: semantic search, related papers, subset graph, and paper listing all require `VITE_API_URL`. `GraphView` and `StatsView` will not load without it.
+5. **Graph coordinate alignment**: the desktop graph places search/related "ghost" nodes by re-applying the loaded subset's normalisation to each paper's raw coords. This is a contract spanning `graph.py`/`papers.py` (which expose `meta.coords.bounds` and raw `rx`/`ry`) and `GraphView.tsx`'s `ghostCoord()` (which mirrors the backend canvas-mapping formula). Changing the normalisation on either side without the other misplaces ghost nodes.
 
 ---
 
@@ -196,7 +186,7 @@ When editing this repository, treat it as four layers:
 
 1. **Ingest and analysis** (`src/aisafety_pipeline/` pipeline modules)
 2. **Persistence** (`db.py` — PostgreSQL)
-3. **Serving contract** (API routes; legacy `graph.json` / `summaries.json` export)
+3. **Serving contract** (API routes)
 4. **Presentation** (`ui/`)
 
 Most safe changes stay within a layer. Cross-layer changes should be intentional and documented.

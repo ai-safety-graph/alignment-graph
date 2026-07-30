@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "aisafety-pipeline"
 version = "0.1.0"
-description = "Staged arXiv → PostgreSQL → Embeddings → Filter → Clustering → labeling → JSON exports"
+description = "Staged arXiv → PostgreSQL → Embeddings → Filter → Clustering → Labeling → Layout → FastAPI"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { text = "MIT" }
@@ -34,8 +34,6 @@ pipeline = [
   "adapters==1.2.0",
   # runtime deps you likely also need:
   # "torch",           # install the correct wheel for your platform/CUDA separately
-  # "networkx",        # needed for FR layout
-  # "fa2; platform_system != 'Windows'",  # ForceAtlas2 (optional; FR works everywhere)
 ]
 
 [project.scripts]
