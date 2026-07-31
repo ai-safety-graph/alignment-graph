@@ -6,6 +6,21 @@ publish = "dist"
 [build.environment]
 NODE_VERSION = "20"
 
+[[headers]]
+for = "/assets/*"
+[headers.values]
+Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+for = "/index.html"
+[headers.values]
+Cache-Control = "no-cache"
+
+[[redirects]]
+from = "/assets/*"
+to = "/index.html"
+status = 404
+
 [[redirects]]
 from = "/*"
 to = "/index.html"
