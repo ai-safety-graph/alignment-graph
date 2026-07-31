@@ -35,7 +35,24 @@ def _build_subgraph(conn, paper_ids: List[str]) -> dict:
     """, (paper_ids,)).fetchall()
 
     if not rows:
-        return {"meta": {}, "clusters": {}, "nodes": [], "links": []}
+        return {
+            "meta": {
+                "model": EMB_MODEL,
+                "embedding_dim": EMB_DIMS,
+                "generated_at": dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat(),
+                "neighbors": None,
+                "coords": {
+                    "included": False,
+                    "method": "none",
+                    "canvas": {"w": 1000, "h": 700, "pad": 24},
+                    "bounds": None,
+                },
+                "compact": True,
+            },
+            "clusters": {},
+            "nodes": [],
+            "links": [],
+        }
 
     labels: Dict[int, str] = {}
     try:
