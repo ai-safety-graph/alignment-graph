@@ -71,7 +71,8 @@ def _oai_fetch(params: dict) -> str:
             return r.text
         except (requests.exceptions.ReadTimeout,
                 requests.exceptions.ConnectTimeout,
-                requests.exceptions.ChunkedEncodingError) as e:
+                requests.exceptions.ChunkedEncodingError,
+                requests.exceptions.ConnectionError) as e:
             # exponential backoff with jitter
             backoff = OAI_THROTTLE_SEC * (2 ** attempt)
             _sleep_with_jitter(backoff)
