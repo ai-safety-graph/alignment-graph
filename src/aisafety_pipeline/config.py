@@ -22,7 +22,7 @@ EMB_MODEL = "specter2"
 
 # OAI-PMH
 OAI_BASE = "https://export.arxiv.org/oai2"
-OAI_SETS = ["cs", "stat", "econ"]
+OAI_SETS = ["cs", "stat", "econ", "eess:eess:SY"]
 OAI_PREFIX = "arXiv"
 OAI_THROTTLE_SEC = 3
 
