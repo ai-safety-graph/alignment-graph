@@ -2,9 +2,21 @@ from __future__ import annotations
 import datetime as dt, os, time as _time, xml.etree.ElementTree as ET, random
 from pathlib import Path
 import requests
+from psycopg2.extras import execute_values
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from .config import OAI_BASE, OAI_SETS, OAI_PREFIX, OAI_THROTTLE_SEC, STATE_FILE, BLUE, GREEN, RESET
+
+_HARVEST_BATCH_SIZE = 500
+
+_UPSERT_PAPERS_RAW = """
+    INSERT INTO papers_raw (id, title, authors, published, summary, link, categories, updated, pdf_url)
+    VALUES %s
+    ON CONFLICT (id) DO UPDATE SET
+      title=EXCLUDED.title, authors=EXCLUDED.authors, published=EXCLUDED.published,
+      summary=EXCLUDED.summary, link=EXCLUDED.link,
+      categories=EXCLUDED.categories, updated=EXCLUDED.updated, pdf_url=EXCLUDED.pdf_url
+"""
 
 # ---- Session with retries & polite UA ----
 _SESSION: requests.Session | None = None
@@ -162,7 +174,24 @@ def harvest_arxiv_oai_to_papers_raw(conn, from_date: str | None = None, until_da
     print(f"{BLUE}OAI-PMH harvest {RESET}{OAI_SETS}{BLUE} {from_date} → {until_date}{RESET}")
 
     scanned = saved = 0
-    cur = conn.cursor(); cur.execute("BEGIN")
+    cur = conn.raw_cursor()
+    batch: list[dict] = []
+
+    def flush():
+        nonlocal batch, saved
+        if not batch:
+            return
+        rows = [
+            (r["id"], r["title"], r["authors"], r["published"], r["summary"],
+             r["link"], r["categories"], r["updated"], r["pdf_url"])
+            for r in batch
+        ]
+        execute_values(cur, _UPSERT_PAPERS_RAW, rows)
+        conn.commit()
+        saved += len(batch)
+        batch = []
+        print(f"{BLUE}OAI progress:{RESET} scanned={scanned} saved={saved}")
+
     try:
         for oset in OAI_SETS:
             for rec_xml in _oai_iter_records(from_date, until_date, oset):
@@ -170,20 +199,16 @@ def harvest_arxiv_oai_to_papers_raw(conn, from_date: str | None = None, until_da
                 rec = _oai_parse_record(rec_xml)
                 if not rec:
                     continue
-                cur.execute(
-                    """
-                    INSERT INTO papers_raw (id, title, authors, published, summary, link, categories, updated, pdf_url)
-                    VALUES (:id, :title, :authors, :published, :summary, :link, :categories, :updated, :pdf_url)
-                    ON CONFLICT(id) DO UPDATE SET
-                      title=excluded.title, authors=excluded.authors, published=excluded.published,
-                      summary=excluded.summary, link=excluded.link,
-                      categories=excluded.categories, updated=excluded.updated, pdf_url=excluded.pdf_url
-                """, rec)
-                saved += 1
-        cur.execute("COMMIT")
+                batch.append(rec)
+                if len(batch) >= _HARVEST_BATCH_SIZE:
+                    flush()
+        flush()
     except Exception:
-        cur.execute("ROLLBACK"); raise
+        conn.rollback()
+        raise
 
+    # Reached only on a fully successful run — commits from completed batches
+    # above are already durable even if a later batch or a rerun fails.
     Path(state_file).write_text(until_date)
     print(f"{GREEN}OAI done.{RESET} scanned={scanned} saved={saved} (state → {state_file})")
     return scanned, saved

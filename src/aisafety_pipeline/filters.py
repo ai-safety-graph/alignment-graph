@@ -1,8 +1,25 @@
 from __future__ import annotations
 import re, numpy as np
 from pathlib import Path
+from psycopg2.extras import execute_values
 from .config import GREEN, YELLOW, BLUE, RESET
 from .arxiv_ids import normalize_arxiv_id_or_url
+
+_STAGE1_READ_CHUNK = 2000
+_STAGE1_WRITE_BATCH = 500
+
+_UPSERT_PAPERS = """
+    INSERT INTO papers (id, title, authors, published, summary, link, ai_regex_hit, domain_tag)
+    VALUES %s
+    ON CONFLICT (id) DO UPDATE SET
+      title=EXCLUDED.title,
+      authors=EXCLUDED.authors,
+      published=EXCLUDED.published,
+      summary=EXCLUDED.summary,
+      link=EXCLUDED.link,
+      ai_regex_hit=EXCLUDED.ai_regex_hit,
+      domain_tag=EXCLUDED.domain_tag
+"""
 
 _AI_SAFETY_PATTERNS = [
     r"\bAI safety\b", r"\bAI alignment\b", r"\bvalue alignment\b",
@@ -54,38 +71,54 @@ def cmd_stage1(args):
     from .db import connect
     conn = connect(args.db)
     try:
-        rows = conn.execute("SELECT id, title, summary, authors, published, link, categories FROM papers_raw").fetchall()
-        cur = conn.cursor(); cur.execute("BEGIN")
-        copied = 0
-        for r in rows:
-            title, summary, cats = r["title"], r["summary"], (r["categories"] or "")
-            text_hit = _looks_like_ai_safety(title, summary)
-            cat_hit = False
-            if (not text_hit) and _policyish(cats):
-                cat_hit = bool(re.search(r"\b(AI|artificial intelligence|foundation model|frontier model|LLM|model|system)s?\b", (title or "") + " " + (summary or ""), re.I))
-            hit = int(text_hit or cat_hit)
-            if not hit and not args.keep_all_and_filter:
-                continue
-            ai_regex_hit = int(text_hit)
-            domain_tag = domain_from_arxiv_categories(cats)
-            cur.execute(
-              """
-              INSERT INTO papers (id, title, authors, published, summary, link, ai_regex_hit, domain_tag)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-              ON CONFLICT(id) DO UPDATE SET
-                title=excluded.title,
-                authors=excluded.authors,
-                published=excluded.published,
-                summary=excluded.summary,
-                link=excluded.link,
-                ai_regex_hit=excluded.ai_regex_hit,
-                domain_tag=excluded.domain_tag
-            """,
-              (r["id"], r["title"], r["authors"], r["published"], r["summary"], r["link"], ai_regex_hit, domain_tag)
-            )
-            copied += 1
-        cur.execute("COMMIT")
-        print(f"{GREEN}stage1:{RESET} copied/updated {copied} candidates into `papers`.")
+        write_cur = conn.raw_cursor()
+        scanned = copied = 0
+        write_batch: list[tuple] = []
+
+        def flush_writes():
+            nonlocal write_batch, copied
+            if not write_batch:
+                return
+            execute_values(write_cur, _UPSERT_PAPERS, write_batch)
+            conn.commit()
+            copied += len(write_batch)
+            write_batch = []
+            print(f"{BLUE}stage1 progress:{RESET} scanned={scanned} copied={copied}")
+
+        try:
+            last_id = ""
+            while True:
+                page = conn.execute(
+                    "SELECT id, title, summary, authors, published, link, categories "
+                    "FROM papers_raw WHERE id > %s ORDER BY id LIMIT %s",
+                    (last_id, _STAGE1_READ_CHUNK),
+                ).fetchall()
+                if not page:
+                    break
+                for r in page:
+                    scanned += 1
+                    title, summary, cats = r["title"], r["summary"], (r["categories"] or "")
+                    text_hit = _looks_like_ai_safety(title, summary)
+                    cat_hit = False
+                    if (not text_hit) and _policyish(cats):
+                        cat_hit = bool(re.search(r"\b(AI|artificial intelligence|foundation model|frontier model|LLM|model|system)s?\b", (title or "") + " " + (summary or ""), re.I))
+                    hit = int(text_hit or cat_hit)
+                    if not hit and not args.keep_all_and_filter:
+                        continue
+                    ai_regex_hit = int(text_hit)
+                    domain_tag = domain_from_arxiv_categories(cats)
+                    write_batch.append(
+                        (r["id"], r["title"], r["authors"], r["published"], r["summary"], r["link"], ai_regex_hit, domain_tag)
+                    )
+                    if len(write_batch) >= _STAGE1_WRITE_BATCH:
+                        flush_writes()
+                last_id = page[-1]["id"]
+            flush_writes()
+        except Exception:
+            conn.rollback()
+            raise
+
+        print(f"{GREEN}stage1:{RESET} scanned {scanned} rows, copied/updated {copied} candidates into `papers`.")
     finally:
         conn.close()
 

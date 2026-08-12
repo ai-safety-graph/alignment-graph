@@ -129,6 +129,16 @@ class PgConnection:
         raw = self._conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
         return _PgCursor(raw, self)
 
+    def raw_cursor(self):
+        """Return the underlying psycopg2 cursor, unwrapped.
+
+        Needed for psycopg2.extras.execute_values(), which requires a real
+        cursor (it calls .mogrify() internally) rather than the ?/:name-
+        translating _PgCursor wrapper.
+        """
+        import psycopg2.extras
+        return self._conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
     def commit(self):
         self._conn.commit()
 
