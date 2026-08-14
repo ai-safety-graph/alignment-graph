@@ -3,7 +3,16 @@ from __future__ import annotations
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
+from psycopg2.extras import execute_values
 from .config import EMB_MODEL, GREEN, YELLOW, BLUE, RESET
+
+_EMBED_WRITE_BATCH = 500
+
+_UPSERT_EMBEDDING = """
+    UPDATE papers AS p SET embedding = v.embedding
+    FROM (VALUES %s) AS v(id, embedding)
+    WHERE p.id = v.id
+"""
 
 
 # -------- Upsert / fetch --------
@@ -149,17 +158,22 @@ def ensure_embeddings_for_candidates(conn, device: str = "auto") -> None:
     print(f"{BLUE}embed:{RESET} computing embeddings for {len(missing)} papers…")
     embs = EmbeddingGenerator(batch_size=32, device=device).encode(titles, sums)
 
-    cur = conn.cursor()
-    cur.execute("BEGIN")
-    try:
-        for pid, vec in zip(missing, embs):
-            upsert_embedding(conn, pid, EMB_MODEL, vec)
-        cur.execute("COMMIT")
-    except Exception:
-        cur.execute("ROLLBACK")
-        raise
+    write_cur = conn.raw_cursor()
+    written = 0
+    for i in range(0, len(missing), _EMBED_WRITE_BATCH):
+        chunk_ids = missing[i:i + _EMBED_WRITE_BATCH]
+        chunk_vecs = embs[i:i + _EMBED_WRITE_BATCH]
+        rows = []
+        for pid, vec in zip(chunk_ids, chunk_vecs):
+            v = vec.astype(np.float32)
+            v = v / (np.linalg.norm(v) + 1e-12)
+            rows.append((pid, v.tolist()))
+        execute_values(write_cur, _UPSERT_EMBEDDING, rows, template="(%s, %s::vector)")
+        conn.commit()
+        written += len(rows)
+        print(f"{BLUE}embed progress:{RESET} {written}/{len(missing)} written")
 
-    print(f"{GREEN}embed:{RESET} added {len(missing)} embeddings.")
+    print(f"{GREEN}embed:{RESET} added {written} embeddings.")
 
 
 def cmd_embed(args) -> None:
