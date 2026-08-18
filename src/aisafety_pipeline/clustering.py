@@ -3,6 +3,7 @@ import numpy as np, pandas as pd
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import normalize
 from .config import GREEN, YELLOW, BLUE, RESET
+from .db import vector_to_array
 from .embeddings import upsert_embedding, fetch_existing_embeddings, EmbeddingGenerator
 
 ## Contributed by mnm-matin
@@ -51,7 +52,7 @@ def load_embeddings_for_df(conn, df: pd.DataFrame) -> np.ndarray:
         "SELECT id, embedding FROM papers WHERE embedding IS NOT NULL AND id = ANY(%s)",
         (ids,),
     ).fetchall()
-    by_id = {row[0]: np.array(row[1], dtype=np.float32) for row in rows}
+    by_id = {row[0]: vector_to_array(row[1]) for row in rows}
     mat = np.vstack([by_id[pid] for pid in ids])
     return mat
 

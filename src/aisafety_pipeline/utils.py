@@ -61,6 +61,8 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
     c.add_argument("--device", default="auto",
                    help="auto|cpu|mps|cuda|cuda:N (e.g. cuda:0)")
+    c.add_argument("--batch-size", type=int, default=32, dest="batch_size",
+                   help="Encoding batch size (raise this on GPU, e.g. 256, for much better throughput)")
     c.set_defaults(func=embeddings.cmd_embed)
 
     d = sp.add_parser("filter", help="Stage-2 semantic filter")

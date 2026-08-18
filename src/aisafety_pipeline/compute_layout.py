@@ -25,7 +25,7 @@ def compute_graph_layout(
     Compute 2D layout coordinates for kept+clustered papers and persist them
     to `papers.graph_x` / `papers.graph_y`. Returns the number of papers updated.
     """
-    from .db import connect
+    from .db import connect, vector_to_array
     conn = connect(db_path)
     try:
         # 1) Load kept + clustered papers
@@ -52,7 +52,7 @@ def compute_graph_layout(
         vec_by_id: Dict[str, np.ndarray] = {}
         for pid, vec in emb_rows:
             if vec is not None:
-                v = np.array(vec, dtype=np.float32)
+                v = vector_to_array(vec)
                 v /= (np.linalg.norm(v) + 1e-12)
                 vec_by_id[pid] = v
         missing = [pid for pid in ids if pid not in vec_by_id]

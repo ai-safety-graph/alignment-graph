@@ -1,6 +1,7 @@
 from __future__ import annotations
 import re
 from typing import Any, Optional
+import numpy as np
 from .config import DATABASE_URL
 
 # ---------------------------------------------------------------------------
@@ -14,6 +15,18 @@ def _to_pg_sql(sql: str, params: Any) -> tuple[str, Any]:
     elif params:
         sql = sql.replace("?", "%s")
     return sql, params
+
+
+def vector_to_array(vec: Any) -> np.ndarray:
+    """Normalize a `papers.embedding` value read via psycopg2 into a float32 array.
+
+    pgvector's psycopg2 caster returns a plain list/ndarray on some versions
+    and a `Vector` wrapper (with `.to_numpy()`) on others (>=0.5), depending
+    on which pgvector-python release is installed.
+    """
+    if hasattr(vec, "to_numpy"):
+        return vec.to_numpy().astype(np.float32)
+    return np.array(vec, dtype=np.float32)
 
 
 # ---------------------------------------------------------------------------

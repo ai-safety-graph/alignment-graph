@@ -4,6 +4,7 @@ from pathlib import Path
 from psycopg2.extras import execute_values
 from .config import GREEN, YELLOW, BLUE, RESET
 from .arxiv_ids import normalize_arxiv_id_or_url
+from .db import vector_to_array
 
 _STAGE1_READ_CHUNK = 2000
 _STAGE1_WRITE_BATCH = 500
@@ -136,7 +137,7 @@ def load_vectors(conn, ids, *, model="specter2", chunk_size=900):
     ).fetchall()
     for pid, vec in rows:
         if vec is not None:
-            v = np.array(vec, dtype=np.float32)
+            v = vector_to_array(vec)
             V[pid] = v / (np.linalg.norm(v) + 1e-12)
     return V
 

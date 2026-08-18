@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 from psycopg2.extras import execute_values
 from .config import EMB_MODEL, GREEN, YELLOW, BLUE, RESET
+from .db import vector_to_array
 
 _EMBED_WRITE_BATCH = 500
 
@@ -37,7 +38,7 @@ def fetch_existing_embeddings(conn, paper_ids: List[str], model: str) -> Dict[st
     ).fetchall()
     for pid, vec in rows:
         if vec is not None:
-            out[pid] = np.array(vec, dtype=np.float32)
+            out[pid] = vector_to_array(vec)
     return out
 
 
@@ -90,6 +91,7 @@ class EmbeddingGenerator:
 
 ### Contributed by mnm-matin ###
     def encode(self, titles: List[str], summaries: List[str]) -> np.ndarray:
+        import time
         from transformers import AutoTokenizer
         from adapters import AutoAdapterModel
         import torch
@@ -104,7 +106,10 @@ class EmbeddingGenerator:
         texts = [(t or "") + sep + (s or "") for t, s in zip(titles, summaries)]
         chunks: List[np.ndarray] = []
 
-        for i in range(0, len(texts), self.batch_size):
+        total = len(texts)
+        n_batches = (total + self.batch_size - 1) // self.batch_size
+        start = time.monotonic()
+        for bi, i in enumerate(range(0, total, self.batch_size), start=1):
             batch = texts[i : i + self.batch_size]
             inputs = tokenizer(
                 batch,
@@ -120,6 +125,16 @@ class EmbeddingGenerator:
             cls = out.last_hidden_state[:, 0, :].detach().cpu().numpy()
             chunks.append(cls)
 
+            done = min(i + self.batch_size, total)
+            if bi % 10 == 0 or bi == n_batches:
+                elapsed = time.monotonic() - start
+                rate = done / elapsed if elapsed > 0 else 0.0
+                eta_s = (total - done) / rate if rate > 0 else float("inf")
+                print(
+                    f"{BLUE}embed encode:{RESET} {done}/{total} "
+                    f"({rate:.1f} papers/s, ETA {eta_s/60:.1f} min)"
+                )
+
         embs = np.concatenate(chunks, axis=0)
         embs = embs / (np.linalg.norm(embs, axis=1, keepdims=True) + 1e-12)
         return embs.astype(np.float32)
@@ -127,7 +142,7 @@ class EmbeddingGenerator:
 
 # -------- Pipeline entry points --------
 
-def ensure_embeddings_for_candidates(conn, device: str = "auto") -> None:
+def ensure_embeddings_for_candidates(conn, device: str = "auto", batch_size: int = 32) -> None:
     ids = [row[0] for row in conn.execute("SELECT id FROM papers").fetchall()]
     if not ids:
         print(f"{YELLOW}embed:{RESET} no rows in `papers`. Run stage1 first.")
@@ -156,7 +171,7 @@ def ensure_embeddings_for_candidates(conn, device: str = "auto") -> None:
         sums.append(s or "")
 
     print(f"{BLUE}embed:{RESET} computing embeddings for {len(missing)} papers…")
-    embs = EmbeddingGenerator(batch_size=32, device=device).encode(titles, sums)
+    embs = EmbeddingGenerator(batch_size=batch_size, device=device).encode(titles, sums)
 
     write_cur = conn.raw_cursor()
     written = 0
@@ -180,6 +195,6 @@ def cmd_embed(args) -> None:
     from .db import connect
     conn = connect(args.db)
     try:
-        ensure_embeddings_for_candidates(conn, device=args.device)
+        ensure_embeddings_for_candidates(conn, device=args.device, batch_size=args.batch_size)
     finally:
         conn.close()
