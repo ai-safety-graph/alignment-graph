@@ -124,6 +124,17 @@ def cmd_stage1(args):
         conn.close()
 
 
+_STAGE2_WRITE_BATCH = 500
+
+_UPDATE_STAGE2 = """
+    UPDATE papers AS p SET
+      ai_sem_sim = v.sim,
+      ai_stage2_keep = v.keep,
+      ai_stage2_reason = v.reason
+    FROM (VALUES %s) AS v(id, sim, keep, reason)
+    WHERE p.id = v.id
+"""
+
 # ---- Stage-2 filter (centroid) ----
 
 def load_vectors(conn, ids, *, model="specter2", chunk_size=900):
@@ -161,35 +172,58 @@ def cmd_filter(args):
     from .db import connect
     conn = connect(args.db)
     try:
+        if args.method != "centroid":
+            raise SystemExit(f"--method {args.method!r} is not implemented yet")
+        if not args.seeds:
+            raise SystemExit("--seeds is required for centroid method")
+
         ids = [r[0] for r in conn.execute("SELECT id FROM papers").fetchall()]
         if not ids:
             print(f"{YELLOW}filter:{RESET} nothing in `papers`. Run stage1 & embed first."); return
         V = load_vectors(conn, ids)
-        kept = rej = 0
-        all_sims = []
-        cur = conn.cursor(); cur.execute("BEGIN")
+        C = build_centroid(conn, args.seeds)
 
-        if args.method == "centroid":
-            if not args.seeds: raise SystemExit("--seeds is required for centroid method")
-            C = build_centroid(conn, args.seeds)
+        write_cur = conn.raw_cursor()
+        scanned = kept = rej = missing = 0
+        all_sims = []
+        write_batch: list[tuple] = []
+
+        def flush_writes():
+            nonlocal write_batch
+            if not write_batch:
+                return
+            execute_values(
+                write_cur, _UPDATE_STAGE2, write_batch,
+                template="(%s, %s::real, %s::boolean, %s::text)",
+            )
+            conn.commit()
+            write_batch = []
+            print(f"{BLUE}filter progress:{RESET} scanned={scanned} kept={kept} rejected={rej} missing={missing}")
+
+        try:
             for pid in ids:
+                scanned += 1
                 v = V.get(pid)
                 if v is None:
-                    cur.execute("UPDATE papers SET ai_stage2_keep=NULL, ai_stage2_reason=? WHERE id=?", ("missing-embedding", pid))
-                    continue
-                sim = float(v @ C)
-                all_sims.append(sim)
-                keep = bool(sim >= args.tau)
-                cur.execute("UPDATE papers SET ai_sem_sim=?, ai_stage2_keep=?, ai_stage2_reason=? WHERE id=?", (sim, keep, f"centroid tau={args.tau}", pid))
-                kept += keep; rej += (1-keep)
-            if all_sims:
-                import numpy as np
-                arr = np.array(all_sims, dtype=float)
-                print(f"sim stats: min={arr.min():.3f} p10={np.percentile(arr,10):.3f} median={np.median(arr):.3f} p90={np.percentile(arr,90):.3f} max={arr.max():.3f}")
-        else:
-            pass
+                    missing += 1
+                    write_batch.append((pid, None, None, "missing-embedding"))
+                else:
+                    sim = float(v @ C)
+                    all_sims.append(sim)
+                    keep = bool(sim >= args.tau)
+                    kept += keep; rej += (1 - keep)
+                    write_batch.append((pid, sim, keep, f"centroid tau={args.tau}"))
+                if len(write_batch) >= _STAGE2_WRITE_BATCH:
+                    flush_writes()
+            flush_writes()
+        except Exception:
+            conn.rollback()
+            raise
 
-        cur.execute("COMMIT")
-        print(f"{GREEN}filter:{RESET} kept={kept} rejected={rej} (tau={args.tau})")
+        if all_sims:
+            arr = np.array(all_sims, dtype=float)
+            print(f"sim stats: min={arr.min():.3f} p10={np.percentile(arr,10):.3f} median={np.median(arr):.3f} p90={np.percentile(arr,90):.3f} max={arr.max():.3f}")
+
+        print(f"{GREEN}filter:{RESET} scanned={scanned} kept={kept} rejected={rej} missing_embedding={missing} (tau={args.tau})")
     finally:
         conn.close()
