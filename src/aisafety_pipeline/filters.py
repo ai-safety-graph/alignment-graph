@@ -90,12 +90,18 @@ def domain_from_arxiv_categories(categories: str) -> str:
     return "unknown"
 
 
+_SELECT_EXISTING_PAPERS = """
+    SELECT id, title, authors, published, summary, link, ai_regex_hit, domain_tag
+    FROM papers WHERE id = ANY(%s)
+"""
+
+
 def cmd_stage1(args):
     from .db import connect
     conn = connect(args.db)
     try:
         write_cur = conn.raw_cursor()
-        scanned = copied = 0
+        scanned = copied = unchanged = 0
         write_batch: list[tuple] = []
 
         def flush_writes():
@@ -106,7 +112,7 @@ def cmd_stage1(args):
             conn.commit()
             copied += len(write_batch)
             write_batch = []
-            print(f"{BLUE}stage1 progress:{RESET} scanned={scanned} copied={copied}")
+            print(f"{BLUE}stage1 progress:{RESET} scanned={scanned} copied={copied} unchanged_skipped={unchanged}")
 
         try:
             last_id = ""
@@ -118,6 +124,10 @@ def cmd_stage1(args):
                 ).fetchall()
                 if not page:
                     break
+
+                # First pass: figure out which rows in this chunk are candidates
+                # for `papers` (matched the filter, or --keep-all-and-filter).
+                candidates = []
                 for r in page:
                     scanned += 1
                     title, summary, cats = r["title"], r["summary"], (r["categories"] or "")
@@ -130,18 +140,46 @@ def cmd_stage1(args):
                         continue
                     ai_regex_hit = int(text_hit)
                     domain_tag = domain_from_arxiv_categories(cats)
-                    write_batch.append(
-                        (r["id"], r["title"], r["authors"], r["published"], r["summary"], r["link"], ai_regex_hit, domain_tag)
-                    )
-                    if len(write_batch) >= _STAGE1_WRITE_BATCH:
-                        flush_writes()
+                    candidates.append((
+                        r["id"], r["title"], r["authors"], r["published"], r["summary"], r["link"],
+                        ai_regex_hit, domain_tag,
+                    ))
+
+                # Second pass: drop candidates that are already present in `papers`
+                # with identical values. `papers` carries a 654MB HNSW index that
+                # this upsert never touches (embedding isn't in the column list),
+                # but with fillfactor=100 Postgres still can't do a HOT update for
+                # most rows (no free space in the heap page for the new tuple
+                # version), so a no-op re-upsert still forces a full write to
+                # every index on the table. Skipping unchanged rows avoids that
+                # write entirely instead of just avoiding the embedding column.
+                if candidates:
+                    cand_ids = [c[0] for c in candidates]
+                    existing = {
+                        row["id"]: (
+                            row["title"], row["authors"], row["published"],
+                            row["summary"], row["link"], row["ai_regex_hit"], row["domain_tag"],
+                        )
+                        for row in conn.execute(_SELECT_EXISTING_PAPERS, (cand_ids,)).fetchall()
+                    }
+                    for cid, *rest in candidates:
+                        if existing.get(cid) == tuple(rest):
+                            unchanged += 1
+                            continue
+                        write_batch.append((cid, *rest))
+                        if len(write_batch) >= _STAGE1_WRITE_BATCH:
+                            flush_writes()
+
                 last_id = page[-1]["id"]
             flush_writes()
         except Exception:
             conn.rollback()
             raise
 
-        print(f"{GREEN}stage1:{RESET} scanned {scanned} rows, copied/updated {copied} candidates into `papers`.")
+        print(
+            f"{GREEN}stage1:{RESET} scanned {scanned} rows, copied/updated {copied} candidates into "
+            f"`papers` ({unchanged} already up to date, skipped)."
+        )
     finally:
         conn.close()
 
