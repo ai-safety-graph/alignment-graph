@@ -25,7 +25,7 @@ _UPSERT_PAPERS = """
 _AI_SAFETY_PATTERNS = [
     r"\bAI safety\b", r"\bAI alignment\b", r"\bvalue alignment\b",
     r"\bcorrigib", r"\bsafe reinforcement learning\b",
-    r"\bsafety evaluation\b", r"\b(model|capabilit(y|ies)) evaluation\b.*\bsafety\b",
+    r"\bsafety evaluations?\b", r"\b(model|capabilit(y|ies)) evaluation\b.*\bsafety\b",
     r"\bred[- ]?teaming\b", r"\bjailbreak(s|ing)?\b",
     r"\bfrontier model(s)?\b.*\bsafety\b",
     r"\b(system prompt|model spec(ification)?)\b.*\bsafety\b",
@@ -42,6 +42,28 @@ _AI_SAFETY_PATTERNS = [
     r"\bred team(ing)?\b.*\b(governance|policy|safety)\b",
     r"\b(taxonomy|framework|benchmark|standardization)\b.*\b(safety|risk|governance)\b.*\b(AI|model|system)s?\b",
     r"\bEU AI Act\b|\bAI Act\b|\bNIST AI RMF\b|\bISO/IEC\s*42001\b|\bISO/IEC\s*23894\b",
+    # --- alignment-theory / inner-alignment vocabulary ---
+    r"\bsafety[- ]align(ed|ment|ing)?\b", r"\bsafety[- ]tun(ed|ing)\b",
+    r"\breward hacking\b", r"\breward tampering\b",
+    r"\bmesa[- ]?optimi[sz](ers?|ation)\b",
+    r"\bpower[- ]seeking\b|\bseeks?\s+power\b|\bseeking\s+power\b",
+    r"\binstrumental convergence\b", r"\bgoal misgeneralization\b",
+    r"\boff[- ]switch(es)?\b", r"\bagent alignment\b",
+    r"\bRLHF\b|\breinforcement learning from human feedback\b",
+    # --- interpretability vocabulary ---
+    r"\blatent knowledge\b", r"\bactivation steering\b",
+    r"\bmechanistic interpretability\b", r"\brepresentation engineering\b",
+    r"\brefusal direction(s)?\b",
+    r"\bsparse autoencoders?\b.*\b(language models?|LLMs?|large language models?|interpretab)\b",
+    r"\b(language models?|LLMs?|large language models?|interpretab)\b.*\bsparse autoencoders?\b",
+    # --- risk/eval vocabulary ---
+    r"\bextreme risks?\b", r"\bdangerous capabilit(y|ies)\b",
+    # --- bare "safety"/"toxic(ity)" only when co-occurring with LM/LLM context,
+    # to avoid matching unrelated ML papers that happen to say "safe"/"aligned" ---
+    r"\btoxic(ity)?\b.*\b(language models?|LLMs?|large language models?)\b",
+    r"\b(language models?|LLMs?|large language models?)\b.*\btoxic(ity)?\b",
+    r"\bsafety\b.*\b(language models?|LLMs?|large language models?)\b",
+    r"\b(language models?|LLMs?|large language models?)\b.*\bsafety\b",
 ]
 _AI_RE = re.compile("|".join(_AI_SAFETY_PATTERNS), re.IGNORECASE)
 _POLICYish_CATS = ("cs.CY", "cs.SI", "cs.CR")
