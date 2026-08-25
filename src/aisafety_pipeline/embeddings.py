@@ -5,7 +5,6 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 from psycopg2.extras import execute_values
 from .config import EMB_MODEL, GREEN, YELLOW, BLUE, RESET
-from .db import vector_to_array
 
 _EMBED_WRITE_BATCH = 500
 
@@ -28,18 +27,19 @@ def upsert_embedding(conn, paper_id: str, model: str, vec: np.ndarray) -> None:
 
 
 def fetch_existing_embeddings(conn, paper_ids: List[str], model: str) -> Dict[str, np.ndarray]:
-    """Return {paper_id: vector} for the given IDs."""
+    """Return {paper_id: None} for IDs that already have an embedding.
+
+    Callers only check presence (`pid in existing`) — the embedding vectors
+    themselves are never read back out, so we avoid pulling them over the
+    wire (which is enough data to trip a remote DB's statement timeout).
+    """
     if not paper_ids:
         return {}
-    out: Dict[str, np.ndarray] = {}
     rows = conn.execute(
-        "SELECT id, embedding FROM papers WHERE embedding IS NOT NULL AND id = ANY(%s)",
+        "SELECT id FROM papers WHERE embedding IS NOT NULL AND id = ANY(%s)",
         (paper_ids,),
     ).fetchall()
-    for pid, vec in rows:
-        if vec is not None:
-            out[pid] = vector_to_array(vec)
-    return out
+    return {row[0]: None for row in rows}
 
 
 # -------- Embedding model --------

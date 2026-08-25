@@ -3,8 +3,8 @@ import numpy as np, pandas as pd
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import normalize
 from .config import GREEN, YELLOW, BLUE, RESET
-from .db import vector_to_array
 from .embeddings import upsert_embedding, fetch_existing_embeddings, EmbeddingGenerator
+from .filters import load_vectors
 
 ## Contributed by mnm-matin
 class ClusterManager:
@@ -19,13 +19,29 @@ class ClusterManager:
         return km.fit_predict(self.embeddings)
 
 
+_GET_PAPERS_CHUNK = 5000
+
+
 def get_papers(conn, only_kept=True) -> pd.DataFrame:
-    sql = ("SELECT id, title, summary FROM papers WHERE ai_stage2_keep"
-           if only_kept else "SELECT id, title, summary FROM papers")
-    cur = conn.cursor()
-    cur.execute(sql)
-    rows = cur.fetchall()
-    return pd.DataFrame([list(r) for r in rows], columns=["id", "title", "summary"])
+    # Paginated by id (keyset, not OFFSET) rather than one single-shot SELECT:
+    # title/summary are large TOASTed text columns, and fetching all of them
+    # for the full kept set in one statement can exceed a hosted DB's
+    # statement_timeout even though the query plan itself is fine.
+    cond = "ai_stage2_keep" if only_kept else "TRUE"
+    rows_all = []
+    last_id = ""
+    while True:
+        page = conn.execute(
+            f"SELECT id, title, summary FROM papers WHERE {cond} AND id > %s ORDER BY id LIMIT %s",
+            (last_id, _GET_PAPERS_CHUNK),
+        ).fetchall()
+        if not page:
+            break
+        rows_all.extend(page)
+        last_id = page[-1]["id"]
+        if len(page) < _GET_PAPERS_CHUNK:
+            break
+    return pd.DataFrame([list(r) for r in rows_all], columns=["id", "title", "summary"])
 
 
 def compute_and_store_missing_embeddings(conn, df: pd.DataFrame, device="auto"):
@@ -48,11 +64,7 @@ def compute_and_store_missing_embeddings(conn, df: pd.DataFrame, device="auto"):
 
 def load_embeddings_for_df(conn, df: pd.DataFrame) -> np.ndarray:
     ids = df["id"].tolist()
-    rows = conn.execute(
-        "SELECT id, embedding FROM papers WHERE embedding IS NOT NULL AND id = ANY(%s)",
-        (ids,),
-    ).fetchall()
-    by_id = {row[0]: vector_to_array(row[1]) for row in rows}
+    by_id = load_vectors(conn, ids)
     mat = np.vstack([by_id[pid] for pid in ids])
     return mat
 

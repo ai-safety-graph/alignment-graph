@@ -32,15 +32,32 @@ def label_clusters_default(conn, method_name: str = "default", topk_terms: int =
     """)
     conn.commit()
 
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT p.id, p.title, p.summary, p.kmeans_cluster AS cid
-        FROM papers AS p
-        WHERE p.ai_stage2_keep AND p.kmeans_cluster IS NOT NULL
-        ORDER BY p.kmeans_cluster ASC
-    """)
-    rows = cur.fetchall()
-    df = pd.DataFrame([list(r) for r in rows], columns=["id", "title", "summary", "cid"])
+    # Paginated by id (keyset), not a single-shot SELECT: title/summary are
+    # large TOASTed text columns, and fetching all of them for the full
+    # kept+clustered set in one statement can exceed a hosted DB's
+    # statement_timeout. Row order doesn't matter downstream (grouping by
+    # `cid` below is done with boolean masks, not positionally).
+    _LABEL_READ_CHUNK = 5000
+    rows_all = []
+    last_id = ""
+    while True:
+        page = conn.execute(
+            """
+            SELECT id, title, summary, kmeans_cluster AS cid
+            FROM papers
+            WHERE ai_stage2_keep AND kmeans_cluster IS NOT NULL AND id > %s
+            ORDER BY id
+            LIMIT %s
+            """,
+            (last_id, _LABEL_READ_CHUNK),
+        ).fetchall()
+        if not page:
+            break
+        rows_all.extend(page)
+        last_id = page[-1]["id"]
+        if len(page) < _LABEL_READ_CHUNK:
+            break
+    df = pd.DataFrame([list(r) for r in rows_all], columns=["id", "title", "summary", "cid"])
     if df.empty: return {}
     ids = df["id"].tolist(); cids = df["cid"].to_numpy()
     texts = (df["title"].fillna("") + ". " + df["summary"].fillna("")).tolist()

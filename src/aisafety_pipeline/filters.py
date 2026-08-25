@@ -195,21 +195,32 @@ _UPDATE_STAGE2 = """
     WHERE p.id = v.id
 """
 
+_SELECT_EXISTING_STAGE2 = "SELECT id, ai_sem_sim, ai_stage2_keep FROM papers WHERE id = ANY(%s)"
+_STAGE2_READ_CHUNK = 900
+# ai_sem_sim is stored as `real` (float32), so a value round-tripped through
+# Postgres won't compare bit-equal to the float64 the same computation
+# produces in Python; a tolerance well above float32 precision (~1.2e-7
+# relative) avoids treating that round-trip noise as a real change.
+_SIM_UNCHANGED_TOL = 1e-4
+
 # ---- Stage-2 filter (centroid) ----
 
 def load_vectors(conn, ids, *, model="specter2", chunk_size=900):
     if not ids:
         return {}
 
+    ids = list(ids)
     V = {}
-    rows = conn.execute(
-        "SELECT id, embedding FROM papers WHERE embedding IS NOT NULL AND id = ANY(%s)",
-        (list(ids),),
-    ).fetchall()
-    for pid, vec in rows:
-        if vec is not None:
-            v = vector_to_array(vec)
-            V[pid] = v / (np.linalg.norm(v) + 1e-12)
+    for i in range(0, len(ids), chunk_size):
+        chunk = ids[i:i + chunk_size]
+        rows = conn.execute(
+            "SELECT id, embedding FROM papers WHERE embedding IS NOT NULL AND id = ANY(%s)",
+            (chunk,),
+        ).fetchall()
+        for pid, vec in rows:
+            if vec is not None:
+                v = vector_to_array(vec)
+                V[pid] = v / (np.linalg.norm(v) + 1e-12)
     return V
 
 
@@ -243,8 +254,22 @@ def cmd_filter(args):
         V = load_vectors(conn, ids)
         C = build_centroid(conn, args.seeds)
 
+        # Existing (sim, keep) per id, so unchanged rows can be skipped below.
+        # `papers` carries a 654MB HNSW index that this UPDATE never touches
+        # (embedding isn't in the SET list), but with fillfactor=100 Postgres
+        # still can't do a HOT update for most rows, so writing a row that
+        # didn't actually change still forces a full rewrite of every index
+        # on the table. This matters most when re-running `filter` with a
+        # different --tau: sim doesn't depend on tau at all, and `keep` only
+        # flips for rows near the new threshold, so most rows are unchanged.
+        existing: dict[str, tuple] = {}
+        for i in range(0, len(ids), _STAGE2_READ_CHUNK):
+            chunk = ids[i:i + _STAGE2_READ_CHUNK]
+            for row in conn.execute(_SELECT_EXISTING_STAGE2, (chunk,)).fetchall():
+                existing[row[0]] = (row[1], row[2])
+
         write_cur = conn.raw_cursor()
-        scanned = kept = rej = missing = 0
+        scanned = kept = rej = missing = unchanged = 0
         all_sims = []
         write_batch: list[tuple] = []
 
@@ -258,7 +283,7 @@ def cmd_filter(args):
             )
             conn.commit()
             write_batch = []
-            print(f"{BLUE}filter progress:{RESET} scanned={scanned} kept={kept} rejected={rej} missing={missing}")
+            print(f"{BLUE}filter progress:{RESET} scanned={scanned} kept={kept} rejected={rej} missing={missing} unchanged_skipped={unchanged}")
 
         try:
             for pid in ids:
@@ -266,13 +291,23 @@ def cmd_filter(args):
                 v = V.get(pid)
                 if v is None:
                     missing += 1
-                    write_batch.append((pid, None, None, "missing-embedding"))
+                    sim, keep, reason = None, None, "missing-embedding"
                 else:
                     sim = float(v @ C)
                     all_sims.append(sim)
                     keep = bool(sim >= args.tau)
                     kept += keep; rej += (1 - keep)
-                    write_batch.append((pid, sim, keep, f"centroid tau={args.tau}"))
+                    reason = f"centroid tau={args.tau}"
+
+                prev_sim, prev_keep = existing.get(pid, (None, None))
+                sim_unchanged = (sim is None and prev_sim is None) or (
+                    sim is not None and prev_sim is not None and abs(float(prev_sim) - sim) < _SIM_UNCHANGED_TOL
+                )
+                if sim_unchanged and prev_keep == keep:
+                    unchanged += 1
+                    continue
+
+                write_batch.append((pid, sim, keep, reason))
                 if len(write_batch) >= _STAGE2_WRITE_BATCH:
                     flush_writes()
             flush_writes()
@@ -284,6 +319,9 @@ def cmd_filter(args):
             arr = np.array(all_sims, dtype=float)
             print(f"sim stats: min={arr.min():.3f} p10={np.percentile(arr,10):.3f} median={np.median(arr):.3f} p90={np.percentile(arr,90):.3f} max={arr.max():.3f}")
 
-        print(f"{GREEN}filter:{RESET} scanned={scanned} kept={kept} rejected={rej} missing_embedding={missing} (tau={args.tau})")
+        print(
+            f"{GREEN}filter:{RESET} scanned={scanned} kept={kept} rejected={rej} "
+            f"missing_embedding={missing} unchanged_skipped={unchanged} (tau={args.tau})"
+        )
     finally:
         conn.close()
