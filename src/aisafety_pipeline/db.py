@@ -210,7 +210,8 @@ _PG_SCHEMA = [
 
 _PG_VECTOR_INDEX = (
     "CREATE INDEX IF NOT EXISTS idx_papers_embedding ON papers "
-    "USING hnsw (embedding vector_cosine_ops)"
+    "USING hnsw (embedding vector_cosine_ops) "
+    "WHERE ai_stage2_keep = TRUE AND embedding IS NOT NULL"
 )
 
 
