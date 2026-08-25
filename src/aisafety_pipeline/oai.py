@@ -78,6 +78,11 @@ def _oai_fetch(params: dict) -> str:
                 _sleep_with_jitter(secs)
                 continue
             r.raise_for_status()
+            # arXiv's OAI-PMH responses omit a charset in Content-Type, so
+            # requests falls back to ISO-8859-1 (RFC 2616 default) even
+            # though the body is UTF-8 -- force the correct encoding or
+            # every non-ASCII byte pair gets mis-decoded into mojibake.
+            r.encoding = "utf-8"
             # Success
             _sleep_with_jitter(OAI_THROTTLE_SEC)
             return r.text
