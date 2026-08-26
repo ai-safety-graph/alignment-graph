@@ -36,18 +36,9 @@ import ClusterLegendOverlay from './ClusterLegendOverlay'
 import Dropdown from './Dropdown'
 import { useCapabilities } from '../hooks/useCapabilities'
 
-const DEMO_PAPER_IDS = [
-  'https://arxiv.org/abs/2401.02843', // Thousands of AI Authors on the Future of AI
-  'https://arxiv.org/abs/2510.05519', // Assessing Human Rights Risks in AI
-  'https://arxiv.org/abs/2510.08314', // To Ask or Not to Ask: Learning to Require Human Feedback
-  'https://arxiv.org/abs/2510.08211', // LLMs Learn to Deceive Unintentionally
-  'https://arxiv.org/abs/2510.09462', // Adaptive Attacks on Trusted Monitors Subvert AI Control Protocols
-  'https://arxiv.org/abs/2510.08792', // Assurance of Frontier AI Built for National Security
-  'https://arxiv.org/abs/2510.09090', // AI and Human Oversight: A Risk-Based Framework for Alignment
-  'https://arxiv.org/abs/2412.07727', // AI Expands Scientists' Impact but Contracts Science's Focus
-  'https://arxiv.org/abs/2505.18942', // Language Models Surface the Unwritten Code of Science and Society
-  'https://arxiv.org/abs/2510.06559', // The Algebra of Meaning: Why Machines Need Montague More Than Moore's Law
-]
+// Safety cap on the fallback graph's size; the from/to date window is what
+// actually bounds it under normal volume.
+const RECENT_PAPERS_LIMIT = 200
 
 // Map a paper's raw global coords (rx, ry) into the main graph's canvas space,
 // mirroring the backend normalization in graph.py so ghost nodes land at the
@@ -114,11 +105,34 @@ export default function ArxivGraph({
     setActiveSavedGraph(updated)
   }
 
+  const wantsRecentPapers = !paperIds?.length && !activeSavedGraph
+
+  // Fallback graph when nothing is explicitly selected: papers published in
+  // the last month, refetched periodically so the default view stays fresh.
+  const { data: recentPapers } = useQuery({
+    queryKey: ['recentPapers'],
+    queryFn: async () => {
+      const { fetchPapers } = await import('../lib/api')
+      const to = new Date()
+      const from = new Date(to)
+      from.setMonth(from.getMonth() - 1)
+      return fetchPapers({
+        limit: RECENT_PAPERS_LIMIT,
+        from: from.toISOString().slice(0, 10),
+        to: to.toISOString().slice(0, 10),
+      })
+    },
+    enabled: wantsRecentPapers,
+    staleTime: 5 * 60 * 1000,
+  })
+
   const ids = paperIds?.length
     ? paperIds
-    : (activeSavedGraph?.paperIds ?? DEMO_PAPER_IDS)
+    : (activeSavedGraph?.paperIds ??
+      recentPapers?.items.map((p) => p.aid) ??
+      [])
 
-  const isDemo = !paperIds?.length && !activeSavedGraph
+  const isDemo = wantsRecentPapers
   const isEmptySavedGraph =
     !paperIds?.length && !!activeSavedGraph && activeSavedGraph.paperIds.length === 0
 
@@ -829,7 +843,7 @@ export default function ArxivGraph({
         <Dropdown
           label={
             isDemo
-              ? 'Demo subgraph'
+              ? 'Recent papers'
               : (activeSavedGraph?.name ?? 'Custom subgraph')
           }
         >
@@ -865,7 +879,7 @@ export default function ArxivGraph({
                 isDemo ? 'text-[#4ea8de]' : 'text-neutral-400'
               }`}
             >
-              Demo subgraph
+              Recent papers
             </button>
           )}
         </Dropdown>
