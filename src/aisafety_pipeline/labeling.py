@@ -1,24 +1,19 @@
 from __future__ import annotations
-import re, json, numpy as np, pandas as pd
+import json, numpy as np, pandas as pd
 from typing import Dict, List, Optional
-from sklearn.feature_extraction.text import TfidfVectorizer
 from .embeddings import EmbeddingGenerator
 from .config import GREEN
 from .filters import load_vectors
+from .taxonomy import TAXONOMY
 
-# (Same logic as your labeler, with docstrings and modularized persistence)
+# Cluster labels are zero-shot: each cluster's centroid embedding is matched
+# against a fixed, human-curated topic list (`taxonomy.TAXONOMY`) by cosine
+# similarity, rather than mined from cluster text via TF-IDF. This trades
+# discovering unnamed topics for labels that are stable and meaningful to
+# readers -- see the k-sweep results (silhouette highest at k=4, no elbow)
+# for why clusters here don't reliably correspond to distinct vocabulary.
 
-def label_clusters_default(conn, method_name: str = "default", topk_terms: int = 4, ngram_range=(2,3), min_df: int = 6, max_df: float = 0.35, extra_phrases: Optional[List[str]] = None, cosine_floor: float = 0.60, enforce_unique: bool = True):
-    GENERIC_LABEL_STOPLIST = {"artificial","intelligence","language","agent","agents","model","models","system","systems","approach","method","task","dataset","framework","paper","study"}
-    _LABEL_TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
-    def _is_generic_phrase(phrase: str) -> bool:
-        toks = _LABEL_TOKEN_RE.findall((phrase or "").lower());
-        if not toks: return True
-        norm = [t[:-1] if t.endswith("s") and len(t) > 3 else t for t in toks]
-        if len(norm) == 1 and norm[0] in GENERIC_LABEL_STOPLIST: return True
-        if all(t in GENERIC_LABEL_STOPLIST for t in norm): return True
-        return False
-
+def label_clusters_default(conn, method_name: str = "default", topk_terms: int = 4, extra_phrases: Optional[List[str]] = None, cosine_floor: float = 0.60, enforce_unique: bool = True):
     conn.execute("""
         CREATE TABLE IF NOT EXISTS cluster_meta (
             method TEXT NOT NULL,
@@ -60,31 +55,8 @@ def label_clusters_default(conn, method_name: str = "default", topk_terms: int =
     df = pd.DataFrame([list(r) for r in rows_all], columns=["id", "title", "summary", "cid"])
     if df.empty: return {}
     ids = df["id"].tolist(); cids = df["cid"].to_numpy()
-    texts = (df["title"].fillna("") + ". " + df["summary"].fillna("")).tolist()
 
-    vec = TfidfVectorizer(stop_words="english", ngram_range=ngram_range, min_df=min_df, max_df=max_df, strip_accents="unicode")
-    X = vec.fit_transform(texts); vocab = np.array(vec.get_feature_names_out())
-
-    tfidf_terms_by_cluster: Dict[int, List[str]] = {}
-    for cid in sorted(df["cid"].unique()):
-        idx = np.where(cids == cid)[0]
-        if idx.size == 0: tfidf_terms_by_cluster[int(cid)] = []; continue
-        mean_vec = np.asarray(X[idx].mean(axis=0)).ravel()
-        if not np.any(mean_vec): tfidf_terms_by_cluster[int(cid)] = []; continue
-        top_idx_all = mean_vec.argsort()[::-1]
-        chosen: List[str] = []
-        for j in top_idx_all:
-            t = vocab[j]
-            if _is_generic_phrase(t): continue
-            if any(t in u or u in t for u in chosen): continue
-            chosen.append(t)
-            if len(chosen) >= topk_terms: break
-        tfidf_terms_by_cluster[int(cid)] = chosen
-
-    cand = set(); [cand.update(terms) for terms in tfidf_terms_by_cluster.values()]
-    if extra_phrases: cand.update(extra_phrases)
-    if not cand: cand.update({"reinforcement learning","governance","robustness","evaluation"})
-    phrases = sorted(p for p in cand if not _is_generic_phrase(p))
+    phrases = sorted(set(TAXONOMY) | set(extra_phrases or []))
 
     V = load_vectors(conn, ids)
     embs = np.vstack([V[i] for i in ids])
@@ -157,7 +129,7 @@ def cmd_label(args):
     from .db import connect
     conn = connect(args.db)
     try:
-        out = label_clusters_default(conn, method_name="default", topk_terms=args.topk, ngram_range=(1,3), min_df=args.min_df, max_df=args.max_df, extra_phrases=args.extra and [s.strip() for s in args.extra.split(",") if s.strip()] or None)
+        out = label_clusters_default(conn, method_name="default", topk_terms=args.topk, extra_phrases=args.extra and [s.strip() for s in args.extra.split(",") if s.strip()] or None)
         print(f"{GREEN}label:{GREEN} stored labels for {len(out)} clusters (method=default).")
         for cid in sorted(out):
             print(f"  • cluster {cid}: {out[cid]['label']}  (conf={out[cid]['confidence']:.3f})")

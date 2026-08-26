@@ -1,32 +1,9 @@
 from __future__ import annotations
-import argparse, datetime as dt, re, json, os
+import argparse, datetime as dt, json, os
 from pathlib import Path
 from typing import Optional
 from .config import GREEN, YELLOW, BLUE, RESET, API_HOST, API_PORT
 from . import oai, filters, embeddings, clustering, labeling, compute_layout, config
-
-# Labeling helpers (shared)
-GENERIC_LABEL_STOPLIST = {
-    "artificial", "intelligence", "language",
-    "agent", "agents",
-    "model", "models",
-    "system", "systems",
-    "approach", "method", "task", "dataset",
-    "framework", "paper", "study"
-}
-_LABEL_TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
-
-
-def is_generic_phrase(phrase: str) -> bool:
-    toks = _LABEL_TOKEN_RE.findall((phrase or "").lower())
-    if not toks:
-        return True
-    norm = [t[:-1] if t.endswith("s") and len(t) > 3 else t for t in toks]
-    if len(norm) == 1 and norm[0] in GENERIC_LABEL_STOPLIST:
-        return True
-    if all(t in GENERIC_LABEL_STOPLIST for t in norm):
-        return True
-    return False
 
 
 def iso_date(d: dt.date) -> str: return d.strftime("%Y-%m-%d")
@@ -92,12 +69,10 @@ def build_parser() -> argparse.ArgumentParser:
     cl.add_argument("--canvas-pad", type=int, default=24)
     cl.set_defaults(func=compute_layout.cmd_compute_layout)
 
-    g = sp.add_parser("label", help="Auto-label clusters (default recipe)")
+    g = sp.add_parser("label", help="Auto-label clusters against a fixed topic taxonomy (see taxonomy.py)")
     g.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
     g.add_argument("--topk", type=int, default=4)
-    g.add_argument("--min-df", type=int, default=3)
-    g.add_argument("--max-df", type=float, default=0.6)
-    g.add_argument("--extra", type=str, default=None)
+    g.add_argument("--extra", type=str, default=None, help="Comma-separated extra candidate topics, on top of taxonomy.TAXONOMY")
     g.set_defaults(func=labeling.cmd_label)
 
     srv = sp.add_parser("serve", help="Start the FastAPI server (requires DATABASE_URL)")
