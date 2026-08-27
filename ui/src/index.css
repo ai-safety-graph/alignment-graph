@@ -3,3 +3,12 @@
 @plugin "tailwind-scrollbar" {
   nocompatible: true;
 }
+
+@theme {
+  --color-neutral-950: #1a1a1a;
+}
+
+html,
+body {
+  background-color: #1a1a1a;
+}

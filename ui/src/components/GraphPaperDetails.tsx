@@ -49,7 +49,7 @@ export default function GraphPaperDetails({
   return (
     <aside
       ref={scrollerRef as any}
-      className='fixed top-[72px] right-4 bottom-4 w-[440px] z-10 bg-[#262626] backdrop-blur-md border border-[#333333] rounded-xl pb-3 px-3 overflow-auto text-[#e5e5e5] scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent scrollbar-hover:scrollbar-thumb-[#666]'
+      className='fixed top-[72px] right-4 bottom-4 w-[440px] z-10 bg-[#262626] backdrop-blur-md border border-[#333333] rounded-xl pb-3 px-3 overflow-auto text-[#e5e5e5] scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent scrollbar-hover:scrollbar-thumb-[#666]'
     >
       <div>
         <div className='py-3 sticky top-0 bg-[#262626]'>

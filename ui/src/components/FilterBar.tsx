@@ -104,7 +104,7 @@ export default function FilterBar({
               )}
 
             {(isLoading || availableDomains.length > 0) && (
-              <div className='flex items-center gap-2 overflow-x-auto scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent'>
+              <div className='flex items-center gap-2 overflow-x-auto scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent'>
                 <span className='shrink-0 text-xs text-neutral-500 w-12'>
                   Domain
                 </span>

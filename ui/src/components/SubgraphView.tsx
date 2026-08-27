@@ -111,7 +111,7 @@ export default function SubgraphView() {
 
       <div className='flex flex-row flex-1 overflow-hidden'>
         <div className='flex flex-col flex-1 overflow-hidden min-w-0'>
-          <div className='flex-1 overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent'>
+          <div className='flex-1 overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent'>
             {!nodes && <LoadingIndicator label='Loading…' />}
 
             {nodes && items.length === 0 && (

@@ -70,14 +70,14 @@ export default function PaperList({
 
   return (
     <>
-      <ul className='divide-y divide-neutral-800'>
+      <ul>
         {slice.map(({ n }) => {
           const inSubgraph = subgraphPaperIds?.has(n.aid) ?? false
           return (
-          <li key={n.aid} className='relative'>
+          <li key={n.aid} className='relative group/row mb-1.5 last:mb-0'>
             <button
               onClick={() => onSelectId(n.aid)}
-              className={`w-full text-left px-4 py-3 pr-10 active:bg-neutral-900${n.aid === selectedId ? ' bg-neutral-800' : ''}${enableHover ? ' hover:bg-neutral-900' : ''}`}
+              className={`w-full text-left px-4 py-3 pr-10 rounded-md cursor-pointer active:bg-[#2a2a2a]${n.aid === selectedId ? ' bg-neutral-800' : ''}${enableHover ? ' group-hover/row:bg-[#2a2a2a]' : ''}`}
             >
               <div className='text-[13px] text-neutral-400 truncate'>
                 {n.au}

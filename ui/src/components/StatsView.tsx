@@ -495,200 +495,182 @@ export default function StatsView() {
         <div className='flex flex-col flex-1 overflow-hidden min-w-0'>
           <div
             ref={listRef}
-            className='flex-1 overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-[#1a1a1a] scrollbar-track-transparent [scrollbar-gutter:stable]'
+            className='flex-1 overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent [scrollbar-gutter:stable] md:[direction:rtl]'
           >
-            {(subgraphTitle || filterBar) && (
+            <div className='md:[direction:ltr] md:px-4'>
+              {(subgraphTitle || filterBar) && (
+                <div
+                  className={`hidden md:block sticky top-0 z-10 transition-colors duration-200 ${
+                    filterBar && filterExpanded
+                      ? 'bg-[#1f1f1f]'
+                      : 'bg-neutral-950'
+                  }`}
+                >
+                  {subgraphTitle}
+                  {filterBar}
+                </div>
+              )}
+
+              <div className='md:hidden px-4 pt-4 pb-2'>
+                <a
+                  target='_blank'
+                  href='https://github.com/ai-safety-graph/alignment-graph'
+                  className='flex items-center justify-center'
+                >
+                  <img
+                    src='/ag-logo.svg'
+                    alt='Alignment Graph Logo'
+                    className='h-10 w-auto opacity-50 saturate-70'
+                  />
+                </a>
+              </div>
+
               <div
-                className={`hidden md:block sticky top-0 z-10 transition-colors duration-200 ${
-                  filterBar && filterExpanded
-                    ? 'bg-[#1f1f1f]'
-                    : 'bg-neutral-950'
-                }`}
+                ref={searchBarRef}
+                className='md:hidden sticky top-0 z-20 bg-neutral-950/90 backdrop-blur'
               >
-                {subgraphTitle}
-                {filterBar}
-              </div>
-            )}
-
-            <div className='md:hidden px-4 pt-4 pb-2'>
-              <a
-                target='_blank'
-                href='https://github.com/ai-safety-graph/alignment-graph'
-                className='flex items-center justify-center'
-              >
-                <img
-                  src='/ag-logo.svg'
-                  alt='Alignment Graph Logo'
-                  className='h-10 w-auto opacity-50 saturate-70'
-                />
-              </a>
-            </div>
-
-            <div
-              ref={searchBarRef}
-              className='md:hidden sticky top-0 z-20 bg-neutral-950/90 backdrop-blur'
-            >
-              <div className='p-3 flex flex-col gap-2'>
-                <div className='flex items-center gap-3'>
-                  {backLink}
-                  {subgraphControl}
-                </div>
-                <div className='flex items-center gap-2'>
-                  {isBrowsing ? searchControls : subgraphSearchControls}
-                </div>
-              </div>
-              {(selectedSubgraph || filterBar || isBrowsing) && (
-                <div className='px-3 pb-2 flex items-center gap-2 text-sm text-neutral-400'>
-                  {!selectedSubgraph && isBrowsing && newGraphControl}
-                  {selectedSubgraph && (
-                    <span className='flex-1 min-w-0 truncate'>
-                      {isBrowsing ? 'Adding papers to' : 'Viewing papers in'}{' '}
-                      <span className='font-medium text-neutral-200'>
-                        {selectedSubgraph.name}
-                      </span>
-                    </span>
-                  )}
-                  <div className='ml-auto flex items-center gap-2'>
-                    {filterBar && filterToggleButton}
-                    {selectedSubgraph && isBrowsing && newGraphControl}
+                <div className='p-3 flex flex-col gap-2'>
+                  <div className='flex items-center gap-3'>
+                    {backLink}
+                    {subgraphControl}
+                  </div>
+                  <div className='flex items-center gap-2'>
+                    {isBrowsing ? searchControls : subgraphSearchControls}
                   </div>
                 </div>
-              )}
-            </div>
-
-            {filterBar && (
-              <div
-                className='md:hidden sticky z-10 bg-neutral-950/90 backdrop-blur'
-                style={{ top: searchHeight }}
-              >
-                {filterBar}
-              </div>
-            )}
-
-            {isBrowsing && searchMode === 'keyword' && papers && total > 0 && (
-              <div className='px-4 py-1.5 text-xs text-neutral-500 flex items-center gap-2'>
-                <span>
-                  Showing {papers.length} of {total.toLocaleString()} papers
-                </span>
-                {isFiltering && (
-                  <span className='h-3 w-3 shrink-0 rounded-full border-2 border-neutral-600 border-t-neutral-300 animate-spin' />
+                {(selectedSubgraph || filterBar || isBrowsing) && (
+                  <div className='px-3 pb-2 flex items-center gap-2 text-sm text-neutral-400'>
+                    {!selectedSubgraph && isBrowsing && newGraphControl}
+                    {selectedSubgraph && (
+                      <span className='flex-1 min-w-0 truncate'>
+                        {isBrowsing ? 'Adding papers to' : 'Viewing papers in'}{' '}
+                        <span className='font-medium text-neutral-200'>
+                          {selectedSubgraph.name}
+                        </span>
+                      </span>
+                    )}
+                    <div className='ml-auto flex items-center gap-2'>
+                      {filterBar && filterToggleButton}
+                      {selectedSubgraph && isBrowsing && newGraphControl}
+                    </div>
+                  </div>
                 )}
               </div>
-            )}
 
-            {isBrowsing && searchMode === 'semantic' && semanticResults && (
-              <div className='px-4 py-1.5 text-xs text-neutral-500'>
-                {semanticResults.length} semantic results
-              </div>
-            )}
-
-            {!isBrowsing && subgraphNodes && subgraphNodes.length > 0 && (
-              <div className='px-4 py-1.5 text-xs text-neutral-500'>
-                Showing {subgraphItems.length} of {subgraphNodes.length} papers
-              </div>
-            )}
-
-            {isBrowsing && searchMode === 'keyword' && error && (
-              <p className='p-4 text-red-400'>{error}</p>
-            )}
-
-            {isBrowsing && searchMode === 'keyword' && !papers && (
-              <LoadingIndicator label='Loading Papers…' />
-            )}
-
-            {isBrowsing &&
-              searchMode === 'keyword' &&
-              papers &&
-              items.length === 0 && (
-                <div className='p-6 text-center text-neutral-400'>
-                  No matches.
-                </div>
-              )}
-
-            {isBrowsing && searchMode === 'semantic' && semanticLoading && (
-              <LoadingIndicator label='Searching…' />
-            )}
-
-            {isBrowsing &&
-              searchMode === 'semantic' &&
-              !semanticLoading &&
-              !debouncedQuery.trim() && (
-                <div className='p-6 text-center text-neutral-500 text-sm'>
-                  Enter a query to search semantically.
-                </div>
-              )}
-
-            {isBrowsing &&
-              searchMode === 'semantic' &&
-              !semanticLoading &&
-              debouncedQuery.trim() &&
-              semanticResults &&
-              semanticResults.length === 0 && (
-                <div className='p-6 text-center text-neutral-400'>
-                  No matches.
-                </div>
-              )}
-
-            {!isBrowsing && subgraphError && (
-              <p className='p-4 text-red-400'>{subgraphError}</p>
-            )}
-
-            {!isBrowsing && !subgraphNodes && !subgraphError && (
-              <LoadingIndicator label='Loading Papers…' />
-            )}
-
-            {!isBrowsing && subgraphNodes && subgraphItems.length === 0 && (
-              <div className='p-6 flex flex-col items-center gap-3 text-center text-neutral-400'>
-                <p>
-                  {subgraphNodes.length === 0
-                    ? 'No papers in this graph yet.'
-                    : 'No matches.'}
-                </p>
-                {subgraphNodes.length === 0 && (
-                  <button
-                    type='button'
-                    onClick={toggleViewMode}
-                    className='flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#2a2a2a] border border-[#333333] text-sm text-neutral-300 hover:text-neutral-100 cursor-pointer'
-                  >
-                    <Plus size={14} />
-                    Add papers
-                  </button>
-                )}
-              </div>
-            )}
-
-            {isBrowsing ? (
-              searchMode === 'semantic' ? (
-                <PaperList
-                  items={semanticItems}
-                  clusters={clusters}
-                  clustersLoading={clustersLoading}
-                  onSelectId={selectFromList}
-                  enableHover
-                  resetKey={`semantic|${debouncedQuery}`}
-                  selectedId={selectedId ?? undefined}
-                  onAddToSubgraph={
-                    selectedSubgraphId ? addToSelectedSubgraph : undefined
-                  }
-                  onRemoveFromSubgraph={
-                    selectedSubgraphId ? removeFromSelectedSubgraph : undefined
-                  }
-                  subgraphPaperIds={selectedSubgraphPaperIds}
-                  subgraphName={selectedSubgraph?.name}
-                />
-              ) : (
+              {filterBar && (
                 <div
-                  className={`transition-opacity duration-150 ${isFiltering ? 'opacity-50' : ''}`}
+                  className='md:hidden sticky z-10 bg-neutral-950/90 backdrop-blur'
+                  style={{ top: searchHeight }}
                 >
+                  {filterBar}
+                </div>
+              )}
+
+              {isBrowsing &&
+                searchMode === 'keyword' &&
+                papers &&
+                total > 0 && (
+                  <div className='px-4 py-1.5 text-xs text-neutral-500 flex items-center gap-2'>
+                    <span>
+                      Showing {papers.length} of {total.toLocaleString()} papers
+                    </span>
+                    {isFiltering && (
+                      <span className='h-3 w-3 shrink-0 rounded-full border-2 border-neutral-600 border-t-neutral-300 animate-spin' />
+                    )}
+                  </div>
+                )}
+
+              {isBrowsing && searchMode === 'semantic' && semanticResults && (
+                <div className='px-4 py-1.5 text-xs text-neutral-500'>
+                  {semanticResults.length} semantic results
+                </div>
+              )}
+
+              {!isBrowsing && subgraphNodes && subgraphNodes.length > 0 && (
+                <div className='px-4 py-1.5 text-xs text-neutral-500'>
+                  Showing {subgraphItems.length} of {subgraphNodes.length}{' '}
+                  papers
+                </div>
+              )}
+
+              {isBrowsing && searchMode === 'keyword' && error && (
+                <p className='p-4 text-red-400'>{error}</p>
+              )}
+
+              {isBrowsing && searchMode === 'keyword' && !papers && (
+                <LoadingIndicator label='Loading Papers…' />
+              )}
+
+              {isBrowsing &&
+                searchMode === 'keyword' &&
+                papers &&
+                items.length === 0 && (
+                  <div className='p-6 text-center text-neutral-400'>
+                    No matches.
+                  </div>
+                )}
+
+              {isBrowsing && searchMode === 'semantic' && semanticLoading && (
+                <LoadingIndicator label='Searching…' />
+              )}
+
+              {isBrowsing &&
+                searchMode === 'semantic' &&
+                !semanticLoading &&
+                !debouncedQuery.trim() && (
+                  <div className='p-6 text-center text-neutral-500 text-sm'>
+                    Enter a query to search semantically.
+                  </div>
+                )}
+
+              {isBrowsing &&
+                searchMode === 'semantic' &&
+                !semanticLoading &&
+                debouncedQuery.trim() &&
+                semanticResults &&
+                semanticResults.length === 0 && (
+                  <div className='p-6 text-center text-neutral-400'>
+                    No matches.
+                  </div>
+                )}
+
+              {!isBrowsing && subgraphError && (
+                <p className='p-4 text-red-400'>{subgraphError}</p>
+              )}
+
+              {!isBrowsing && !subgraphNodes && !subgraphError && (
+                <LoadingIndicator label='Loading Papers…' />
+              )}
+
+              {!isBrowsing && subgraphNodes && subgraphItems.length === 0 && (
+                <div className='p-6 flex flex-col items-center gap-3 text-center text-neutral-400'>
+                  <p>
+                    {subgraphNodes.length === 0
+                      ? 'No papers in this graph yet.'
+                      : 'No matches.'}
+                  </p>
+                  {subgraphNodes.length === 0 && (
+                    <button
+                      type='button'
+                      onClick={toggleViewMode}
+                      className='flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#2a2a2a] border border-[#333333] text-sm text-neutral-300 hover:text-neutral-100 cursor-pointer'
+                    >
+                      <Plus size={14} />
+                      Add papers
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {isBrowsing ? (
+                searchMode === 'semantic' ? (
                   <PaperList
-                    items={items}
+                    items={semanticItems}
                     clusters={clusters}
                     clustersLoading={clustersLoading}
                     onSelectId={selectFromList}
                     enableHover
-                    resetKey={resetKey}
-                    hasMore={hasMore}
-                    onLoadMore={loadMore}
+                    resetKey={`semantic|${debouncedQuery}`}
                     selectedId={selectedId ?? undefined}
                     onAddToSubgraph={
                       selectedSubgraphId ? addToSelectedSubgraph : undefined
@@ -701,73 +683,101 @@ export default function StatsView() {
                     subgraphPaperIds={selectedSubgraphPaperIds}
                     subgraphName={selectedSubgraph?.name}
                   />
-                </div>
-              )
-            ) : (
-              <PaperList
-                items={subgraphItems}
-                clusters={clusters}
-                clustersLoading={clustersLoading}
-                onSelectId={selectFromList}
-                enableHover
-                resetKey={`${selectedSubgraphId ?? ''}|${debouncedSubgraphQuery}|${[...subgraphActiveCids].sort()}|${[...subgraphActiveDomains].sort()}`}
-                selectedId={selectedId ?? undefined}
-                onRemoveFromSubgraph={removeFromSubgraphView}
-                subgraphPaperIds={subgraphNodeIds}
-                subgraphName={selectedSubgraph?.name}
-              />
-            )}
+                ) : (
+                  <div
+                    className={`transition-opacity duration-150 ${isFiltering ? 'opacity-50' : ''}`}
+                  >
+                    <PaperList
+                      items={items}
+                      clusters={clusters}
+                      clustersLoading={clustersLoading}
+                      onSelectId={selectFromList}
+                      enableHover
+                      resetKey={resetKey}
+                      hasMore={hasMore}
+                      onLoadMore={loadMore}
+                      selectedId={selectedId ?? undefined}
+                      onAddToSubgraph={
+                        selectedSubgraphId ? addToSelectedSubgraph : undefined
+                      }
+                      onRemoveFromSubgraph={
+                        selectedSubgraphId
+                          ? removeFromSelectedSubgraph
+                          : undefined
+                      }
+                      subgraphPaperIds={selectedSubgraphPaperIds}
+                      subgraphName={selectedSubgraph?.name}
+                    />
+                  </div>
+                )
+              ) : (
+                <PaperList
+                  items={subgraphItems}
+                  clusters={clusters}
+                  clustersLoading={clustersLoading}
+                  onSelectId={selectFromList}
+                  enableHover
+                  resetKey={`${selectedSubgraphId ?? ''}|${debouncedSubgraphQuery}|${[...subgraphActiveCids].sort()}|${[...subgraphActiveDomains].sort()}`}
+                  selectedId={selectedId ?? undefined}
+                  onRemoveFromSubgraph={removeFromSubgraphView}
+                  subgraphPaperIds={subgraphNodeIds}
+                  subgraphName={selectedSubgraph?.name}
+                />
+              )}
+            </div>
           </div>
         </div>
 
         <div className='hidden md:block w-1/2 border-l border-neutral-800 overflow-y-auto'>
-          {selected ? (
-            <StatsPaperDetails
-              paper={selected}
-              clusters={clusters}
-              clustersLoading={clustersLoading}
-              neighbors={neighbors}
-              neighborsLoading={neighborsLoading}
-              navHistory={navHistory}
-              onClose={close}
-              onSelectPaper={handleSelectRelated}
-              onNavigateTo={navigateTo}
-              onAddToSubgraph={
-                isBrowsing && selectedSubgraphId
-                  ? addToSelectedSubgraph
-                  : undefined
-              }
-              onRemoveFromSubgraph={
-                isBrowsing
-                  ? selectedSubgraphId
-                    ? removeFromSelectedSubgraph
+          <div className='h-full'>
+            {selected ? (
+              <StatsPaperDetails
+                paper={selected}
+                clusters={clusters}
+                clustersLoading={clustersLoading}
+                neighbors={neighbors}
+                neighborsLoading={neighborsLoading}
+                navHistory={navHistory}
+                onClose={close}
+                onSelectPaper={handleSelectRelated}
+                onNavigateTo={navigateTo}
+                onAddToSubgraph={
+                  isBrowsing && selectedSubgraphId
+                    ? addToSelectedSubgraph
                     : undefined
-                  : removeFromSubgraphView
-              }
-              subgraphPaperIds={
-                isBrowsing ? selectedSubgraphPaperIds : subgraphNodeIds
-              }
-              subgraphName={selectedSubgraph?.name}
-            />
-          ) : selectedId ? (
-            <div className='p-6 space-y-3 animate-pulse'>
-              <div className='h-3 bg-neutral-800 rounded w-1/3' />
-              <div className='h-5 bg-neutral-800 rounded w-3/4' />
-              <div className='h-5 bg-neutral-800 rounded w-1/2' />
-              <div className='h-3 bg-neutral-800 rounded w-1/4 mt-2' />
-              <div className='h-3 bg-neutral-800 rounded w-1/4' />
-              <div className='space-y-2 mt-4'>
-                <div className='h-3 bg-neutral-800 rounded' />
-                <div className='h-3 bg-neutral-800 rounded' />
-                <div className='h-3 bg-neutral-800 rounded w-5/6' />
-                <div className='h-3 bg-neutral-800 rounded w-4/6' />
+                }
+                onRemoveFromSubgraph={
+                  isBrowsing
+                    ? selectedSubgraphId
+                      ? removeFromSelectedSubgraph
+                      : undefined
+                    : removeFromSubgraphView
+                }
+                subgraphPaperIds={
+                  isBrowsing ? selectedSubgraphPaperIds : subgraphNodeIds
+                }
+                subgraphName={selectedSubgraph?.name}
+              />
+            ) : selectedId ? (
+              <div className='p-6 space-y-3 animate-pulse'>
+                <div className='h-3 bg-neutral-800 rounded w-1/3' />
+                <div className='h-5 bg-neutral-800 rounded w-3/4' />
+                <div className='h-5 bg-neutral-800 rounded w-1/2' />
+                <div className='h-3 bg-neutral-800 rounded w-1/4 mt-2' />
+                <div className='h-3 bg-neutral-800 rounded w-1/4' />
+                <div className='space-y-2 mt-4'>
+                  <div className='h-3 bg-neutral-800 rounded' />
+                  <div className='h-3 bg-neutral-800 rounded' />
+                  <div className='h-3 bg-neutral-800 rounded w-5/6' />
+                  <div className='h-3 bg-neutral-800 rounded w-4/6' />
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className='flex h-full items-center justify-center text-neutral-500 text-sm'>
-              Select a paper to load details
-            </div>
-          )}
+            ) : (
+              <div className='flex h-full items-center justify-center text-neutral-500 text-sm'>
+                Select a paper to load details
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
