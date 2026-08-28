@@ -104,6 +104,19 @@ class PgConnection:
         self._conn.autocommit = False
         self.try_register_vector()
 
+    @classmethod
+    def from_raw(cls, conn) -> "PgConnection":
+        """Wrap an already-open, already-configured psycopg2 connection.
+
+        Used by the API's connection pool: the pool owns connect() and
+        register_vector() calls (done once per physical connection), so
+        borrowing one for a request should skip both instead of redoing
+        them on every request.
+        """
+        self = cls.__new__(cls)
+        self._conn = conn
+        return self
+
     def try_register_vector(self) -> bool:
         """Register pgvector's type adapter on this connection, if available.
 
@@ -198,7 +211,7 @@ _PG_SCHEMA = [
     """
     CREATE TABLE IF NOT EXISTS cluster_meta (
         method TEXT NOT NULL, cluster_id INTEGER NOT NULL,
-        label TEXT, confidence REAL, terms TEXT,
+        label TEXT, confidence REAL, terms TEXT, size INTEGER,
         created_at TIMESTAMPTZ DEFAULT now(),
         PRIMARY KEY (method, cluster_id)
     )
@@ -254,6 +267,7 @@ def _ensure_columns(conn: PgConnection) -> None:
     _ENSURE = [
         ("papers", "graph_x", "REAL"),
         ("papers", "graph_y", "REAL"),
+        ("cluster_meta", "size", "INTEGER"),
     ]
     for table, col, dtype in _ENSURE:
         try:

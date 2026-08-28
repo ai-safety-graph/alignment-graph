@@ -20,7 +20,6 @@ src/aisafety_pipeline/api/
     papers.py      # GET /api/papers, GET /api/papers/related, GET /api/papers/{arxiv_id:path}
     search.py      # POST /api/search
     clusters.py    # GET /api/clusters
-    stats.py       # GET /api/stats
 ```
 
 ---
@@ -35,11 +34,10 @@ CORS origins are configured from `config.API_CORS_ORIGINS` (includes `https://al
 
 ## Dependency
 
-`deps.py` defines `get_conn()`:
-- Raises `RuntimeError` if `DATABASE_URL` is unset (the API requires PostgreSQL)
-- Opens a fresh `PgConnection(DATABASE_URL)` per request
-- Yields the connection
-- Closes it in `finally`
+`deps.py` pools connections rather than opening one per request:
+- `init_pool()` / `close_pool()` run in `main.py`'s `lifespan`, creating/closing a `ThreadedConnectionPool` (size from `config.API_DB_POOL_MIN`/`API_DB_POOL_MAX`) once for the process lifetime. `register_vector` is registered once per physical connection (in the pool's `_connect` override), not per request.
+- `get_conn()` borrows a connection from the pool, wraps it via `PgConnection.from_raw()`, yields it, then rolls back (in case a request left an open transaction) and returns it to the pool in `finally` — it never closes the underlying connection.
+- Raises `RuntimeError` if the pool wasn't initialized (`DATABASE_URL` unset at startup).
 
 Route handlers declare `conn=Depends(get_conn)`.
 
@@ -112,21 +110,9 @@ Returns: `{ query: str, results: SearchResult[] }` where each result includes `s
 
 ### `GET /api/clusters`
 
-All cluster metadata from `cluster_meta` where `method = 'default'`, joined with paper counts from `papers`.
+All cluster metadata from `cluster_meta` where `method = 'default'`. No join to `papers` — `size` is precomputed and stored on `cluster_meta` by `label_clusters_default` (`labeling.py`) each time the `label` pipeline stage runs, not recomputed per request.
 
 Returns: array of `{ cid, label, confidence, terms, size }`.
-
-### `GET /api/stats`
-
-Aggregate statistics over `ai_stage2_keep = TRUE` papers (plus raw/embedded totals):
-- `total_harvested` — `COUNT(*)` of `papers_raw`
-- `total_filtered` — kept papers
-- `total_embedded` — kept papers with a non-null `embedding`
-- `domains` — counts keyed by `domain_tag` (null → `"unknown"`)
-- `clusters` — counts keyed by `kmeans_cluster`
-- `by_month` — monthly histogram keyed `YYYY-MM` via `DATE_TRUNC('month', published::date)`
-
-Returns: `{ total_harvested, total_filtered, total_embedded, domains, clusters, by_month }`
 
 ### `GET /health`
 

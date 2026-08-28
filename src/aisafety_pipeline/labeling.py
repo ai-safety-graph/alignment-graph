@@ -21,10 +21,16 @@ def label_clusters_default(conn, method_name: str = "default", topk_terms: int =
             label TEXT,
             confidence REAL,
             terms TEXT,
+            size INTEGER,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (method, cluster_id)
         )
     """)
+    # In case cluster_meta already existed from before `size` was added.
+    try:
+        conn.execute("ALTER TABLE cluster_meta ADD COLUMN IF NOT EXISTS size INTEGER")
+    except Exception:
+        pass
     conn.commit()
 
     # Paginated by id (keyset), not a single-shot SELECT: title/summary are
@@ -109,17 +115,20 @@ def label_clusters_default(conn, method_name: str = "default", topk_terms: int =
             label = rt["title"]; terms = [label]; conf = float(rt["confidence"])
         else:
             label = chosen_label; terms = sem["terms"]; conf = float(sem["confidence"])
-        results[int(cid)] = {"label": label, "terms": terms, "confidence": conf}
+        results[int(cid)] = {
+            "label": label, "terms": terms, "confidence": conf,
+            "size": cluster_sizes[int(cid)],
+        }
 
     cur = conn.cursor(); cur.execute("BEGIN")
     for cid, meta in results.items():
         cur.execute(
             """
-            INSERT INTO cluster_meta(method, cluster_id, label, confidence, terms)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(method, cluster_id) DO UPDATE SET label=excluded.label, confidence=excluded.confidence, terms=excluded.terms
+            INSERT INTO cluster_meta(method, cluster_id, label, confidence, terms, size)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(method, cluster_id) DO UPDATE SET label=excluded.label, confidence=excluded.confidence, terms=excluded.terms, size=excluded.size
             """,
-            (method_name, int(cid), meta["label"], float(meta["confidence"]), json.dumps(meta["terms"]))
+            (method_name, int(cid), meta["label"], float(meta["confidence"]), json.dumps(meta["terms"]), meta["size"])
         )
     cur.execute("COMMIT")
     return results

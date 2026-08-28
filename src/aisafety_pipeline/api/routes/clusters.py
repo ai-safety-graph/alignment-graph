@@ -7,16 +7,14 @@ router = APIRouter(prefix="/api/clusters", tags=["clusters"])
 
 @router.get("")
 def list_clusters(conn=Depends(get_conn)):
+    # size is precomputed and stored on cluster_meta by label_clusters_default
+    # (labeling.py) at label time -- no need to recount papers on every request.
     rows = conn.execute(
         """
-        SELECT cm.cluster_id, cm.label, cm.confidence, cm.terms,
-               COUNT(p.id) AS size
-        FROM cluster_meta cm
-        LEFT JOIN papers p ON p.kmeans_cluster = cm.cluster_id
-            AND p.ai_stage2_keep = TRUE
-        WHERE cm.method = 'default'
-        GROUP BY cm.cluster_id, cm.label, cm.confidence, cm.terms
-        ORDER BY cm.cluster_id
+        SELECT cluster_id, label, confidence, terms, size
+        FROM cluster_meta
+        WHERE method = 'default'
+        ORDER BY cluster_id
         """
     ).fetchall()
 

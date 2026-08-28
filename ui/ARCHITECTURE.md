@@ -18,7 +18,6 @@ All data comes from the **FastAPI backend** via `lib/api.ts`. This is **API mode
 All data comes from the FastAPI backend via `lib/api.ts`:
 
 - `fetchClusters()` → `GET /api/clusters` — cluster labels and sizes
-- `fetchStats()` → `GET /api/stats` — aggregate counts (used by `useClusterCatalog` for available domains)
 - `fetchPapers(params)` → `GET /api/papers` — paginated, server-side filtered listing (used by `StatsView` via `usePaperBrowser`)
 - `fetchSubgraph(ids)` → `POST /api/graph/subset` — graph data for a specific set of paper IDs (desktop `GraphView`)
 - `fetchRelated(arxivId)` → `GET /api/papers/related` — on-demand nearest-neighbor lookup for paper detail panels and graph ghost nodes
@@ -88,7 +87,7 @@ Server-filtered paper browser. Serves both the `/stats` route (all sizes) and th
 
 Responsibilities:
 - Paginated, server-side filtered loading via the shared `usePaperBrowser` hook (keyword `q` / `from` date / `clusters` / `domains`; infinite scroll via its `loadMore`)
-- Cluster legend + available domains via the shared `useClusterCatalog` hook (one mount fetch of `fetchClusters` + `fetchStats`)
+- Cluster legend + available domains via the shared `useClusterCatalog` hook (one mount fetch of `fetchClusters`; domains are a hardcoded fixed set — see `useClusterCatalog.ts`)
 - Query debounce via `useDebouncedValue` (300ms)
 - Filter state managed by the `useServerFilters` hook — changing any filter triggers a fresh fetch inside `usePaperBrowser`
 - Filter UI via `FilterBar`; results rendered by `PaperList`
@@ -148,7 +147,6 @@ Central API client. Key exports:
 - `BASE_URL` — from `import.meta.env.VITE_API_URL`, trailing slash stripped
 - `hasApi()` — `Boolean(BASE_URL)`
 - `fetchClusters()` — hits `GET /api/clusters`, returns `ClustersLegend`
-- `fetchStats()` — hits `GET /api/stats`, returns `StatsResponse`
 - `fetchSubgraph(ids)` — hits `POST /api/graph/subset`, returns `GraphDataCompact`
 - `fetchRelated(arxivId, limit?)` — hits `GET /api/papers/related`, returns `RelatedPaper[]` (NodeCompact + `sim` + raw coords `rx`/`ry`)
 - `fetchPaper(arxivUrl)` — hits `/api/papers/{id}`, returns `PaperDetail | null` (module-level `paperCache` memoises by id)

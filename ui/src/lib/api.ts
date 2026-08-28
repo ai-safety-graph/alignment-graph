@@ -76,17 +76,6 @@ export async function fetchPapers(
   return apiFetch<PaginatedPapers>(`/api/papers?${qs}`)
 }
 
-export type StatsResponse = {
-  total_filtered: number
-  domains: Record<string, number>
-  clusters: Record<string, number>
-  by_month: Record<string, number>
-}
-
-export async function fetchStats(): Promise<StatsResponse> {
-  return apiFetch<StatsResponse>('/api/stats')
-}
-
 export async function fetchClusters(): Promise<ClustersLegend> {
   type Row = { cid: number; label: string | null; size: number }
   const rows = await apiFetch<Row[]>('/api/clusters')

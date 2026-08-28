@@ -34,6 +34,9 @@ API_CORS_ORIGINS = os.getenv(
     "https://alignment-graph.netlify.app,http://localhost:5173,http://localhost:4173",
 ).split(",")
 
+API_DB_POOL_MIN = int(os.getenv("API_DB_POOL_MIN", "1"))
+API_DB_POOL_MAX = int(os.getenv("API_DB_POOL_MAX", "10"))
+
 # Semantic search loads a transformer embedding model into memory; only
 # self-hosted deployments (which run alongside the pipeline) enable it.
 ENABLE_SEMANTIC_SEARCH = os.getenv("ENABLE_SEMANTIC_SEARCH", "false").strip().lower() in (
