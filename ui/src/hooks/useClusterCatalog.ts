@@ -6,7 +6,7 @@ import type { ClustersLegend } from '../lib/types'
 // (see domain_from_arxiv_categories in filters.py) and is a fixed, closed
 // set -- not data that grows or changes as papers are harvested. Hardcoded
 // here instead of fetched from /api/stats.
-const DOMAINS = ['tech', 'gov', 'both', 'unknown']
+const DOMAINS = ['tech', 'gov', 'both']
 
 /**
  * Fetches the cluster legend. Shared by the list-based views (StatsView,
