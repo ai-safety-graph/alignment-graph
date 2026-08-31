@@ -499,13 +499,7 @@ export default function StatsView() {
           >
             <div className='md:[direction:ltr] md:px-4'>
               {(subgraphTitle || filterBar) && (
-                <div
-                  className={`hidden md:block sticky top-0 z-10 transition-colors duration-200 ${
-                    filterBar && filterExpanded
-                      ? 'bg-[#1f1f1f]'
-                      : 'bg-neutral-950'
-                  }`}
-                >
+                <div className='hidden md:block sticky top-0 z-10 bg-neutral-950'>
                   {subgraphTitle}
                   {filterBar}
                 </div>
