@@ -21,8 +21,8 @@ A staged pipeline for harvesting **arXiv** papers → storing in **PostgreSQL + 
 ## Installation
 
 ```bash
-git clone https://github.com/yourname/aisafety-pipeline.git
-cd aisafety-pipeline
+git clone https://github.com/ai-safety-graph/alignment-graph.git
+cd alignment-graph
 
 uv venv
 source .venv/bin/activate
@@ -144,6 +144,8 @@ VITE_API_URL=http://localhost:8000
 - CLI entrypoint: `utils.py`
 - Run without install: `python -m aisafety_pipeline.utils --help`
 - Frontend: `cd ui && npm install && npm run dev`
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for branching conventions and how to run the same checks CI runs.
 
 ---
 
