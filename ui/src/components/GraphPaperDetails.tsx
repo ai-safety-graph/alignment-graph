@@ -35,7 +35,7 @@ export default function GraphPaperDetails({
 }: Props) {
   const isPaperInSubgraph = subgraphPaperIds?.has(paper.aid) ?? false
   const subgraphLabel = subgraphName ?? 'Subgraph'
-  const urlKey = paper.ln || (paper as any).aid
+  const urlKey = paper.ln || paper.aid
   const { data: lazy, loading, error } = usePaperSummary(urlKey)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const summaryText = lazy?.sm ?? paper.sm
@@ -48,7 +48,7 @@ export default function GraphPaperDetails({
 
   return (
     <aside
-      ref={scrollerRef as any}
+      ref={scrollerRef}
       className='fixed top-[72px] right-4 bottom-4 w-[440px] z-10 bg-[#262626] backdrop-blur-md border border-[#333333] rounded-xl pb-3 px-3 overflow-auto text-[#e5e5e5] scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent scrollbar-hover:scrollbar-thumb-[#666]'
     >
       <div>

@@ -46,7 +46,8 @@ export function useServerFilters(clusters: ClustersLegend) {
   function toggleCluster(cid: number) {
     setActiveCids((prev) => {
       const next = new Set(prev)
-      next.has(cid) ? next.delete(cid) : next.add(cid)
+      if (next.has(cid)) next.delete(cid)
+      else next.add(cid)
       return next
     })
   }
@@ -54,7 +55,8 @@ export function useServerFilters(clusters: ClustersLegend) {
   function toggleDomain(dm: string) {
     setActiveDomains((prev) => {
       const next = new Set(prev)
-      next.has(dm) ? next.delete(dm) : next.add(dm)
+      if (next.has(dm)) next.delete(dm)
+      else next.add(dm)
       return next
     })
   }

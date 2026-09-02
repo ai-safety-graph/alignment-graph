@@ -40,6 +40,10 @@ import { useCapabilities } from '../hooks/useCapabilities'
 // actually bounds it under normal volume.
 const RECENT_PAPERS_LIMIT = 200
 
+// A node once it's in the force simulation: always has a live x/y position,
+// and fx/fy when pinned (dragged, hovered while locked, or coordinate-pinned).
+type SimNode = NodeCompact & { x: number; y: number; fx?: number; fy?: number }
+
 // Map a paper's raw global coords (rx, ry) into the main graph's canvas space,
 // mirroring the backend normalization in graph.py so ghost nodes land at the
 // correct position relative to the already-loaded nodes.
@@ -65,7 +69,9 @@ export default function ArxivGraph({
   src?: string
   paperIds?: string[]
 }) {
-  const fgRef = useRef<ForceGraphMethods | null>(null)
+  const fgRef = useRef<ForceGraphMethods<NodeCompact, LinkCompact> | undefined>(
+    undefined,
+  )
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const { semanticSearch: semanticSearchEnabled } = useCapabilities()
 
@@ -147,12 +153,8 @@ export default function ArxivGraph({
   const [query, setQuery] = useState('')
   const [apiResults, setApiResults] = useState<SearchResult[]>([])
   const [isSearching, setIsSearching] = useState(false)
-  const [ghostSimNodes, setGhostSimNodes] = useState<
-    Array<NodeCompact & { x: number; y: number }>
-  >([])
-  const [relatedGhostNodes, setRelatedGhostNodes] = useState<
-    Array<NodeCompact & { x: number; y: number }>
-  >([])
+  const [ghostSimNodes, setGhostSimNodes] = useState<SimNode[]>([])
+  const [relatedGhostNodes, setRelatedGhostNodes] = useState<SimNode[]>([])
   const [related, setRelated] = useState<RelatedPaper[]>([])
   const [relatedLoading, setRelatedLoading] = useState(false)
   const [width, setWidth] = useState<number>(0)
@@ -205,7 +207,7 @@ export default function ArxivGraph({
 
   // Prepare simulation nodes (mutable x/y)
   const simNodes = useMemo(() => {
-    if (!data) return [] as (NodeCompact & { x: number; y: number })[]
+    if (!data) return [] as SimNode[]
     const pin = data.meta.coords.included
     return data.nodes.map((n) => ({
       ...n,
@@ -231,7 +233,7 @@ export default function ArxivGraph({
   }, [data])
 
   const simById = useMemo(() => {
-    const m = new Map<number, any>()
+    const m = new Map<number, SimNode>()
     for (const n of simNodes) m.set(n.id, n)
     for (const n of ghostSimNodes) m.set(n.id, n)
     for (const n of relatedGhostNodes) m.set(n.id, n)
@@ -321,7 +323,7 @@ export default function ArxivGraph({
               ...(pin ? { fx: pos.x, fy: pos.y } : {}),
             }
           })
-          setGhostSimNodes(ghosts as any)
+          setGhostSimNodes(ghosts)
         }
       } catch {
         setApiResults([])
@@ -428,7 +430,7 @@ export default function ArxivGraph({
             x,
             y,
             ...(pin ? { fx: x, fy: y } : {}),
-          } as NodeCompact & { x: number; y: number })
+          } as SimNode)
         }
         return built
       })
@@ -484,9 +486,9 @@ export default function ArxivGraph({
     const h = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (hoverId != null && !ghostIds.has(hoverId))
-          setPinned(simById.get(hoverId) as any, false)
+          setPinned(simById.get(hoverId), false)
         if (lockedId != null && !ghostIds.has(lockedId))
-          setPinned(simById.get(lockedId) as any, false)
+          setPinned(simById.get(lockedId), false)
         setLockedId(null)
         setHoverId(null)
         setSelectedId(null)
@@ -500,8 +502,12 @@ export default function ArxivGraph({
   const fitPadding = () => (simNodes.length === 1 ? 400 : 150)
 
   // Focus helpers
-  function focusNode(simNode: any, zoomLevel = 1.1, duration = 600) {
-    const fg = fgRef.current as any
+  function focusNode(
+    simNode: SimNode | undefined,
+    zoomLevel = 1.1,
+    duration = 600,
+  ) {
+    const fg = fgRef.current
     if (!fg || !simNode) return
     const x = simNode.x ?? 0
     const y = simNode.y ?? 0
@@ -516,7 +522,7 @@ export default function ArxivGraph({
   }
 
   // Node pinning
-  function setPinned(n: any | null, pinned: boolean) {
+  function setPinned(n: NodeObject<NodeCompact> | null | undefined, pinned: boolean) {
     if (!n) return
     if (pinned) {
       n.fx = n.x
@@ -530,42 +536,41 @@ export default function ArxivGraph({
   // Hover handling
   const hoverTimer = useRef<number | null>(null)
   const onNodeHover = (
-    node: NodeObject | null,
-    prevNode?: NodeObject | null,
+    node: NodeObject<NodeCompact> | null,
+    prevNode?: NodeObject<NodeCompact> | null,
   ) => {
-    if (node && !isInteractive((node as any).id)) {
-      setPinned(prevNode as any, false)
+    if (node && !isInteractive(node.id)) {
+      setPinned(prevNode, false)
       if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
       hoverTimer.current = window.setTimeout(() => setHoverId(null), 120)
       return
     }
     if (lockedId != null) return
-    setPinned(prevNode as any, false)
-    setPinned(node as any, true)
+    setPinned(prevNode, false)
+    setPinned(node, true)
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
-    if (node) setHoverId((node as any).id)
+    if (node) setHoverId(node.id)
     else hoverTimer.current = window.setTimeout(() => setHoverId(null), 120)
   }
 
-  const onNodeClick = (node: NodeObject) => {
-    const n = node as any
-    if (ghostIds.has(n.id)) {
-      setSelectedId(n.id)
-      setLockedId(n.id)
+  const onNodeClick = (node: NodeObject<NodeCompact>) => {
+    if (ghostIds.has(node.id)) {
+      setSelectedId(node.id)
+      setLockedId(node.id)
       return
     }
-    if (!isInteractive(n.id)) return
-    setSelectedId(n.id)
-    setLockedId(n.id)
-    setPinned(n, true)
-    focusNode(n)
+    if (!isInteractive(node.id)) return
+    setSelectedId(node.id)
+    setLockedId(node.id)
+    setPinned(node, true)
+    focusNode(node as SimNode)
   }
 
   const onBackgroundClick = () => {
     if (hoverId != null && !ghostIds.has(hoverId))
-      setPinned(simById.get(hoverId) as any, false)
+      setPinned(simById.get(hoverId), false)
     if (lockedId != null && !ghostIds.has(lockedId))
-      setPinned(simById.get(lockedId) as any, false)
+      setPinned(simById.get(lockedId), false)
     fgRef.current?.zoomToFit(400, fitPadding())
     setLockedId(null)
     setHoverId(null)
@@ -584,11 +589,11 @@ export default function ArxivGraph({
 
   // Rendering helpers
   const nodeCanvasObject = (
-    node: NodeObject,
+    node: NodeObject<NodeCompact>,
     ctx: CanvasRenderingContext2D,
     globalScale: number,
   ) => {
-    const n = node as unknown as NodeCompact
+    const n = node as SimNode
     const r = 4
     ctx.save()
     let alpha = 1
@@ -601,7 +606,7 @@ export default function ArxivGraph({
     ctx.globalAlpha = alpha
     ctx.beginPath()
     ctx.fillStyle = cidToColor(n.cid)
-    ctx.arc(n.x as number, n.y as number, r, 0, 2 * Math.PI, false)
+    ctx.arc(n.x, n.y, r, 0, 2 * Math.PI, false)
     ctx.fill()
     ctx.lineWidth = 0.5
     ctx.strokeStyle = 'rgba(255,255,255,0.7)'
@@ -613,7 +618,7 @@ export default function ArxivGraph({
       ctx.strokeStyle = '#4ea8de'
       ctx.lineWidth = 1.5
       ctx.beginPath()
-      ctx.arc(n.x as number, n.y as number, r + 4, angle, angle + Math.PI * 1.3)
+      ctx.arc(n.x, n.y, r + 4, angle, angle + Math.PI * 1.3)
       ctx.stroke()
       ctx.restore()
     }
@@ -624,18 +629,17 @@ export default function ArxivGraph({
       ctx.globalAlpha = 1
       ctx.font = `${fontSize}px sans-serif`
       ctx.fillStyle = 'rgba(255,255,255,0.9)'
-      ctx.fillText(label, (n.x as number) + 6, (n.y as number) + 3)
+      ctx.fillText(label, n.x + 6, n.y + 3)
     }
     ctx.restore()
   }
 
-  const linkColor = (link: LinkObject) => {
-    const l = link as unknown as LinkCompact
-    const alpha = clamp(0.15 + (l.w ?? 0) * 0.7, 0.15, 0.85)
+  const linkColor = (link: LinkObject<NodeCompact, LinkCompact>) => {
+    const alpha = clamp(0.15 + (link.w ?? 0) * 0.7, 0.15, 0.85)
     return `rgba(220,220,220,${alpha})`
   }
 
-  const nodeLabel = (node: NodeObject) => `${(node as any).t}`
+  const nodeLabel = (node: NodeObject<NodeCompact>) => node.t
 
   return (
     <div className='fixed inset-0 bg-neutral-950 text-[#e5e5e5]'>
@@ -657,13 +661,13 @@ export default function ArxivGraph({
         </div>
       )}
       {data && width > 0 && height > 0 && (
-        <ForceGraph2D
-          ref={fgRef as any}
+        <ForceGraph2D<NodeCompact, LinkCompact>
+          ref={fgRef}
           width={width}
           height={height}
           graphData={{
-            nodes: allSimNodes as any[],
-            links: (data.links as any[]) ?? [],
+            nodes: allSimNodes,
+            links: data.links,
           }}
           backgroundColor='#1a1a1a'
           nodeId='id'
@@ -675,14 +679,14 @@ export default function ArxivGraph({
           nodeCanvasObject={nodeCanvasObject}
           nodeLabel={nodeLabel}
           linkColor={linkColor}
-          nodePointerAreaPaint={(n: any, color, ctx) => {
+          nodePointerAreaPaint={(n: NodeObject<NodeCompact>, color, ctx) => {
             if (!isInteractive(n.id)) return
             ctx.fillStyle = color
             ctx.beginPath()
-            ctx.arc(n.x, n.y, 10, 0, 2 * Math.PI)
+            ctx.arc(n.x ?? 0, n.y ?? 0, 10, 0, 2 * Math.PI)
             ctx.fill()
           }}
-          linkVisibility={(l: any) => {
+          linkVisibility={(l: LinkObject<NodeCompact, LinkCompact>) => {
             if (activeId == null) return false
             const s =
               l.s ?? (typeof l.source === 'object' ? l.source?.id : l.source)

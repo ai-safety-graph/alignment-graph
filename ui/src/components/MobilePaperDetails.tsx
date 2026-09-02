@@ -42,7 +42,7 @@ export default function MobilePaperDetails({
 
   return (
     <aside
-      ref={scrollerRef as any}
+      ref={scrollerRef}
       className='relative w-full h-full bg-[#262626] backdrop-blur-md border border-[#333333] rounded-2xl pb-3 px-3 overflow-auto text-[#e5e5e5] scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent'
     >
       <div>

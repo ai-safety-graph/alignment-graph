@@ -50,7 +50,6 @@ export default function PaperList({
   const effectiveResetKey = resetKey ?? items
   useEffect(() => {
     setLimit(40)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveResetKey])
 
   useEffect(() => {

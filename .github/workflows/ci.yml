@@ -15,7 +15,7 @@ jobs:
       - run: uvx ruff@0.16.5 check .
 
   ui:
-    name: UI (typecheck, build)
+    name: UI (lint, typecheck, build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -28,7 +28,5 @@ jobs:
           cache: npm
           cache-dependency-path: ui/package-lock.json
       - run: npm ci
-      # `npm run lint` is intentionally not run here yet: it currently fails
-      # on ~29 pre-existing `no-explicit-any` / `no-unused-expressions`
-      # errors unrelated to CI setup. Fix those separately, then add it back.
+      - run: npm run lint
       - run: npm run build
