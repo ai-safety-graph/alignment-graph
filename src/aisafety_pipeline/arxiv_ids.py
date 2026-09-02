@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import re
 
 _ID_RE = re.compile(r"/(\d{4}\.\d{4,5}(v\d+)?)")

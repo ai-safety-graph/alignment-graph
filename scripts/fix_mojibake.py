@@ -21,6 +21,7 @@ Usage:
     DATABASE_URL=postgresql://... python scripts/fix_mojibake.py --apply    # writes the fixes
 """
 from __future__ import annotations
+
 import argparse
 import sys
 from pathlib import Path

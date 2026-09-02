@@ -1,10 +1,13 @@
 from __future__ import annotations
+
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .routes import graph, papers, search, clusters
-from .deps import init_pool, close_pool
+
 from ..config import API_CORS_ORIGINS, ENABLE_SEMANTIC_SEARCH
+from .deps import close_pool, init_pool
+from .routes import clusters, graph, papers, search
 
 
 @asynccontextmanager

@@ -1,10 +1,14 @@
 from __future__ import annotations
-import numpy as np, pandas as pd
+
+import numpy as np
+import pandas as pd
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import normalize
-from .config import GREEN, YELLOW, BLUE, RESET
-from .embeddings import upsert_embedding, fetch_existing_embeddings, EmbeddingGenerator
+
+from .config import BLUE, GREEN, RESET, YELLOW
+from .embeddings import EmbeddingGenerator, fetch_existing_embeddings, upsert_embedding
 from .filters import load_vectors
+
 
 ## Contributed by mnm-matin
 class ClusterManager:
@@ -56,7 +60,7 @@ def compute_and_store_missing_embeddings(conn, df: pd.DataFrame, device="auto"):
     eg = EmbeddingGenerator(batch_size=32, device=device)
     embs = eg.encode(missing_df["title"].tolist(), missing_df["summary"].tolist())
     cur = conn.cursor(); cur.execute("BEGIN")
-    for pid, vec in zip(missing_df["id"].tolist(), embs):
+    for pid, vec in zip(missing_df["id"].tolist(), embs, strict=True):
         upsert_embedding(conn, pid, "specter2", vec)
     cur.execute("COMMIT")
     print(f"{GREEN}Stored {len(missing_df)} embeddings.{RESET}")

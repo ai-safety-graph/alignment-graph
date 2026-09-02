@@ -1,11 +1,18 @@
 from __future__ import annotations
-import datetime as dt, os, time as _time, xml.etree.ElementTree as ET, random
+
+import datetime as dt
+import os
+import random
+import time as _time
+import xml.etree.ElementTree as ET
 from pathlib import Path
+
 import requests
 from psycopg2.extras import execute_values
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from .config import OAI_BASE, OAI_SETS, OAI_PREFIX, OAI_THROTTLE_SEC, STATE_FILE, BLUE, GREEN, RESET
+
+from .config import BLUE, GREEN, OAI_BASE, OAI_PREFIX, OAI_SETS, OAI_THROTTLE_SEC, RESET, STATE_FILE
 
 _HARVEST_BATCH_SIZE = 500
 
@@ -89,13 +96,13 @@ def _oai_fetch(params: dict) -> str:
         except (requests.exceptions.ReadTimeout,
                 requests.exceptions.ConnectTimeout,
                 requests.exceptions.ChunkedEncodingError,
-                requests.exceptions.ConnectionError) as e:
+                requests.exceptions.ConnectionError):
             # exponential backoff with jitter
             backoff = OAI_THROTTLE_SEC * (2 ** attempt)
             _sleep_with_jitter(backoff)
             if attempt == attempts - 1:
                 raise
-        except requests.exceptions.HTTPError as e:
+        except requests.exceptions.HTTPError:
             # For persistent 4xx (other than 429) there's no point in retrying.
             if 400 <= r.status_code < 500 and r.status_code != 429:
                 raise
@@ -119,8 +126,7 @@ def _oai_iter_records(from_date: str, until_date: str, oai_set: str):
         xml = _oai_fetch(q)
         root = ET.fromstring(xml)
         ns = {"oai": "http://www.openarchives.org/OAI/2.0/"}
-        for rec in root.findall(".//oai:ListRecords/oai:record", ns):
-            yield rec
+        yield from root.findall(".//oai:ListRecords/oai:record", ns)
         rt = root.find(".//oai:ListRecords/oai:resumptionToken", ns)
         token = rt.text.strip() if (rt is not None and rt.text) else None
         if not token:

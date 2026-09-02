@@ -17,6 +17,7 @@ Re-run the same command to resume after an interruption — completed chunks
 are skipped via the checkpoint file.
 """
 from __future__ import annotations
+
 import argparse
 import datetime as dt
 import subprocess

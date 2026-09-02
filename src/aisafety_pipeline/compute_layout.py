@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
-
 import numpy as np
 
 from .config import GREEN, RESET
-from .config import EMB_DIMS
 
 
 def compute_graph_layout(
@@ -39,14 +36,14 @@ def compute_graph_layout(
         if not rows:
             raise RuntimeError("No kept/clustered papers. Run filter & cluster first.")
 
-        ids: List[str] = [r["id"] for r in rows]
+        ids: list[str] = [r["id"] for r in rows]
 
         if coords_method.lower() == "none":
             print(f"{GREEN}compute-layout:{RESET} coords_method=none, nothing to do")
             return 0
 
         # 2) Embeddings (already L2-normalized by load_vectors)
-        vec_by_id: Dict[str, np.ndarray] = load_vectors(conn, ids)
+        vec_by_id: dict[str, np.ndarray] = load_vectors(conn, ids)
         missing = [pid for pid in ids if pid not in vec_by_id]
         if missing:
             raise RuntimeError(f"{len(missing)} papers missing embeddings; run embed/cluster.")

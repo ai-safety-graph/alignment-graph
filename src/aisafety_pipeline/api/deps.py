@@ -1,6 +1,7 @@
 from __future__ import annotations
+
+from ..config import API_DB_POOL_MAX, API_DB_POOL_MIN, DATABASE_URL
 from ..db import PgConnection
-from ..config import DATABASE_URL, API_DB_POOL_MIN, API_DB_POOL_MAX
 
 _pool = None
 

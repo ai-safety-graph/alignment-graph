@@ -13,6 +13,7 @@ Usage:
     python scripts/sweep_kmeans_k.py --out data/kmeans_k_sweep.csv
 """
 from __future__ import annotations
+
 import argparse
 import sys
 import time
@@ -26,13 +27,13 @@ except ImportError:
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from aisafety_pipeline.db import connect  # noqa: E402
 from aisafety_pipeline.clustering import (  # noqa: E402
     ClusterManager,
     compute_and_store_missing_embeddings,
     get_papers,
     load_embeddings_for_df,
 )
+from aisafety_pipeline.db import connect  # noqa: E402
 
 GREEN = "\033[92m"; YELLOW = "\033[93m"; BLUE = "\033[94m"; RESET = "\033[0m"
 

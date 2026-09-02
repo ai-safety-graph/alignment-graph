@@ -1,7 +1,10 @@
 from __future__ import annotations
+
 import re
-from typing import Any, Optional
+from typing import Any
+
 import numpy as np
+
 from .config import DATABASE_URL
 
 # ---------------------------------------------------------------------------
@@ -46,7 +49,7 @@ class _FakeCursor:
 class _PgCursor:
     """Wraps a psycopg2 DictCursor to handle BEGIN/COMMIT and ? params."""
 
-    def __init__(self, cur, conn_ref: "PgConnection"):
+    def __init__(self, cur, conn_ref: PgConnection):
         self._cur = cur
         self._conn = conn_ref
 
@@ -105,7 +108,7 @@ class PgConnection:
         self.try_register_vector()
 
     @classmethod
-    def from_raw(cls, conn) -> "PgConnection":
+    def from_raw(cls, conn) -> PgConnection:
         """Wrap an already-open, already-configured psycopg2 connection.
 
         Used by the API's connection pool: the pool owns connect() and
@@ -232,7 +235,7 @@ _PG_VECTOR_INDEX = (
 # Public API
 # ---------------------------------------------------------------------------
 
-def connect(db_arg: Optional[str] = None) -> PgConnection:
+def connect(db_arg: str | None = None) -> PgConnection:
     """Return a connection to the configured PostgreSQL database.
 
     Uses DATABASE_URL env var by default; db_arg overrides it when passed
@@ -247,7 +250,7 @@ def connect(db_arg: Optional[str] = None) -> PgConnection:
     return PgConnection(dsn)
 
 
-def init_db(db_arg: Optional[str] = None) -> PgConnection:
+def init_db(db_arg: str | None = None) -> PgConnection:
     conn = connect(db_arg)
     cur = conn.cursor()
     for stmt in _PG_SCHEMA:

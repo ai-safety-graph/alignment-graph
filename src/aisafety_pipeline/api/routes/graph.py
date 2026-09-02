@@ -1,11 +1,13 @@
 from __future__ import annotations
+
 import datetime as dt
 from collections import defaultdict
-from typing import Dict, List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
+
+from ...config import EMB_DIMS, EMB_MODEL
 from ..deps import get_conn
-from ...config import EMB_MODEL, EMB_DIMS
 
 router = APIRouter(prefix="/api/graph", tags=["graph"])
 
@@ -13,11 +15,11 @@ _MAX_SUBSET = 500
 
 
 class SubsetRequest(BaseModel):
-    ids: List[str]
+    ids: list[str]
 
     @field_validator("ids")
     @classmethod
-    def validate_ids(cls, v: List[str]) -> List[str]:
+    def validate_ids(cls, v: list[str]) -> list[str]:
         if not v:
             raise ValueError("ids must not be empty")
         if len(v) > _MAX_SUBSET:
@@ -25,7 +27,7 @@ class SubsetRequest(BaseModel):
         return v
 
 
-def _build_subgraph(conn, paper_ids: List[str]) -> dict:
+def _build_subgraph(conn, paper_ids: list[str]) -> dict:
     rows = conn.execute("""
         SELECT id, title, authors, published, link, domain_tag, kmeans_cluster,
                graph_x, graph_y
@@ -39,7 +41,7 @@ def _build_subgraph(conn, paper_ids: List[str]) -> dict:
             "meta": {
                 "model": EMB_MODEL,
                 "embedding_dim": EMB_DIMS,
-                "generated_at": dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat(),
+                "generated_at": dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat(),
                 "neighbors": None,
                 "coords": {
                     "included": False,
@@ -54,7 +56,7 @@ def _build_subgraph(conn, paper_ids: List[str]) -> dict:
             "links": [],
         }
 
-    labels: Dict[int, str] = {}
+    labels: dict[int, str] = {}
     try:
         lab_rows = conn.execute(
             "SELECT cluster_id, label FROM cluster_meta WHERE method = 'default'"
@@ -67,7 +69,7 @@ def _build_subgraph(conn, paper_ids: List[str]) -> dict:
     papers = []
     ids = []
     cluster_ids = []
-    cluster_counts: Dict[int, int] = defaultdict(int)
+    cluster_counts: dict[int, int] = defaultdict(int)
 
     for r in rows:
         cid = int(r[6]) if r[6] is not None else -1
@@ -118,7 +120,7 @@ def _build_subgraph(conn, paper_ids: List[str]) -> dict:
         "meta": {
             "model": EMB_MODEL,
             "embedding_dim": EMB_DIMS,
-            "generated_at": dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat(),
+            "generated_at": dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat(),
             "neighbors": None,
             "coords": {
                 "included": has_coords,
@@ -142,4 +144,4 @@ def get_subgraph(body: SubsetRequest, conn=Depends(get_conn)):
     try:
         return _build_subgraph(conn, body.ids)
     except RuntimeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e

@@ -35,6 +35,9 @@ pipeline = [
   # runtime deps you likely also need:
   # "torch",           # install the correct wheel for your platform/CUDA separately
 ]
+dev = [
+  "ruff==0.16.5",
+]
 
 [project.scripts]
 aisafety-pipeline = "aisafety_pipeline.utils:cli_entry"
@@ -48,3 +51,20 @@ include = [
   "README.md",
   "pyproject.toml",
 ]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["archive", "tmp", "data", "venv", ".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = [
+  "E501",  # line-too-long: not enforced yet, codebase has pre-existing long lines
+  "E701",  # multiple-statements-on-one-line-colon: used deliberately for compact CLI code
+  "E702",  # multiple-statements-on-one-line-semicolon: same
+  "B008",  # function-call-in-default-argument: FastAPI's `Depends(...)` idiom relies on this
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]

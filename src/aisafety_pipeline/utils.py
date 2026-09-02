@@ -1,9 +1,10 @@
 from __future__ import annotations
-import argparse, datetime as dt, json, os
-from pathlib import Path
-from typing import Optional
-from .config import GREEN, YELLOW, BLUE, RESET, API_HOST, API_PORT
-from . import oai, filters, embeddings, clustering, labeling, compute_layout, config
+
+import argparse
+import datetime as dt
+
+from . import clustering, compute_layout, config, embeddings, filters, labeling, oai
+from .config import API_HOST, API_PORT, GREEN, RESET
 
 
 def iso_date(d: dt.date) -> str: return d.strftime("%Y-%m-%d")

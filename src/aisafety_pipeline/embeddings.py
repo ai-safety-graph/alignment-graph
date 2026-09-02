@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Tuple
-
 import numpy as np
 from psycopg2.extras import execute_values
-from .config import EMB_MODEL, GREEN, YELLOW, BLUE, RESET
+
+from .config import BLUE, EMB_MODEL, GREEN, RESET, YELLOW
 
 _EMBED_WRITE_BATCH = 500
 
@@ -26,7 +25,7 @@ def upsert_embedding(conn, paper_id: str, model: str, vec: np.ndarray) -> None:
     )
 
 
-def fetch_existing_embeddings(conn, paper_ids: List[str], model: str) -> Dict[str, np.ndarray]:
+def fetch_existing_embeddings(conn, paper_ids: list[str], model: str) -> dict[str, np.ndarray]:
     """Return {paper_id: None} for IDs that already have an embedding.
 
     Callers only check presence (`pid in existing`) — the embedding vectors
@@ -45,7 +44,7 @@ def fetch_existing_embeddings(conn, paper_ids: List[str], model: str) -> Dict[st
 # -------- Embedding model --------
 
 class EmbeddingGenerator:
-    def __init__(self, batch_size: int = 32, device: Optional[str] = "auto"):
+    def __init__(self, batch_size: int = 32, device: str | None = "auto"):
         try:
             import torch  # noqa: F401
         except ImportError as e:
@@ -90,11 +89,12 @@ class EmbeddingGenerator:
         raise SystemExit(f"Unknown device specifier: {requested!r}.")
 
 ### Contributed by mnm-matin ###
-    def encode(self, titles: List[str], summaries: List[str]) -> np.ndarray:
+    def encode(self, titles: list[str], summaries: list[str]) -> np.ndarray:
         import time
-        from transformers import AutoTokenizer
-        from adapters import AutoAdapterModel
+
         import torch
+        from adapters import AutoAdapterModel
+        from transformers import AutoTokenizer
 
         torch.set_grad_enabled(False)
         tokenizer = AutoTokenizer.from_pretrained("allenai/specter2_base")
@@ -103,8 +103,8 @@ class EmbeddingGenerator:
         model.eval().to(self.device)
 
         sep = tokenizer.sep_token
-        texts = [(t or "") + sep + (s or "") for t, s in zip(titles, summaries)]
-        chunks: List[np.ndarray] = []
+        texts = [(t or "") + sep + (s or "") for t, s in zip(titles, summaries, strict=True)]
+        chunks: list[np.ndarray] = []
 
         total = len(texts)
         n_batches = (total + self.batch_size - 1) // self.batch_size
@@ -159,12 +159,12 @@ def ensure_embeddings_for_candidates(conn, device: str = "auto", batch_size: int
         "SELECT id, title, summary FROM papers WHERE id = ANY(%s)",
         (missing,),
     ).fetchall()
-    meta: Dict[str, Tuple[Optional[str], Optional[str]]] = {
+    meta: dict[str, tuple[str | None, str | None]] = {
         row[0]: (row[1], row[2]) for row in rows
     }
 
-    titles: List[str] = []
-    sums: List[str] = []
+    titles: list[str] = []
+    sums: list[str] = []
     for pid in missing:
         t, s = meta.get(pid, ("", ""))
         titles.append(t or "")
@@ -179,7 +179,7 @@ def ensure_embeddings_for_candidates(conn, device: str = "auto", batch_size: int
         chunk_ids = missing[i:i + _EMBED_WRITE_BATCH]
         chunk_vecs = embs[i:i + _EMBED_WRITE_BATCH]
         rows = []
-        for pid, vec in zip(chunk_ids, chunk_vecs):
+        for pid, vec in zip(chunk_ids, chunk_vecs, strict=True):
             v = vec.astype(np.float32)
             v = v / (np.linalg.norm(v) + 1e-12)
             rows.append((pid, v.tolist()))

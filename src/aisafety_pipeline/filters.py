@@ -1,9 +1,13 @@
 from __future__ import annotations
-import re, numpy as np
+
+import re
 from pathlib import Path
+
+import numpy as np
 from psycopg2.extras import execute_values
-from .config import GREEN, YELLOW, BLUE, RESET
+
 from .arxiv_ids import normalize_arxiv_id_or_url
+from .config import BLUE, GREEN, RESET, YELLOW
 from .db import vector_to_array
 
 _STAGE1_READ_CHUNK = 2000
@@ -225,7 +229,6 @@ def load_vectors(conn, ids, *, model="specter2", chunk_size=900):
 
 
 def build_centroid(conn, seeds_path):
-    from pathlib import Path
     import numpy as np
     raw_lines = [ln.strip() for ln in Path(seeds_path).read_text().splitlines() if ln.strip()]
     seed_ids = sorted({normalize_arxiv_id_or_url(ln) for ln in raw_lines} - {""})

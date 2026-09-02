@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 from fastapi import APIRouter, Depends
+
 from ..deps import get_conn
 
 router = APIRouter(prefix="/api/clusters", tags=["clusters"])

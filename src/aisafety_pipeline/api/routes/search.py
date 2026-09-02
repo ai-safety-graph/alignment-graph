@@ -1,7 +1,8 @@
 from __future__ import annotations
-from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+
 from ...config import ENABLE_SEMANTIC_SEARCH
 from ..deps import get_conn
 
@@ -21,8 +22,8 @@ def _get_generator():
 class SearchRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=1000)
     limit: int = Field(20, ge=1, le=100)
-    domain: Optional[str] = None
-    cluster: Optional[int] = None
+    domain: str | None = None
+    cluster: int | None = None
 
 
 @router.post("")

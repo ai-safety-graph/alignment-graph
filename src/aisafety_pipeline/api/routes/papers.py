@@ -1,6 +1,7 @@
 from __future__ import annotations
-from typing import List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+
 from ..deps import get_conn
 
 router = APIRouter(prefix="/api/papers", tags=["papers"])
@@ -10,11 +11,11 @@ router = APIRouter(prefix="/api/papers", tags=["papers"])
 def list_papers(
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
-    cluster: List[int] = Query(default=[]),
-    domain: List[str] = Query(default=[]),
-    from_date: Optional[str] = Query(None, alias="from"),
-    to_date: Optional[str] = Query(None, alias="to"),
-    q: Optional[str] = Query(None),
+    cluster: list[int] = Query(default=[]),
+    domain: list[str] = Query(default=[]),
+    from_date: str | None = Query(None, alias="from"),
+    to_date: str | None = Query(None, alias="to"),
+    q: str | None = Query(None),
     conn=Depends(get_conn),
 ):
     offset = (page - 1) * limit

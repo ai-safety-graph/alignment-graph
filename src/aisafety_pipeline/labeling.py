@@ -1,8 +1,12 @@
 from __future__ import annotations
-import json, numpy as np, pandas as pd
-from typing import Dict, List, Optional
-from .embeddings import EmbeddingGenerator
+
+import json
+
+import numpy as np
+import pandas as pd
+
 from .config import GREEN
+from .embeddings import EmbeddingGenerator
 from .filters import load_vectors
 from .taxonomy import TAXONOMY
 
@@ -13,7 +17,7 @@ from .taxonomy import TAXONOMY
 # readers -- see the k-sweep results (silhouette highest at k=4, no elbow)
 # for why clusters here don't reliably correspond to distinct vocabulary.
 
-def label_clusters_default(conn, method_name: str = "default", topk_terms: int = 4, extra_phrases: Optional[List[str]] = None, cosine_floor: float = 0.60, enforce_unique: bool = True):
+def label_clusters_default(conn, method_name: str = "default", topk_terms: int = 4, extra_phrases: list[str] | None = None, cosine_floor: float = 0.60, enforce_unique: bool = True):
     conn.execute("""
         CREATE TABLE IF NOT EXISTS cluster_meta (
             method TEXT NOT NULL,
@@ -66,7 +70,7 @@ def label_clusters_default(conn, method_name: str = "default", topk_terms: int =
 
     V = load_vectors(conn, ids)
     embs = np.vstack([V[i] for i in ids])
-    cents: Dict[int, np.ndarray] = {}
+    cents: dict[int, np.ndarray] = {}
     for cid in sorted(df["cid"].unique()):
         idx = np.where(cids == cid)[0]
         if idx.size:
@@ -77,7 +81,7 @@ def label_clusters_default(conn, method_name: str = "default", topk_terms: int =
     phrase_embs = eg.encode(phrases, [""] * len(phrases))
     phrase_embs = phrase_embs / (np.linalg.norm(phrase_embs, axis=1, keepdims=True) + 1e-12)
 
-    semantic_labels: Dict[int, Dict[str, object]] = {}
+    semantic_labels: dict[int, dict[str, object]] = {}
     for cid, c in cents.items():
         sims = phrase_embs @ c
         if sims.size == 0:
@@ -87,7 +91,7 @@ def label_clusters_default(conn, method_name: str = "default", topk_terms: int =
         conf = float(sims[top[0]])
         semantic_labels[cid] = {"terms": terms, "confidence": conf}
 
-    rep_title: Dict[int, Dict[str, object]] = {}
+    rep_title: dict[int, dict[str, object]] = {}
     for cid in sorted(df["cid"].unique()):
         idx = np.where(cids == cid)[0]
         if idx.size == 0: continue
@@ -101,7 +105,7 @@ def label_clusters_default(conn, method_name: str = "default", topk_terms: int =
     cluster_sizes = {int(cid): int(np.sum(cids == cid)) for cid in df["cid"].unique()}
     order = sorted(cluster_sizes.keys(), key=lambda k: -cluster_sizes[k]) if enforce_unique else sorted(cluster_sizes.keys())
 
-    results: Dict[int, Dict[str, object]] = {}
+    results: dict[int, dict[str, object]] = {}
     used_primary: set = set(); MIN_TERMS = 1
     for cid in order:
         sem = semantic_labels.get(int(cid), {"terms": [], "confidence": 0.0})
