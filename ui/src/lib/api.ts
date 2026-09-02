@@ -99,8 +99,6 @@ export async function fetchRelated(
   )
 }
 
-export const hasApi = () => Boolean(BASE_URL)
-
 export type HealthResponse = { status: string; semantic_search: boolean }
 
 export async function fetchHealth(): Promise<HealthResponse> {

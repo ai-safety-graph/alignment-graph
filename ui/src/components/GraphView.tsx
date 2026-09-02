@@ -63,10 +63,8 @@ function ghostCoord(
 }
 
 export default function ArxivGraph({
-  src = '/graph.json',
   paperIds,
 }: {
-  src?: string
   paperIds?: string[]
 }) {
   const fgRef = useRef<ForceGraphMethods<NodeCompact, LinkCompact> | undefined>(
@@ -479,7 +477,7 @@ export default function ArxivGraph({
   const didAutoFit = useRef(false)
   useEffect(() => {
     didAutoFit.current = false
-  }, [src, activeSavedGraph])
+  }, [activeSavedGraph])
 
   // ESC unlock (global)
   useEffect(() => {
