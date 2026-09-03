@@ -15,16 +15,34 @@ Commit messages are imperative and describe the change, not the process (e.g. "P
 Run the same checks CI runs:
 
 ```bash
-# Python
+# Python lint
 uvx ruff check .
+
+# Python tests (needs Postgres — see below)
+uv sync --extra test
+uv run pytest
 
 # UI
 cd ui
 npm run lint
+npm run test
 npm run build   # also runs the TypeScript typecheck
 ```
 
-CI (`.github/workflows/ci.yml`) runs both on every push and PR against `main`.
+CI (`.github/workflows/ci.yml`) runs all of these on every push and PR against `main`.
+
+### Running the Python tests locally
+
+The API tests exercise real routes against a real Postgres/pgvector database (no mocking — the routes rely on raw SQL and pgvector's `<=>` operator). Each test runs inside a transaction that's rolled back afterward, so nothing is ever committed — but they still read whatever rows already exist in the database within that transaction, so **don't point them at your working dev database** if it has real harvested papers in it; use a separate, empty database instead:
+
+```bash
+docker compose up -d   # starts the bundled Postgres+pgvector container
+docker exec -it $(docker compose ps -q postgres) psql -U postgres -c "CREATE DATABASE aisafety_test;"
+
+TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/aisafety_test uv run pytest
+```
+
+`TEST_DATABASE_URL` falls back to `DATABASE_URL` if unset — fine in CI, where the Postgres service container always starts empty, but not for local runs against a populated `aisafety` DB.
 
 ## Areas that need extra care
 

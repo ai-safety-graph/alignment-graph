@@ -38,6 +38,10 @@ pipeline = [
 dev = [
   "ruff==0.16.5",
 ]
+test = [
+  "pytest>=8",
+  "httpx>=0.27",
+]
 
 [project.scripts]
 aisafety-pipeline = "aisafety_pipeline.utils:cli_entry"
@@ -51,6 +55,9 @@ include = [
   "README.md",
   "pyproject.toml",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 120
