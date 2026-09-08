@@ -273,9 +273,13 @@ def cmd_embed(args) -> None:
 
 
 def ensure_topic_embeddings_for_candidates(conn, device: str = "auto", batch_size: int = 32) -> None:
-    ids = [row[0] for row in conn.execute("SELECT id FROM papers").fetchall()]
+    # Unlike SPECTER2 embeddings (needed for every stage-1 candidate so the
+    # stage-2 filter has vectors to decide keep/reject), the topic embedding
+    # only feeds tag/search/compute-layout, which only ever look at kept
+    # papers -- so embedding rejected papers here would be pure waste.
+    ids = [row[0] for row in conn.execute("SELECT id FROM papers WHERE ai_stage2_keep").fetchall()]
     if not ids:
-        print(f"{YELLOW}embed-topic:{RESET} no rows in `papers`. Run stage1 first.")
+        print(f"{YELLOW}embed-topic:{RESET} no kept rows in `papers`. Run stage1 & filter first.")
         return
 
     have = fetch_existing_embeddings(conn, ids, "topic")
