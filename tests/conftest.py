@@ -7,7 +7,21 @@ import pytest
 
 
 def _resolve_test_dsn() -> str | None:
-    return os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL") or None
+    """Resolve the DSN for DB-backed tests.
+
+    Never falls back to a non-local DATABASE_URL: DATABASE_URL is meant to
+    point at production (e.g. Supabase) once the pipeline runs against it,
+    and tests must not risk writing there even if something bypasses the
+    rollback-only fixture below.
+    """
+    explicit = os.getenv("TEST_DATABASE_URL")
+    if explicit:
+        return explicit
+
+    fallback = os.getenv("DATABASE_URL")
+    if fallback and any(host in fallback for host in ("localhost", "127.0.0.1")):
+        return fallback
+    return None
 
 
 @pytest.fixture(scope="session")
@@ -15,8 +29,9 @@ def test_dsn() -> str:
     dsn = _resolve_test_dsn()
     if not dsn:
         pytest.skip(
-            "TEST_DATABASE_URL/DATABASE_URL not set — start Postgres with "
-            "`docker compose up -d` and set DATABASE_URL to run DB-backed tests."
+            "No local test database configured — start Postgres with "
+            "`docker compose up -d` and set TEST_DATABASE_URL (or a "
+            "localhost/127.0.0.1 DATABASE_URL) to run DB-backed tests."
         )
     try:
         import psycopg2
