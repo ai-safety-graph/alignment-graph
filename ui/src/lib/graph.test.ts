@@ -3,7 +3,7 @@ import { buildAdjacency, clamp, lc } from './graph'
 import type { LinkCompact, NodeCompact } from './types'
 
 function makeNode(id: number): NodeCompact {
-  return { id, aid: `aid-${id}`, t: '', au: '', pd: '', dm: '', ln: '', cid: 0 }
+  return { id, aid: `aid-${id}`, t: '', au: '', pd: '', dm: '', ln: '', tags: [] }
 }
 
 describe('clamp', () => {

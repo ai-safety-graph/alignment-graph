@@ -6,25 +6,28 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts'
-import { cidToColor } from '../lib/colors'
-import type { ClustersLegend } from '../lib/types'
+import { tagToColor } from '../lib/colors'
+import type { TagsLegend } from '../lib/types'
 
 export default function ClusterPieChart({
-  clusters,
+  tags,
 }: {
-  clusters: ClustersLegend
+  tags: TagsLegend
 }) {
-  const data = Object.entries(clusters).map(([cid, { label, size }]) => ({
-    name: label ?? `Cluster ${cid}`,
-    value: size,
-    cid: Number(cid),
-  }))
+  // Each paper is counted once, under its primary (top-scored) tag only --
+  // otherwise a multi-tag paper would inflate the pie past 100%.
+  const data = Object.entries(tags)
+    .map(([tag, { primary_size }]) => ({
+      name: tag,
+      value: primary_size ?? 0,
+    }))
+    .filter((d) => d.value > 0)
   const total = data.reduce((s, d) => s + d.value, 0)
 
   return (
     <div className='w-full flex flex-col items-center gap-4'>
       <p className='text-neutral-400 text-sm'>
-        {total.toLocaleString()} papers across {data.length} clusters
+        {total.toLocaleString()} papers across {data.length} tags
       </p>
       <ResponsiveContainer width='100%' height={420}>
         <PieChart>
@@ -38,7 +41,7 @@ export default function ClusterPieChart({
             labelLine={false}
           >
             {data.map((entry) => (
-              <Cell key={entry.cid} fill={cidToColor(entry.cid)} />
+              <Cell key={entry.name} fill={tagToColor(entry.name)} />
             ))}
           </Pie>
           <Tooltip

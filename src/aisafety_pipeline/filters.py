@@ -9,6 +9,7 @@ from psycopg2.extras import execute_values
 from .arxiv_ids import normalize_arxiv_id_or_url
 from .config import BLUE, GREEN, RESET, YELLOW
 from .db import vector_to_array
+from .embeddings import _MODEL_COLUMNS
 
 _STAGE1_READ_CHUNK = 2000
 _STAGE1_WRITE_BATCH = 500
@@ -213,12 +214,13 @@ def load_vectors(conn, ids, *, model="specter2", chunk_size=900):
     if not ids:
         return {}
 
+    col = _MODEL_COLUMNS[model]
     ids = list(ids)
     V = {}
     for i in range(0, len(ids), chunk_size):
         chunk = ids[i:i + chunk_size]
         rows = conn.execute(
-            "SELECT id, embedding FROM papers WHERE embedding IS NOT NULL AND id = ANY(%s)",
+            f"SELECT id, {col} FROM papers WHERE {col} IS NOT NULL AND id = ANY(%s)",
             (chunk,),
         ).fetchall()
         for pid, vec in rows:

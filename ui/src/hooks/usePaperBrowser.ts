@@ -9,7 +9,7 @@ type Params = {
   /** Debounced keyword query. */
   query: string
   fromDate: string | undefined
-  activeCids: Set<number>
+  activeTags: Set<string>
   activeDomains: Set<string>
   /** When false, the browser pauses fetching (e.g. MobileView semantic mode). */
   enabled?: boolean
@@ -43,11 +43,11 @@ function errMessage(e: unknown): string {
 export function usePaperBrowser({
   query,
   fromDate,
-  activeCids,
+  activeTags,
   activeDomains,
   enabled = true,
 }: Params): PaperBrowser {
-  const cidsKey = [...activeCids].sort().join(',')
+  const tagsKey = [...activeTags].sort().join(',')
   const domainsKey = [...activeDomains].sort().join(',')
 
   const {
@@ -59,12 +59,12 @@ export function usePaperBrowser({
     isFetchingNextPage,
     error: queryError,
   } = useInfiniteQuery({
-    queryKey: ['papers', query, fromDate ?? '', cidsKey, domainsKey],
+    queryKey: ['papers', query, fromDate ?? '', tagsKey, domainsKey],
     queryFn: ({ pageParam }) =>
       fetchPapers({
         q: query || undefined,
         from: fromDate,
-        clusters: activeCids.size > 0 ? [...activeCids] : undefined,
+        tags: activeTags.size > 0 ? [...activeTags] : undefined,
         domains: activeDomains.size > 0 ? [...activeDomains] : undefined,
         limit: PAGE_SIZE,
         page: pageParam,

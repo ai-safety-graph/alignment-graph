@@ -8,7 +8,6 @@ import PaperList from './PaperList'
 import { fetchSubgraph } from '../lib/api'
 import { getSavedGraph, updateSavedGraph } from '../lib/storage'
 import type { GraphDataCompact } from '../lib/types'
-import { useClusterCatalog } from '../hooks/useClusterCatalog'
 import { usePaperDetail } from '../hooks/usePaperDetail'
 import { useRelatedPapers } from '../hooks/useRelatedPapers'
 import { useNavHistory } from '../hooks/useNavHistory'
@@ -16,7 +15,6 @@ import LoadingIndicator from './LoadingIndicator'
 
 export default function SubgraphView() {
   const { id } = useParams<{ id: string }>()
-  const { clusters, isLoading: clustersLoading } = useClusterCatalog()
   const queryClient = useQueryClient()
 
   const savedGraph = useMemo(() => (id ? getSavedGraph(id) : null), [id])
@@ -122,8 +120,6 @@ export default function SubgraphView() {
 
             <PaperList
               items={items}
-              clusters={clusters}
-              clustersLoading={clustersLoading}
               onSelectId={selectFromList}
               enableHover
               selectedId={selectedId ?? undefined}
@@ -138,8 +134,6 @@ export default function SubgraphView() {
           {selected ? (
             <StatsPaperDetails
               paper={selected}
-              clusters={clusters}
-              clustersLoading={clustersLoading}
               neighbors={neighbors}
               neighborsLoading={neighborsLoading}
               navHistory={navHistory}
@@ -174,8 +168,6 @@ export default function SubgraphView() {
           <div className='relative z-10 w-full max-w-[720px] h-[92dvh] rounded-2xl shadow-2xl overflow-hidden'>
             <MobilePaperDetails
               paper={selected}
-              clusters={clusters}
-              clustersLoading={clustersLoading}
               neighbors={neighbors}
               neighborsLoading={neighborsLoading}
               navHistory={navHistory}

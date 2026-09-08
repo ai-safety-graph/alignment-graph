@@ -1,15 +1,12 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import SharePlusIcon from './icons/SharePlusIcon'
 import ShareMinusIcon from './icons/ShareMinusIcon'
-import type { NodeCompact, ClustersLegend } from '../lib/types'
-import { cidToColor } from '../lib/colors'
+import type { NodeCompact } from '../lib/types'
 import { domainLabel } from '../lib/domain'
-import ClusterLabel from './ClusterLabel'
+import TagChips from './TagChips'
 
 interface PaperListProps {
   items: Array<{ n: NodeCompact }>
-  clusters: ClustersLegend
-  clustersLoading?: boolean
   onSelectId: (aid: string) => void
   enableHover?: boolean
   resetKey?: string
@@ -24,8 +21,6 @@ interface PaperListProps {
 
 export default function PaperList({
   items,
-  clusters,
-  clustersLoading = false,
   onSelectId,
   enableHover = false,
   resetKey,
@@ -84,18 +79,7 @@ export default function PaperList({
               <div className='mt-0.5 text-[15px] leading-snug'>{n.t}</div>
               <div className='mt-1 text-[12px] text-neutral-400'>
                 <div className='flex items-center gap-2 mb-0.5'>
-                  <span
-                    className='inline-block w-2 h-2 rounded-full border border-[#333333]'
-                    style={{ background: cidToColor(n.cid) }}
-                    aria-hidden
-                  />
-                  <span>
-                    <ClusterLabel
-                      cid={n.cid}
-                      clusters={clusters}
-                      isLoading={clustersLoading}
-                    />
-                  </span>
+                  <TagChips tags={n.tags} max={2} />
                   <span>•</span>
                   <span>{domainLabel(n.dm)}</span>
                 </div>

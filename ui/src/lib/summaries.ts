@@ -7,7 +7,7 @@ export type Summary = {
   pd: string
   ln: string
   dm: string
-  cid: number
+  tags: string[]
 }
 
 export async function getSummaryByUrl(
@@ -24,6 +24,6 @@ export async function getSummaryByUrl(
     pd: paper.pd,
     ln: paper.ln,
     dm: paper.dm,
-    cid: paper.cid,
+    tags: paper.tags,
   }
 }

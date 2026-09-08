@@ -1,17 +1,14 @@
 import { CircleX } from 'lucide-react'
-import { cidToColor } from '../lib/colors'
 import { domainLabel } from '../lib/domain'
-import type { ClustersLegend, NodeCompact } from '../lib/types'
+import type { NodeCompact } from '../lib/types'
 import { useRef, useLayoutEffect } from 'react'
-import ClusterLabel from './ClusterLabel'
+import TagChips from './TagChips'
 
 type NeighborEntry = { n: NodeCompact; w: number }
 
 interface Props {
   // Accepts any compact node; `sm` (summary) is optional and rendered when present.
   paper: NodeCompact
-  clusters: ClustersLegend
-  clustersLoading?: boolean
   neighbors: NeighborEntry[]
   neighborsLoading: boolean
   onClose: () => void
@@ -22,8 +19,6 @@ interface Props {
 
 export default function MobilePaperDetails({
   paper,
-  clusters,
-  clustersLoading = false,
   neighbors,
   neighborsLoading,
   onClose,
@@ -72,20 +67,9 @@ export default function MobilePaperDetails({
           )}
           </div>
           <div className='flex items-center justify-between mb-2'>
-            <div className='flex items-center gap-2 mb-0.5'>
-              <span
-                className='inline-block w-2 h-2 rounded-full mt-0.5 border border-[#333333]'
-                style={{ background: cidToColor(paper.cid) }}
-                aria-hidden
-              />
-              <span className='text-[13px] text-neutral-400'>
-                <ClusterLabel
-                  cid={paper.cid}
-                  clusters={clusters}
-                  isLoading={clustersLoading}
-                />{' '}
-                • {domainLabel(paper.dm)}
-              </span>
+            <div className='flex items-center gap-2 mb-0.5 text-[13px] text-neutral-400'>
+              <TagChips tags={paper.tags} />
+              <span>• {domainLabel(paper.dm)}</span>
             </div>
             <button
               onClick={onClose}
@@ -165,20 +149,9 @@ export default function MobilePaperDetails({
                 </div>
                 <div className='text-[12px] text-neutral-500'>
                   <div>{n.au}</div>
-                  <div className='flex items-center gap-2 mb-0.5'>
-                    <span
-                      className='inline-block w-2 h-2 rounded-full mt-0.5 border border-[#333333]'
-                      style={{ background: cidToColor(n.cid) }}
-                      aria-hidden
-                    />
-                    <span className='text-neutral-400'>
-                      <ClusterLabel
-                        cid={n.cid}
-                        clusters={clusters}
-                        isLoading={clustersLoading}
-                      />{' '}
-                      • {domainLabel(n.dm)}
-                    </span>
+                  <div className='flex items-center gap-2 mb-0.5 text-neutral-400'>
+                    <TagChips tags={n.tags} />
+                    <span>• {domainLabel(n.dm)}</span>
                   </div>
                 </div>
               </li>

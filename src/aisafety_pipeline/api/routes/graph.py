@@ -6,7 +6,7 @@ from collections import defaultdict
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 
-from ...config import EMB_DIMS, EMB_MODEL
+from ...config import TOPIC_EMB_DIMS, TOPIC_EMB_MODEL
 from ..deps import get_conn
 
 router = APIRouter(prefix="/api/graph", tags=["graph"])
@@ -30,7 +30,8 @@ class SubsetRequest(BaseModel):
 def _build_subgraph(conn, paper_ids: list[str]) -> dict:
     rows = conn.execute("""
         SELECT id, title, authors, published, link, domain_tag, kmeans_cluster,
-               graph_x, graph_y
+               graph_x, graph_y,
+               (SELECT array_agg(tag ORDER BY score DESC) FROM paper_tags pt WHERE pt.paper_id = papers.id) AS tags
         FROM papers
         WHERE id = ANY(%s) AND ai_stage2_keep = TRUE AND kmeans_cluster IS NOT NULL
         ORDER BY kmeans_cluster ASC, published DESC
@@ -39,8 +40,8 @@ def _build_subgraph(conn, paper_ids: list[str]) -> dict:
     if not rows:
         return {
             "meta": {
-                "model": EMB_MODEL,
-                "embedding_dim": EMB_DIMS,
+                "model": TOPIC_EMB_MODEL,
+                "embedding_dim": TOPIC_EMB_DIMS,
                 "generated_at": dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat(),
                 "neighbors": None,
                 "coords": {
@@ -52,6 +53,7 @@ def _build_subgraph(conn, paper_ids: list[str]) -> dict:
                 "compact": True,
             },
             "clusters": {},
+            "tags": {},
             "nodes": [],
             "links": [],
         }
@@ -71,18 +73,23 @@ def _build_subgraph(conn, paper_ids: list[str]) -> dict:
     cluster_ids = []
     cluster_counts: dict[int, int] = defaultdict(int)
 
+    tag_counts: dict[str, int] = defaultdict(int)
+
     for r in rows:
         cid = int(r[6]) if r[6] is not None else -1
+        tags = list(r[9]) if r[9] else []
         papers.append({
             "aid": r[0], "t": r[1] or "", "au": r[2] or "",
             "pd": str(r[3]) if r[3] else "", "dm": r[5] or "unknown",
-            "ln": r[4] or r[0], "cid": cid,
+            "ln": r[4] or r[0], "cid": cid, "tags": tags,
             "raw_x": float(r[7]) if r[7] is not None else None,
             "raw_y": float(r[8]) if r[8] is not None else None,
         })
         ids.append(r[0])
         cluster_ids.append(cid)
         cluster_counts[cid] += 1
+        for t in tags:
+            tag_counts[t] += 1
 
     N = len(papers)
     CANVAS_W, CANVAS_H, PAD = 1000, 700, 24
@@ -106,7 +113,7 @@ def _build_subgraph(conn, paper_ids: list[str]) -> dict:
 
     nodes = [
         {"id": i, "aid": p["aid"], "t": p["t"], "au": p["au"],
-         "pd": p["pd"], "dm": p["dm"], "ln": p["ln"], "cid": p["cid"],
+         "pd": p["pd"], "dm": p["dm"], "ln": p["ln"], "cid": p["cid"], "tags": p["tags"],
          "x": p["x"], "y": p["y"], "rx": p["raw_x"], "ry": p["raw_y"]}
         for i, p in enumerate(papers)
     ]
@@ -116,10 +123,16 @@ def _build_subgraph(conn, paper_ids: list[str]) -> dict:
         for cid in sorted(set(cluster_ids))
     }
 
+    # Counts every tag a node holds (any rank), matching /api/tags' `size`
+    # semantics -- distinct from the pie chart's primary-tag-only counts.
+    tags_legend = {
+        tag: {"size": count} for tag, count in sorted(tag_counts.items())
+    }
+
     return {
         "meta": {
-            "model": EMB_MODEL,
-            "embedding_dim": EMB_DIMS,
+            "model": TOPIC_EMB_MODEL,
+            "embedding_dim": TOPIC_EMB_DIMS,
             "generated_at": dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat(),
             "neighbors": None,
             "coords": {
@@ -134,6 +147,7 @@ def _build_subgraph(conn, paper_ids: list[str]) -> dict:
             "compact": True,
         },
         "clusters": clusters,
+        "tags": tags_legend,
         "nodes": nodes,
         "links": [],
     }

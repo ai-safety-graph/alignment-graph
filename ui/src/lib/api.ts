@@ -1,4 +1,4 @@
-import type { ClustersLegend, GraphDataCompact, NodeCompact } from './types'
+import type { TagsLegend, GraphDataCompact, NodeCompact } from './types'
 
 const BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
 
@@ -45,7 +45,7 @@ export async function fetchPaper(
 
 export async function searchPapers(
   query: string,
-  opts: { limit?: number; domain?: string; cluster?: number } = {},
+  opts: { limit?: number; domain?: string; tag?: string } = {},
 ): Promise<SearchResponse> {
   return apiFetch<SearchResponse>('/api/search', {
     method: 'POST',
@@ -58,7 +58,7 @@ export async function fetchPapers(
   params: {
     page?: number
     limit?: number
-    clusters?: number[]
+    tags?: string[]
     domains?: string[]
     from?: string
     to?: string
@@ -68,7 +68,7 @@ export async function fetchPapers(
   const qs = new URLSearchParams()
   if (params.page != null) qs.set('page', String(params.page))
   if (params.limit != null) qs.set('limit', String(params.limit))
-  params.clusters?.forEach((c) => qs.append('cluster', String(c)))
+  params.tags?.forEach((t) => qs.append('tags', t))
   params.domains?.forEach((d) => qs.append('domain', d))
   if (params.from) qs.set('from', params.from)
   if (params.to) qs.set('to', params.to)
@@ -76,12 +76,8 @@ export async function fetchPapers(
   return apiFetch<PaginatedPapers>(`/api/papers?${qs}`)
 }
 
-export async function fetchClusters(): Promise<ClustersLegend> {
-  type Row = { cid: number; label: string | null; size: number }
-  const rows = await apiFetch<Row[]>('/api/clusters')
-  const legend: ClustersLegend = {}
-  for (const r of rows) legend[String(r.cid)] = { label: r.label, size: r.size }
-  return legend
+export async function fetchTags(): Promise<TagsLegend> {
+  return apiFetch<TagsLegend>('/api/tags')
 }
 
 export type RelatedPaper = NodeCompact & {

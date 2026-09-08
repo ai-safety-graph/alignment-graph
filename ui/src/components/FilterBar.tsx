@@ -1,17 +1,17 @@
 import { RotateCcw } from 'lucide-react'
-import { cidToColor } from '../lib/colors'
+import { tagToColor } from '../lib/colors'
 import { domainLabel } from '../lib/domain'
 import { DATE_PRESETS } from '../hooks/useServerFilters'
 import type { DatePreset } from '../hooks/useServerFilters'
 
 interface FilterBarProps {
-  clusterEntries: Array<[string, { label?: string | null; size: number }]>
+  tagEntries: Array<[string, { size: number }]>
   availableDomains: string[]
   isLoading?: boolean
-  activeCids: Set<number>
+  activeTags: Set<string>
   activeDomains: Set<string>
   hasActiveFilters: boolean
-  onToggleCluster: (cid: number) => void
+  onToggleTag: (tag: string) => void
   onToggleDomain: (domain: string) => void
   onClearAll: () => void
   // Year chips (MobileView / legacy)
@@ -25,13 +25,13 @@ interface FilterBarProps {
 }
 
 export default function FilterBar({
-  clusterEntries,
+  tagEntries,
   availableDomains,
   isLoading = false,
-  activeCids,
+  activeTags,
   activeDomains,
   hasActiveFilters,
-  onToggleCluster,
+  onToggleTag,
   onToggleDomain,
   onClearAll,
   availableYears,
@@ -128,7 +128,7 @@ export default function FilterBar({
 
         <div className='flex items-start gap-2'>
           <span className='shrink-0 text-xs text-neutral-500 w-12 pt-1'>
-            Cluster
+            Tags
           </span>
           <div className='flex flex-wrap gap-2'>
             {isLoading
@@ -139,22 +139,22 @@ export default function FilterBar({
                     aria-hidden
                   />
                 ))
-              : clusterEntries.map(([cid, meta]) => (
+              : tagEntries.map(([tag, meta]) => (
                   <button
-                    key={cid}
-                    onClick={() => onToggleCluster(+cid)}
+                    key={tag}
+                    onClick={() => onToggleTag(tag)}
                     className={`px-3 py-1 rounded-md border text-xs whitespace-nowrap ${
-                      activeCids.has(+cid)
+                      activeTags.has(tag)
                         ? 'bg-neutral-800 border-neutral-500'
                         : 'bg-neutral-950 border-neutral-700 hover:border-neutral-500'
                     }`}
                   >
                     <span
                       className='inline-block w-2 h-2 mr-2 rounded-full border border-[#333333]'
-                      style={{ backgroundColor: cidToColor(Number(cid)) }}
+                      style={{ backgroundColor: tagToColor(tag) }}
                       aria-hidden
                     />
-                    {(meta.label ?? `Cluster ${cid}`) + ' • ' + meta.size}
+                    {tag + ' • ' + meta.size}
                   </button>
                 ))}
           </div>

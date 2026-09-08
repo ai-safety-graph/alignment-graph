@@ -99,8 +99,10 @@ def insert_paper(
     kmeans_cluster: int | None = 0,
     ai_stage2_keep: bool = True,
     embedding: np.ndarray | None = None,
+    embedding_topic: np.ndarray | None = None,
     graph_x: float | None = 0.0,
     graph_y: float | None = 0.0,
+    tags: list[tuple[str, float]] | None = None,
 ) -> str:
     """Insert a minimal fixture row into `papers` (and its `papers_raw` parent
     row, required by the FK) and return the canonical `aid` (paper id)."""
@@ -119,28 +121,38 @@ def insert_paper(
     )
 
     vec = embedding if embedding is not None else np.zeros(768, dtype=np.float32)
+    vec_topic = embedding_topic if embedding_topic is not None else np.zeros(768, dtype=np.float32)
 
     conn.execute(
         """
         INSERT INTO papers (
             id, title, authors, published, summary, link,
-            domain_tag, kmeans_cluster, ai_stage2_keep, embedding,
+            domain_tag, kmeans_cluster, ai_stage2_keep, embedding, embedding_topic,
             graph_x, graph_y
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (id) DO UPDATE SET
             title=EXCLUDED.title, authors=EXCLUDED.authors,
             published=EXCLUDED.published, summary=EXCLUDED.summary,
             link=EXCLUDED.link, domain_tag=EXCLUDED.domain_tag,
             kmeans_cluster=EXCLUDED.kmeans_cluster,
             ai_stage2_keep=EXCLUDED.ai_stage2_keep,
-            embedding=EXCLUDED.embedding,
+            embedding=EXCLUDED.embedding, embedding_topic=EXCLUDED.embedding_topic,
             graph_x=EXCLUDED.graph_x, graph_y=EXCLUDED.graph_y
         """,
         (
             aid, title, authors, published, summary, link,
-            domain_tag, kmeans_cluster, ai_stage2_keep, vec,
+            domain_tag, kmeans_cluster, ai_stage2_keep, vec, vec_topic,
             graph_x, graph_y,
         ),
     )
+
+    if tags is not None:
+        conn.execute("DELETE FROM paper_tags WHERE paper_id = %s", (aid,))
+        for tag, score in tags:
+            conn.execute(
+                "INSERT INTO paper_tags (paper_id, tag, score) VALUES (%s, %s, %s)",
+                (aid, tag, score),
+            )
+
     return aid

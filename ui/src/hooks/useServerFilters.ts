@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { ClustersLegend } from '../lib/types'
+import type { TagsLegend } from '../lib/types'
 
 export type DatePreset = '1m' | '3m' | '1y' | 'all'
 
@@ -19,35 +19,32 @@ function presetToFromDate(preset: DatePreset): string | undefined {
   return d.toISOString().split('T')[0]
 }
 
-export function useServerFilters(clusters: ClustersLegend) {
-  const [activeCids, setActiveCids] = useState<Set<number>>(new Set())
+export function useServerFilters(tags: TagsLegend) {
+  const [activeTags, setActiveTags] = useState<Set<string>>(new Set())
   const [activeDomains, setActiveDomains] = useState<Set<string>>(new Set())
   const [datePreset, setDatePreset] = useState<DatePreset>('all')
 
-  const clusterEntries = useMemo(
-    () =>
-      Object.entries(clusters) as Array<
-        [string, { label?: string | null; size: number }]
-      >,
-    [clusters],
+  const tagEntries = useMemo(
+    () => Object.entries(tags) as Array<[string, { size: number }]>,
+    [tags],
   )
 
   const fromDate = useMemo(() => presetToFromDate(datePreset), [datePreset])
 
   const hasActiveFilters =
-    activeCids.size > 0 || activeDomains.size > 0 || datePreset !== 'all'
+    activeTags.size > 0 || activeDomains.size > 0 || datePreset !== 'all'
 
   function clearAllFilters() {
-    setActiveCids(new Set())
+    setActiveTags(new Set())
     setActiveDomains(new Set())
     setDatePreset('all')
   }
 
-  function toggleCluster(cid: number) {
-    setActiveCids((prev) => {
+  function toggleTag(tag: string) {
+    setActiveTags((prev) => {
       const next = new Set(prev)
-      if (next.has(cid)) next.delete(cid)
-      else next.add(cid)
+      if (next.has(tag)) next.delete(tag)
+      else next.add(tag)
       return next
     })
   }
@@ -65,12 +62,12 @@ export function useServerFilters(clusters: ClustersLegend) {
     fromDate,
     datePreset,
     setDatePreset,
-    activeCids,
+    activeTags,
     activeDomains,
-    clusterEntries,
+    tagEntries,
     hasActiveFilters,
     clearAllFilters,
-    toggleCluster,
+    toggleTag,
     toggleDomain,
   }
 }
