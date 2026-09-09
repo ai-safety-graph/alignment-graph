@@ -27,9 +27,10 @@ def test_select_tags_caps_at_top_n():
     assert [t for t, _ in tags] == ["reward hacking", "deceptive alignment"]
 
 
-def test_select_tags_empty_when_nothing_clears_floor():
+def test_select_tags_falls_back_to_best_match_when_nothing_clears_floor():
     sims = np.array([0.1, 0.2, 0.1, 0.0])
-    assert select_tags(sims, PHRASES, cosine_floor=0.4, top_n=4) == []
+    tags = select_tags(sims, PHRASES, cosine_floor=0.4, top_n=4)
+    assert tags == [("deceptive alignment", 0.2)]
 
 
 def test_select_tags_scores_match_input():
