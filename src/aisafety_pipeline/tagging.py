@@ -6,7 +6,7 @@ from psycopg2.extras import execute_values
 from .config import GREEN, RESET
 from .embeddings import TopicEmbeddingGenerator
 from .filters import load_vectors
-from .taxonomy import TAXONOMY
+from .taxonomy import TAXONOMY, embedding_texts
 
 # Multi-label, zero-shot tagging: each paper's embedding is matched directly
 # against the fixed taxonomy (taxonomy.TAXONOMY) by cosine similarity, and
@@ -47,7 +47,7 @@ def select_tags(
 
 def tag_papers_default(
     conn,
-    cosine_floor: float = 0.35,
+    cosine_floor: float = 0.64,
     top_n: int = 4,
     extra_phrases: list[str] | None = None,
 ) -> dict[str, list[tuple[str, float]]]:
@@ -84,8 +84,12 @@ def tag_papers_default(
         return {}
     embs = np.vstack([V[pid] for pid in ids])
 
+    # Taxonomy phrases are short, underspecified search terms compared to
+    # the paper text they're matched against (which is embedded as passages
+    # in embed-topic) -- BGE's asymmetric convention calls for the query
+    # prefix on this side to get meaningful passage-vs-query similarity.
     eg = TopicEmbeddingGenerator(batch_size=64)
-    phrase_embs = eg.encode_passages(phrases)
+    phrase_embs = eg.encode_queries(embedding_texts(phrases))
     phrase_embs = phrase_embs / (np.linalg.norm(phrase_embs, axis=1, keepdims=True) + 1e-12)
 
     sims = embs @ phrase_embs.T  # (n_papers, n_phrases)

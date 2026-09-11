@@ -86,7 +86,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     h = sp.add_parser("tag", help="Multi-label tag papers against a fixed topic taxonomy (see taxonomy.py)")
     h.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
-    h.add_argument("--floor", type=float, default=0.62, help="Cosine similarity floor for keeping a tag")
+    h.add_argument("--floor", type=float, default=0.64, help="Cosine similarity floor for keeping a tag")
     h.add_argument("--top-n", type=int, default=4, dest="top_n", help="Max tags kept per paper")
     h.add_argument("--extra", type=str, default=None, help="Comma-separated extra candidate topics, on top of taxonomy.TAXONOMY")
     h.set_defaults(func=tagging.cmd_tag)
