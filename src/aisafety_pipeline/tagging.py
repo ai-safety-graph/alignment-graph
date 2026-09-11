@@ -35,13 +35,12 @@ def select_tags(
     Keeps every phrase at or above `cosine_floor`, then caps at the
     `top_n` highest-scoring ones, sorted descending -- callers rely on
     this order to treat index 0 as the paper's primary tag. If nothing
-    clears the floor, falls back to the single best-matching phrase so no
-    kept paper is left with zero tags.
+    clears the floor, returns an empty list -- the paper stays untagged
+    rather than being forced onto its best (but still weak) match.
     """
     keep = np.where(sims_row >= cosine_floor)[0]
     if keep.size == 0:
-        best = int(np.argmax(sims_row))
-        return [(phrases[best], float(sims_row[best]))]
+        return []
     order = keep[np.argsort(sims_row[keep])[::-1]][:top_n]
     return [(phrases[j], float(sims_row[j])) for j in order]
 
