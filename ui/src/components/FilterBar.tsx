@@ -43,6 +43,11 @@ export default function FilterBar({
 }: FilterBarProps) {
   if (!isExpanded) return null
 
+  const dateIndex =
+    datePreset !== undefined
+      ? DATE_PRESETS.findIndex((p) => p.value === datePreset)
+      : -1
+
   return (
     <div className='w-full my-2 rounded-lg border border-neutral-700 bg-[#1f1f1f]'>
       <div className='px-5 py-3 space-y-2'>
@@ -53,21 +58,20 @@ export default function FilterBar({
             <span className='shrink-0 text-xs text-neutral-500 w-12'>
               Date
             </span>
-            <div className='flex gap-2'>
-              {DATE_PRESETS.map(({ value, label }) => (
-                <button
-                  key={value}
-                  onClick={() => onSetDatePreset(value)}
-                  className={`px-3 py-1 rounded-md border text-xs whitespace-nowrap ${
-                    datePreset === value
-                      ? 'bg-neutral-600 border-neutral-500 text-white'
-                      : 'bg-neutral-950 border-neutral-700 hover:border-neutral-500'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            <input
+              type='range'
+              min={0}
+              max={DATE_PRESETS.length - 1}
+              step={1}
+              value={dateIndex}
+              onChange={(e) =>
+                onSetDatePreset(DATE_PRESETS[+e.target.value].value)
+              }
+              className='date-slider flex-1 max-w-xs'
+            />
+            <span className='shrink-0 w-20 text-right text-xs text-neutral-300'>
+              {DATE_PRESETS[dateIndex]?.label}
+            </span>
           </div>
         )}
 
