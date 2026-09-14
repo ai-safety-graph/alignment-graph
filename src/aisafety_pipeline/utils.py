@@ -53,10 +53,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     d = sp.add_parser("filter", help="Stage-2 semantic filter")
     d.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
-    d.add_argument("--method", choices=["centroid", "logreg"], default="centroid")
+    d.add_argument("--method", choices=["centroid", "centroid-multi", "logreg"], default="centroid")
     d.add_argument("--seeds", help="Path to seeds.txt (one arXiv id/url per line)")
+    d.add_argument("--seeds-subtopics", dest="seeds_subtopics",
+                    help="Path to seeds_subtopics.tsv (arxiv_id, subtopic, ...) for --method centroid-multi "
+                         "(default: seeds_subtopics.tsv)")
     d.add_argument("--labels", help="labels.csv with columns: id,label (0/1)")
-    d.add_argument("--tau", type=float, default=0.38, help="Threshold on sim/proba")
+    d.add_argument("--tau", type=float, default=0.38,
+                    help="Threshold on sim/proba (centroid: raw cosine; centroid-multi: z-score, "
+                         "not directly comparable to the centroid method's tau)")
     d.set_defaults(func=filters.cmd_filter)
 
     e = sp.add_parser("cluster", help="Cluster only kept papers")
