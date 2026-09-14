@@ -1,8 +1,8 @@
 import SharePlusIcon from './icons/SharePlusIcon'
 import ShareMinusIcon from './icons/ShareMinusIcon'
-import { cidToColor } from '../lib/colors'
 import { domainLabel } from '../lib/domain'
-import type { ClustersLegend, NodeCompact } from '../lib/types'
+import type { NodeCompact } from '../lib/types'
+import TagChips from './TagChips'
 
 const truncate = (s: string, n: number) =>
   s.length > n ? s.slice(0, n - 1) + '…' : s
@@ -10,7 +10,6 @@ const truncate = (s: string, n: number) =>
 export default function SearchResultsOverlay({
   results,
   onSelect,
-  clusters,
   isLoading,
   onAddToSubgraph,
   onRemoveFromSubgraph,
@@ -19,7 +18,6 @@ export default function SearchResultsOverlay({
 }: {
   results: Array<{ n: NodeCompact; score: number; deg: number }>
   onSelect: (aid: string) => void
-  clusters: ClustersLegend
   isLoading?: boolean
   onAddToSubgraph?: (aid: string) => void
   onRemoveFromSubgraph?: (aid: string) => void
@@ -67,15 +65,8 @@ export default function SearchResultsOverlay({
                     {n.au}
                   </div>
                   <div className='text-[12px] text-neutral-400 flex items-center gap-2 mb-0.5'>
-                    <span
-                      className='inline-block w-2 h-2 rounded-full mt-0.5 border border-[#333333]'
-                      style={{ background: cidToColor(n.cid) }}
-                      aria-hidden
-                    />
-                    <span>
-                      {clusters[String(n.cid)]?.label ?? `Cluster ${n.cid}`} •{' '}
-                      {domainLabel(n.dm)}
-                    </span>
+                    <TagChips tags={n.tags} max={2} />
+                    <span>• {domainLabel(n.dm)}</span>
                   </div>
                 </div>
                 {(onAddToSubgraph || onRemoveFromSubgraph) && (

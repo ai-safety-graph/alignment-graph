@@ -6,7 +6,8 @@ export type NodeCompact = {
   pd: string
   dm: string
   ln: string
-  cid: number
+  /** Taxonomy tags, ordered by score descending -- tags[0] is the primary tag. */
+  tags: string[]
   sm?: string
   x?: number
   y?: number
@@ -16,9 +17,9 @@ export type NodeCompact = {
 
 export type LinkCompact = { s: number; t: number; w: number }
 
-export type ClustersLegend = Record<
+export type TagsLegend = Record<
   string,
-  { label?: string | null; size: number }
+  { size: number; primary_size?: number }
 >
 
 export type GraphDataCompact = {
@@ -40,7 +41,7 @@ export type GraphDataCompact = {
     }
     compact: boolean
   }
-  clusters: ClustersLegend
+  tags: TagsLegend
   nodes: NodeCompact[]
   links: LinkCompact[]
 }

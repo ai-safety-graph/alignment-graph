@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import re
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from psycopg2.extras import execute_values
 from .arxiv_ids import normalize_arxiv_id_or_url
 from .config import BLUE, GREEN, RESET, YELLOW
 from .db import vector_to_array
+from .embeddings import _MODEL_COLUMNS
 
 _STAGE1_READ_CHUNK = 2000
 _STAGE1_WRITE_BATCH = 500
@@ -213,12 +215,13 @@ def load_vectors(conn, ids, *, model="specter2", chunk_size=900):
     if not ids:
         return {}
 
+    col = _MODEL_COLUMNS[model]
     ids = list(ids)
     V = {}
     for i in range(0, len(ids), chunk_size):
         chunk = ids[i:i + chunk_size]
         rows = conn.execute(
-            "SELECT id, embedding FROM papers WHERE embedding IS NOT NULL AND id = ANY(%s)",
+            f"SELECT id, {col} FROM papers WHERE {col} IS NOT NULL AND id = ANY(%s)",
             (chunk,),
         ).fetchall()
         for pid, vec in rows:
@@ -242,10 +245,162 @@ def build_centroid(conn, seeds_path):
     return C / (np.linalg.norm(C)+1e-12)
 
 
+_SEEDS_SUBTOPICS_DEFAULT = "seeds_subtopics.tsv"
+
+
+def load_seed_groups(path) -> dict[str, list[str]]:
+    """Parse a (arxiv_id, subtopic, ...) TSV into {subtopic: [normalized ids]}.
+
+    Same seed papers `build_centroid` uses, just grouped -- feeds
+    `build_group_centroids` below.
+    """
+    groups: dict[str, list[str]] = {}
+    with open(path, newline="") as f:
+        for row in csv.DictReader(f, delimiter="\t"):
+            aid = normalize_arxiv_id_or_url(row["arxiv_id"])
+            if aid:
+                groups.setdefault(row["subtopic"].strip(), []).append(aid)
+    return groups
+
+
+def build_group_centroids(conn, seeds_subtopics_path, *, model="specter2") -> dict[str, np.ndarray]:
+    """One normalized centroid per subtopic group, instead of `build_centroid`'s
+    single global mean.
+
+    AI safety spans sub-areas (alignment, interpretability, governance, ...)
+    that sit far apart in embedding space; averaging all seeds into one
+    centroid washes out papers that are squarely on-topic for just one
+    sub-area but far from the overall mean. See `_col_zscore` for how the
+    resulting per-group scores get put on comparable footing before
+    thresholding.
+    """
+    groups = load_seed_groups(seeds_subtopics_path)
+    all_ids = sorted({sid for ids in groups.values() for sid in ids})
+    V = load_vectors(conn, all_ids, model=model)
+    centroids: dict[str, np.ndarray] = {}
+    for topic, ids in groups.items():
+        vecs = [V[sid] for sid in ids if sid in V]
+        missing = [sid for sid in ids if sid not in V]
+        if missing:
+            print(f"{YELLOW}filter:{RESET} subtopic {topic!r}: {len(missing)} seed(s) not found/embedded: {', '.join(missing)}")
+        if not vecs:
+            raise RuntimeError(f"No seed embeddings found for subtopic {topic!r}.")
+        c = np.mean(np.vstack(vecs), axis=0)
+        centroids[topic] = c / (np.linalg.norm(c) + 1e-12)
+    return centroids
+
+
+def _col_zscore(sims: np.ndarray) -> np.ndarray:
+    """Standardize each column (one sub-centroid per column) against its own
+    mean/std across the scored population.
+
+    Different sub-centroids sit at different baseline cosine-similarity
+    levels against arbitrary paper text (the same per-phrase bias
+    `tagging.zscore` corrects for taxonomy phrases), so thresholding raw
+    cosine across sub-centroids would systematically favor whichever one
+    happens to run high, not whichever is actually the best-matching topic.
+    """
+    mean = sims.mean(axis=0)
+    std = sims.std(axis=0)
+    return (sims - mean) / (std + 1e-9)
+
+
+def _run_centroid_multi(conn, args) -> None:
+    """Stage-2 filter using one centroid per AI-safety subtopic (from
+    `seeds_subtopics.tsv`) instead of a single global mean -- see
+    `build_group_centroids` for why.
+
+    `--tau` here thresholds the best-matching sub-centroid's *z-score*
+    (`_col_zscore`), not raw cosine, so it is on a different scale from
+    the plain `centroid` method's tau and the two are not directly
+    comparable at the same numeric value -- sweep both independently
+    against `scripts/eval_filter.py` rather than assuming parity.
+
+    This is an experimental alternative to `centroid`, sharing its output
+    columns (`ai_sem_sim`, `ai_stage2_keep`, `ai_stage2_reason`) -- running
+    it against a production DB overwrites the current stage-2 decision for
+    every paper, so validate against the eval harness before doing that,
+    the same way the tag floor was validated before being changed.
+    """
+    ids = [r[0] for r in conn.execute("SELECT id FROM papers").fetchall()]
+    if not ids:
+        print(f"{YELLOW}filter:{RESET} nothing in `papers`. Run stage1 & embed first.")
+        return
+
+    seeds_subtopics = args.seeds_subtopics or _SEEDS_SUBTOPICS_DEFAULT
+    centroids = build_group_centroids(conn, seeds_subtopics)
+    topics = sorted(centroids)
+    C = np.vstack([centroids[t] for t in topics])  # (k, d)
+
+    V = load_vectors(conn, ids)
+    scored_ids = [pid for pid in ids if pid in V]
+    missing = len(ids) - len(scored_ids)
+    if not scored_ids:
+        print(f"{YELLOW}filter:{RESET} no embedded papers to score.")
+        return
+
+    raw = np.vstack([V[pid] for pid in scored_ids]) @ C.T  # (n, k) raw cosine per sub-centroid
+    z = _col_zscore(raw)
+    best = np.argmax(z, axis=1)
+
+    existing: dict[str, tuple] = {}
+    for i in range(0, len(ids), _STAGE2_READ_CHUNK):
+        chunk = ids[i:i + _STAGE2_READ_CHUNK]
+        for row in conn.execute(_SELECT_EXISTING_STAGE2, (chunk,)).fetchall():
+            existing[row[0]] = (row[1], row[2])
+
+    write_cur = conn.raw_cursor()
+    kept = rej = unchanged = 0
+    write_batch: list[tuple] = []
+
+    def flush_writes():
+        nonlocal write_batch
+        if not write_batch:
+            return
+        execute_values(
+            write_cur, _UPDATE_STAGE2, write_batch,
+            template="(%s, %s::real, %s::boolean, %s::text)",
+        )
+        conn.commit()
+        write_batch = []
+        print(f"{BLUE}filter progress (multi):{RESET} kept={kept} rejected={rej} unchanged_skipped={unchanged}")
+
+    try:
+        for row, pid in enumerate(scored_ids):
+            bi = int(best[row])
+            sim = float(raw[row, bi])
+            zbest = float(z[row, bi])
+            keep = bool(zbest >= args.tau)
+            kept += keep; rej += (1 - keep)
+            reason = f"centroid-multi tau={args.tau} group={topics[bi]} z={zbest:.3f}"
+
+            prev_sim, prev_keep = existing.get(pid, (None, None))
+            sim_unchanged = prev_sim is not None and abs(float(prev_sim) - sim) < _SIM_UNCHANGED_TOL
+            if sim_unchanged and prev_keep == keep:
+                unchanged += 1
+                continue
+
+            write_batch.append((pid, sim, keep, reason))
+            if len(write_batch) >= _STAGE2_WRITE_BATCH:
+                flush_writes()
+        flush_writes()
+    except Exception:
+        conn.rollback()
+        raise
+
+    print(
+        f"{GREEN}filter (centroid-multi):{RESET} scanned={len(ids)} kept={kept} rejected={rej} "
+        f"missing_embedding={missing} unchanged_skipped={unchanged} (tau={args.tau}, groups={topics})"
+    )
+
+
 def cmd_filter(args):
     from .db import connect
     conn = connect(args.db)
     try:
+        if args.method == "centroid-multi":
+            _run_centroid_multi(conn, args)
+            return
         if args.method != "centroid":
             raise SystemExit(f"--method {args.method!r} is not implemented yet")
         if not args.seeds:

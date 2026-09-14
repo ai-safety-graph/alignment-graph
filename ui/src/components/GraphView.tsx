@@ -18,10 +18,10 @@ import { Trash, Search, Library, Sparkles } from 'lucide-react'
 
 import { useForceConfig } from '../hooks/useForceConfig'
 import { useGraphShortcuts } from '../hooks/useGraphShortcuts'
-import { cidToColor } from '../lib/colors'
+import { tagToColor } from '../lib/colors'
 import { buildAdjacency, clamp } from '../lib/graph'
 import type {
-  ClustersLegend,
+  TagsLegend,
   GraphDataCompact,
   LinkCompact,
   NodeCompact,
@@ -193,16 +193,6 @@ export default function ArxivGraph({
     ? `Failed to load graph: ${queryError.message}`
     : null
 
-  // Full cluster legend, independent of which papers are currently loaded.
-  const { data: allClusters } = useQuery({
-    queryKey: ['clusters'],
-    queryFn: async () => {
-      const { fetchClusters } = await import('../lib/api')
-      return fetchClusters()
-    },
-    staleTime: Infinity,
-  })
-
   // Prepare simulation nodes (mutable x/y)
   const simNodes = useMemo(() => {
     if (!data) return [] as SimNode[]
@@ -255,21 +245,19 @@ export default function ArxivGraph({
     [ghostSimNodes, relatedGhostNodes],
   )
 
-  const { byId, adj, clusters } = useMemo(() => {
+  const { byId, adj, tags } = useMemo(() => {
     if (!data) {
       return {
         byId: new Map<number, NodeCompact>(),
         adj: new Map<number, Array<{ id: number; w: number }>>(),
-        clusters: {} as ClustersLegend,
+        tags: {} as TagsLegend,
       }
     }
     const { byId, adj } = buildAdjacency(data.nodes, data.links)
     for (const n of ghostSimNodes) byId.set(n.id, n)
     for (const n of relatedGhostNodes) byId.set(n.id, n)
-    return { byId, adj, clusters: data.clusters }
+    return { byId, adj, tags: data.tags }
   }, [data, ghostSimNodes, relatedGhostNodes])
-
-  const clusterLabels = allClusters ?? ({} as ClustersLegend)
 
   // Debounced backend search
   const searchTimerRef = useRef<number | null>(null)
@@ -424,7 +412,7 @@ export default function ArxivGraph({
             pd: r.pd,
             dm: r.dm,
             ln: r.ln,
-            cid: r.cid,
+            tags: r.tags,
             x,
             y,
             ...(pin ? { fx: x, fy: y } : {}),
@@ -603,12 +591,29 @@ export default function ArxivGraph({
     }
     ctx.globalAlpha = alpha
     ctx.beginPath()
-    ctx.fillStyle = cidToColor(n.cid)
+    ctx.fillStyle = n.tags[0] ? tagToColor(n.tags[0]) : '#666666'
     ctx.arc(n.x, n.y, r, 0, 2 * Math.PI, false)
     ctx.fill()
     ctx.lineWidth = 0.5
     ctx.strokeStyle = 'rgba(255,255,255,0.7)'
     ctx.stroke()
+    // Secondary tags: a short colored ring segment per extra tag, dropped at
+    // small on-screen radius (same threshold as label text below) since
+    // full pie-wedge fills are illegible at the size these nodes render at.
+    const secondaryTags = n.tags.slice(1, 4)
+    if (secondaryTags.length > 0 && globalScale > 0.8) {
+      const slice = (2 * Math.PI) / secondaryTags.length
+      secondaryTags.forEach((tag, i) => {
+        ctx.save()
+        ctx.globalAlpha = alpha
+        ctx.strokeStyle = tagToColor(tag)
+        ctx.lineWidth = 1.5
+        ctx.beginPath()
+        ctx.arc(n.x, n.y, r + 3, i * slice, i * slice + slice * 0.8)
+        ctx.stroke()
+        ctx.restore()
+      })
+    }
     if (relatedLoading && selectedId === n.id) {
       const angle = (Date.now() / 300) % (Math.PI * 2)
       ctx.save()
@@ -616,7 +621,7 @@ export default function ArxivGraph({
       ctx.strokeStyle = '#4ea8de'
       ctx.lineWidth = 1.5
       ctx.beginPath()
-      ctx.arc(n.x, n.y, r + 4, angle, angle + Math.PI * 1.3)
+      ctx.arc(n.x, n.y, r + 6, angle, angle + Math.PI * 1.3)
       ctx.stroke()
       ctx.restore()
     }
@@ -787,7 +792,6 @@ export default function ArxivGraph({
             <SearchResultsOverlay
               results={searchResults}
               onSelect={onSearchPick}
-              clusters={clusterLabels}
               isLoading={isSearching}
               onAddToSubgraph={
                 activeSavedGraph ? addToActiveSavedGraph : undefined
@@ -803,14 +807,13 @@ export default function ArxivGraph({
           </div>
         )}
         <div className='shrink-0 pointer-events-auto'>
-          <ClusterLegendOverlay clusters={clusters} />
+          <ClusterLegendOverlay tags={tags} />
         </div>
       </div>
 
       {selected && (
         <GraphPaperDetails
           paper={selected}
-          clusters={clusterLabels}
           related={related}
           relatedLoading={relatedLoading}
           onClose={onBackgroundClick}

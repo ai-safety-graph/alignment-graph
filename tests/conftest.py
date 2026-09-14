@@ -7,7 +7,21 @@ import pytest
 
 
 def _resolve_test_dsn() -> str | None:
-    return os.getenv("TEST_DATABASE_URL") or os.getenv("DATABASE_URL") or None
+    """Resolve the DSN for DB-backed tests.
+
+    Never falls back to a non-local DATABASE_URL: DATABASE_URL is meant to
+    point at production (e.g. Supabase) once the pipeline runs against it,
+    and tests must not risk writing there even if something bypasses the
+    rollback-only fixture below.
+    """
+    explicit = os.getenv("TEST_DATABASE_URL")
+    if explicit:
+        return explicit
+
+    fallback = os.getenv("DATABASE_URL")
+    if fallback and any(host in fallback for host in ("localhost", "127.0.0.1")):
+        return fallback
+    return None
 
 
 @pytest.fixture(scope="session")
@@ -15,8 +29,9 @@ def test_dsn() -> str:
     dsn = _resolve_test_dsn()
     if not dsn:
         pytest.skip(
-            "TEST_DATABASE_URL/DATABASE_URL not set — start Postgres with "
-            "`docker compose up -d` and set DATABASE_URL to run DB-backed tests."
+            "No local test database configured — start Postgres with "
+            "`docker compose up -d` and set TEST_DATABASE_URL (or a "
+            "localhost/127.0.0.1 DATABASE_URL) to run DB-backed tests."
         )
     try:
         import psycopg2
@@ -99,8 +114,10 @@ def insert_paper(
     kmeans_cluster: int | None = 0,
     ai_stage2_keep: bool = True,
     embedding: np.ndarray | None = None,
+    embedding_topic: np.ndarray | None = None,
     graph_x: float | None = 0.0,
     graph_y: float | None = 0.0,
+    tags: list[tuple[str, float]] | None = None,
 ) -> str:
     """Insert a minimal fixture row into `papers` (and its `papers_raw` parent
     row, required by the FK) and return the canonical `aid` (paper id)."""
@@ -119,28 +136,38 @@ def insert_paper(
     )
 
     vec = embedding if embedding is not None else np.zeros(768, dtype=np.float32)
+    vec_topic = embedding_topic if embedding_topic is not None else np.zeros(768, dtype=np.float32)
 
     conn.execute(
         """
         INSERT INTO papers (
             id, title, authors, published, summary, link,
-            domain_tag, kmeans_cluster, ai_stage2_keep, embedding,
+            domain_tag, kmeans_cluster, ai_stage2_keep, embedding, embedding_topic,
             graph_x, graph_y
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (id) DO UPDATE SET
             title=EXCLUDED.title, authors=EXCLUDED.authors,
             published=EXCLUDED.published, summary=EXCLUDED.summary,
             link=EXCLUDED.link, domain_tag=EXCLUDED.domain_tag,
             kmeans_cluster=EXCLUDED.kmeans_cluster,
             ai_stage2_keep=EXCLUDED.ai_stage2_keep,
-            embedding=EXCLUDED.embedding,
+            embedding=EXCLUDED.embedding, embedding_topic=EXCLUDED.embedding_topic,
             graph_x=EXCLUDED.graph_x, graph_y=EXCLUDED.graph_y
         """,
         (
             aid, title, authors, published, summary, link,
-            domain_tag, kmeans_cluster, ai_stage2_keep, vec,
+            domain_tag, kmeans_cluster, ai_stage2_keep, vec, vec_topic,
             graph_x, graph_y,
         ),
     )
+
+    if tags is not None:
+        conn.execute("DELETE FROM paper_tags WHERE paper_id = %s", (aid,))
+        for tag, score in tags:
+            conn.execute(
+                "INSERT INTO paper_tags (paper_id, tag, score) VALUES (%s, %s, %s)",
+                (aid, tag, score),
+            )
+
     return aid

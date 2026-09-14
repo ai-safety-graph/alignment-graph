@@ -14,8 +14,8 @@ _generator = None
 def _get_generator():
     global _generator
     if _generator is None:
-        from ...embeddings import EmbeddingGenerator
-        _generator = EmbeddingGenerator(batch_size=1)
+        from ...embeddings import TopicEmbeddingGenerator
+        _generator = TopicEmbeddingGenerator(batch_size=1)
     return _generator
 
 
@@ -24,6 +24,7 @@ class SearchRequest(BaseModel):
     limit: int = Field(20, ge=1, le=100)
     domain: str | None = None
     cluster: int | None = None
+    tag: str | None = None
 
 
 @router.post("")
@@ -35,10 +36,10 @@ def semantic_search(req: SearchRequest, conn=Depends(get_conn)):
             "Run the API locally with ENABLE_SEMANTIC_SEARCH=true to enable it.",
         )
     gen = _get_generator()
-    embs = gen.encode([req.query], [""])
+    embs = gen.encode_queries([req.query])
     query_vec = embs[0].tolist()
 
-    filter_clauses = ["ai_stage2_keep = TRUE", "embedding IS NOT NULL"]
+    filter_clauses = ["ai_stage2_keep = TRUE", "embedding_topic IS NOT NULL"]
     filter_params: list = []
 
     if req.domain:
@@ -47,6 +48,9 @@ def semantic_search(req: SearchRequest, conn=Depends(get_conn)):
     if req.cluster is not None:
         filter_clauses.append("kmeans_cluster = %s")
         filter_params.append(req.cluster)
+    if req.tag is not None:
+        filter_clauses.append("EXISTS (SELECT 1 FROM paper_tags pt WHERE pt.paper_id = papers.id AND pt.tag = %s)")
+        filter_params.append(req.tag)
 
     where_sql = "WHERE " + " AND ".join(filter_clauses)
 
@@ -54,10 +58,11 @@ def semantic_search(req: SearchRequest, conn=Depends(get_conn)):
     # ORDER BY uses query_vec again, LIMIT uses req.limit
     sql = f"""
         SELECT id, title, authors, published, link, domain_tag, kmeans_cluster,
-               1 - (embedding <=> %s::vector) AS similarity
+               1 - (embedding_topic <=> %s::vector) AS similarity,
+               (SELECT array_agg(tag ORDER BY score DESC) FROM paper_tags pt WHERE pt.paper_id = papers.id) AS tags
         FROM papers
         {where_sql}
-        ORDER BY embedding <=> %s::vector
+        ORDER BY embedding_topic <=> %s::vector
         LIMIT %s
     """
     params = [query_vec] + filter_params + [query_vec, req.limit]
@@ -76,6 +81,7 @@ def semantic_search(req: SearchRequest, conn=Depends(get_conn)):
                 "dm": r[5] or "unknown",
                 "cid": r[6],
                 "sim": round(float(r[7]), 4) if r[7] is not None else None,
+                "tags": list(r[8]) if r[8] else [],
             }
             for r in rows
         ],

@@ -3,24 +3,36 @@ from __future__ import annotations
 import numpy as np
 from psycopg2.extras import execute_values
 
-from .config import BLUE, EMB_MODEL, GREEN, RESET, YELLOW
+from .config import BLUE, EMB_MODEL, GREEN, RESET, TOPIC_EMB_MODEL, YELLOW
 
 _EMBED_WRITE_BATCH = 500
 
-_UPSERT_EMBEDDING = """
-    UPDATE papers AS p SET embedding = v.embedding
-    FROM (VALUES %s) AS v(id, embedding)
-    WHERE p.id = v.id
-"""
+# Column each model's vectors live in. The column name only ever comes from
+# this fixed internal dict, never caller-supplied text, so the f-string
+# interpolations below have no injection surface.
+_MODEL_COLUMNS = {
+    "specter2": "embedding",
+    "topic": "embedding_topic",
+}
+
+
+def _upsert_sql(model: str) -> str:
+    col = _MODEL_COLUMNS[model]
+    return f"""
+        UPDATE papers AS p SET {col} = v.embedding
+        FROM (VALUES %s) AS v(id, embedding)
+        WHERE p.id = v.id
+    """
 
 
 # -------- Upsert / fetch --------
 
 def upsert_embedding(conn, paper_id: str, model: str, vec: np.ndarray) -> None:
+    col = _MODEL_COLUMNS[model]
     vec = vec.astype(np.float32)
     vec = vec / (np.linalg.norm(vec) + 1e-12)
     conn.execute(
-        "UPDATE papers SET embedding = %s WHERE id = %s",
+        f"UPDATE papers SET {col} = %s WHERE id = %s",
         (vec.tolist(), paper_id),
     )
 
@@ -34,8 +46,9 @@ def fetch_existing_embeddings(conn, paper_ids: list[str], model: str) -> dict[st
     """
     if not paper_ids:
         return {}
+    col = _MODEL_COLUMNS[model]
     rows = conn.execute(
-        "SELECT id FROM papers WHERE embedding IS NOT NULL AND id = ANY(%s)",
+        f"SELECT id FROM papers WHERE {col} IS NOT NULL AND id = ANY(%s)",
         (paper_ids,),
     ).fetchall()
     return {row[0]: None for row in rows}
@@ -140,6 +153,65 @@ class EmbeddingGenerator:
         return embs.astype(np.float32)
 ######
 
+# -------- Topic embedding model (tagging / search / graph layout) --------
+
+_BGE_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
+
+
+def _apply_query_prefix(texts: list[str]) -> list[str]:
+    """BGE's documented asymmetric convention: queries get this prefix,
+    passages/documents get none. Kept as a standalone pure function so it's
+    unit-testable without loading a model.
+    """
+    return [_BGE_QUERY_PREFIX + (t or "") for t in texts]
+
+
+class TopicEmbeddingGenerator:
+    """BGE-based encoder for tagging, semantic search, and the graph layout.
+
+    SPECTER2 (EmbeddingGenerator, above) is trained on citation proximity --
+    a poor fit for matching against generic topic phrases or short queries,
+    which is what this encoder is for instead.
+    """
+
+    def __init__(self, batch_size: int = 32, device: str | None = "auto"):
+        try:
+            import torch  # noqa: F401
+        except ImportError as e:
+            raise SystemExit("PyTorch is required for embedding.") from e
+        self.batch_size = batch_size
+        self.device = EmbeddingGenerator._select_device(device or "auto")
+        self._model = None
+
+    def _load_model(self):
+        if self._model is None:
+            from sentence_transformers import SentenceTransformer
+            self._model = SentenceTransformer(TOPIC_EMB_MODEL, device=self.device)
+        return self._model
+
+    def encode_passages(self, texts: list[str]) -> np.ndarray:
+        """Encode documents (papers, taxonomy phrases) -- no prefix."""
+        model = self._load_model()
+        embs = model.encode(
+            [t or "" for t in texts],
+            batch_size=self.batch_size,
+            normalize_embeddings=True,
+            show_progress_bar=False,
+        )
+        return np.asarray(embs, dtype=np.float32)
+
+    def encode_queries(self, texts: list[str]) -> np.ndarray:
+        """Encode search queries -- BGE query prefix applied."""
+        model = self._load_model()
+        embs = model.encode(
+            _apply_query_prefix(texts),
+            batch_size=self.batch_size,
+            normalize_embeddings=True,
+            show_progress_bar=False,
+        )
+        return np.asarray(embs, dtype=np.float32)
+
+
 # -------- Pipeline entry points --------
 
 def ensure_embeddings_for_candidates(conn, device: str = "auto", batch_size: int = 32) -> None:
@@ -183,7 +255,7 @@ def ensure_embeddings_for_candidates(conn, device: str = "auto", batch_size: int
             v = vec.astype(np.float32)
             v = v / (np.linalg.norm(v) + 1e-12)
             rows.append((pid, v.tolist()))
-        execute_values(write_cur, _UPSERT_EMBEDDING, rows, template="(%s, %s::vector)")
+        execute_values(write_cur, _upsert_sql("specter2"), rows, template="(%s, %s::vector)")
         conn.commit()
         written += len(rows)
         print(f"{BLUE}embed progress:{RESET} {written}/{len(missing)} written")
@@ -196,5 +268,64 @@ def cmd_embed(args) -> None:
     conn = connect(args.db)
     try:
         ensure_embeddings_for_candidates(conn, device=args.device, batch_size=args.batch_size)
+    finally:
+        conn.close()
+
+
+def ensure_topic_embeddings_for_candidates(conn, device: str = "auto", batch_size: int = 32) -> None:
+    # Unlike SPECTER2 embeddings (needed for every stage-1 candidate so the
+    # stage-2 filter has vectors to decide keep/reject), the topic embedding
+    # only feeds tag/search/compute-layout, which only ever look at kept
+    # papers -- so embedding rejected papers here would be pure waste.
+    ids = [row[0] for row in conn.execute("SELECT id FROM papers WHERE ai_stage2_keep").fetchall()]
+    if not ids:
+        print(f"{YELLOW}embed-topic:{RESET} no kept rows in `papers`. Run stage1 & filter first.")
+        return
+
+    have = fetch_existing_embeddings(conn, ids, "topic")
+    missing = [pid for pid in ids if pid not in have]
+    if not missing:
+        print(f"{GREEN}embed-topic:{RESET} all embeddings present.")
+        return
+
+    rows = conn.execute(
+        "SELECT id, title, summary FROM papers WHERE id = ANY(%s)",
+        (missing,),
+    ).fetchall()
+    meta: dict[str, tuple[str | None, str | None]] = {
+        row[0]: (row[1], row[2]) for row in rows
+    }
+
+    texts: list[str] = []
+    for pid in missing:
+        t, s = meta.get(pid, ("", ""))
+        texts.append(f"{t or ''}\n{s or ''}")
+
+    print(f"{BLUE}embed-topic:{RESET} computing embeddings for {len(missing)} papers…")
+    embs = TopicEmbeddingGenerator(batch_size=batch_size, device=device).encode_passages(texts)
+
+    write_cur = conn.raw_cursor()
+    written = 0
+    for i in range(0, len(missing), _EMBED_WRITE_BATCH):
+        chunk_ids = missing[i:i + _EMBED_WRITE_BATCH]
+        chunk_vecs = embs[i:i + _EMBED_WRITE_BATCH]
+        rows = []
+        for pid, vec in zip(chunk_ids, chunk_vecs, strict=True):
+            v = vec.astype(np.float32)
+            v = v / (np.linalg.norm(v) + 1e-12)
+            rows.append((pid, v.tolist()))
+        execute_values(write_cur, _upsert_sql("topic"), rows, template="(%s, %s::vector)")
+        conn.commit()
+        written += len(rows)
+        print(f"{BLUE}embed-topic progress:{RESET} {written}/{len(missing)} written")
+
+    print(f"{GREEN}embed-topic:{RESET} added {written} embeddings.")
+
+
+def cmd_embed_topic(args) -> None:
+    from .db import connect
+    conn = connect(args.db)
+    try:
+        ensure_topic_embeddings_for_candidates(conn, device=args.device, batch_size=args.batch_size)
     finally:
         conn.close()

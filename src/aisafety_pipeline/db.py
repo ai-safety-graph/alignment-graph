@@ -219,15 +219,30 @@ _PG_SCHEMA = [
         PRIMARY KEY (method, cluster_id)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS paper_tags (
+        paper_id TEXT NOT NULL REFERENCES papers(id) ON DELETE CASCADE,
+        tag TEXT NOT NULL,
+        score REAL,
+        PRIMARY KEY (paper_id, tag)
+    )
+    """,
     "CREATE INDEX IF NOT EXISTS idx_papers_keep ON papers (ai_stage2_keep)",
     "CREATE INDEX IF NOT EXISTS idx_papers_cluster ON papers (kmeans_cluster)",
     "CREATE INDEX IF NOT EXISTS idx_papers_domain ON papers (domain_tag)",
+    "CREATE INDEX IF NOT EXISTS idx_paper_tags_tag ON paper_tags (tag)",
 ]
 
 _PG_VECTOR_INDEX = (
     "CREATE INDEX IF NOT EXISTS idx_papers_embedding ON papers "
     "USING hnsw (embedding vector_cosine_ops) "
     "WHERE ai_stage2_keep = TRUE AND embedding IS NOT NULL"
+)
+
+_PG_VECTOR_INDEX_TOPIC = (
+    "CREATE INDEX IF NOT EXISTS idx_papers_embedding_topic ON papers "
+    "USING hnsw (embedding_topic vector_cosine_ops) "
+    "WHERE ai_stage2_keep = TRUE AND embedding_topic IS NOT NULL"
 )
 
 
@@ -263,6 +278,11 @@ def init_db(db_arg: str | None = None) -> PgConnection:
         pass  # index may fail if embedding col is empty; ok
     conn.commit()
     _ensure_columns(conn)
+    try:
+        cur.execute(_PG_VECTOR_INDEX_TOPIC)
+    except Exception:
+        pass  # index may fail if embedding_topic col is empty; ok
+    conn.commit()
     return conn
 
 
@@ -270,6 +290,7 @@ def _ensure_columns(conn: PgConnection) -> None:
     _ENSURE = [
         ("papers", "graph_x", "REAL"),
         ("papers", "graph_y", "REAL"),
+        ("papers", "embedding_topic", "vector(768)"),
         ("cluster_meta", "size", "INTEGER"),
     ]
     for table, col, dtype in _ENSURE:

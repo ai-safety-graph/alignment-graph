@@ -1,16 +1,15 @@
 import { CircleX } from 'lucide-react'
 import SharePlusIcon from './icons/SharePlusIcon'
 import ShareMinusIcon from './icons/ShareMinusIcon'
-import { cidToColor } from '../lib/colors'
 import { domainLabel } from '../lib/domain'
-import type { ClustersLegend, NodeCompact } from '../lib/types'
+import type { NodeCompact } from '../lib/types'
 import { usePaperSummary } from '../hooks/usePaperSummary'
 import { useRef, useLayoutEffect } from 'react'
 import type { RelatedPaper } from '../lib/api'
+import TagChips from './TagChips'
 
 interface Props {
   paper: NodeCompact
-  clusters: ClustersLegend
   related: RelatedPaper[]
   relatedLoading: boolean
   onClose: () => void
@@ -23,7 +22,6 @@ interface Props {
 
 export default function GraphPaperDetails({
   paper,
-  clusters,
   related,
   relatedLoading,
   onClose,
@@ -54,16 +52,9 @@ export default function GraphPaperDetails({
       <div>
         <div className='py-3 sticky top-0 bg-[#262626]'>
           <div className='flex items-center justify-between mb-2'>
-            <div className='flex items-center gap-2 mb-0.5'>
-              <span
-                className='inline-block w-2 h-2 rounded-full mt-0.5 border border-[#333333]'
-                style={{ background: cidToColor(paper.cid) }}
-                aria-hidden
-              />
-              <span className='text-[13px] text-neutral-400'>
-                {clusters[String(paper.cid)]?.label ?? `Cluster ${paper.cid}`} •{' '}
-                {domainLabel(paper.dm)}
-              </span>
+            <div className='flex items-center gap-2 mb-0.5 text-[13px] text-neutral-400'>
+              <TagChips tags={paper.tags} />
+              <span>• {domainLabel(paper.dm)}</span>
             </div>
             <div className='flex items-center gap-1'>
               <kbd className='px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-600 text-[10px] font-mono text-neutral-300'>
@@ -203,16 +194,9 @@ export default function GraphPaperDetails({
                   </div>
                   <div className='text-[12px] text-neutral-500'>
                     <div>{r.au}</div>
-                    <div className='flex items-center gap-2 mb-0.5'>
-                      <span
-                        className='inline-block w-2 h-2 rounded-full mt-0.5 border border-[#333333]'
-                        style={{ background: cidToColor(r.cid) }}
-                        aria-hidden
-                      />
-                      <span className='text-neutral-400'>
-                        {clusters[String(r.cid)]?.label ?? `Cluster ${r.cid}`} •{' '}
-                        {domainLabel(r.dm)}
-                      </span>
+                    <div className='flex items-center gap-2 mb-0.5 text-neutral-400'>
+                      <TagChips tags={r.tags} />
+                      <span>• {domainLabel(r.dm)}</span>
                     </div>
                   </div>
                 </li>

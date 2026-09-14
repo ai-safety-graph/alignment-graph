@@ -6,10 +6,10 @@ import {
   updateSavedGraph,
   type SavedGraph,
 } from '../lib/storage'
-import type { ClustersLegend, NodeCompact } from '../lib/types'
+import type { NodeCompact } from '../lib/types'
 import { useDebouncedValue } from './useDebouncedValue'
 
-export function useSubgraphManager(clusters: ClustersLegend) {
+export function useSubgraphManager() {
   const [subgraphs, setSubgraphs] = useState<SavedGraph[]>(() =>
     listSavedGraphs(),
   )
@@ -30,7 +30,7 @@ export function useSubgraphManager(clusters: ClustersLegend) {
   const [subgraphError, setSubgraphError] = useState<string | null>(null)
   const [subgraphQuery, setSubgraphQuery] = useState('')
   const debouncedSubgraphQuery = useDebouncedValue(subgraphQuery, 300)
-  const [subgraphActiveCids, setSubgraphActiveCids] = useState<Set<number>>(
+  const [subgraphActiveTags, setSubgraphActiveTags] = useState<Set<string>>(
     new Set(),
   )
   const [subgraphActiveDomains, setSubgraphActiveDomains] = useState<
@@ -146,24 +146,24 @@ export function useSubgraphManager(clusters: ClustersLegend) {
 
   useEffect(() => {
     setSubgraphQuery('')
-    setSubgraphActiveCids(new Set())
+    setSubgraphActiveTags(new Set())
     setSubgraphActiveDomains(new Set())
     setSubgraphError(null)
   }, [selectedSubgraphId])
 
-  const subgraphClusterEntries = useMemo(() => {
-    const counts = new Map<number, number>()
+  // Counts every tag a node holds (any rank, not just primary), matching
+  // /api/tags' `size` semantics -- a paper with 3 tags contributes to 3 counts.
+  const subgraphTagEntries = useMemo(() => {
+    const counts = new Map<string, number>()
     for (const n of subgraphNodes ?? []) {
-      counts.set(n.cid, (counts.get(n.cid) ?? 0) + 1)
+      for (const tag of n.tags) {
+        counts.set(tag, (counts.get(tag) ?? 0) + 1)
+      }
     }
     return [...counts.entries()].map(
-      ([cid, size]) =>
-        [String(cid), { label: clusters[cid]?.label, size }] as [
-          string,
-          { label?: string | null; size: number },
-        ],
+      ([tag, size]) => [tag, { size }] as [string, { size: number }],
     )
-  }, [subgraphNodes, clusters])
+  }, [subgraphNodes])
 
   const subgraphAvailableDomains = useMemo(
     () => [...new Set((subgraphNodes ?? []).map((n) => n.dm))].sort(),
@@ -171,13 +171,13 @@ export function useSubgraphManager(clusters: ClustersLegend) {
   )
 
   const hasActiveSubgraphFilters =
-    subgraphActiveCids.size > 0 || subgraphActiveDomains.size > 0
+    subgraphActiveTags.size > 0 || subgraphActiveDomains.size > 0
 
-  const toggleSubgraphCluster = (cid: number) => {
-    setSubgraphActiveCids((prev) => {
+  const toggleSubgraphTag = (tag: string) => {
+    setSubgraphActiveTags((prev) => {
       const next = new Set(prev)
-      if (next.has(cid)) next.delete(cid)
-      else next.add(cid)
+      if (next.has(tag)) next.delete(tag)
+      else next.add(tag)
       return next
     })
   }
@@ -193,7 +193,7 @@ export function useSubgraphManager(clusters: ClustersLegend) {
 
   const clearSubgraphFilters = () => {
     setSubgraphQuery('')
-    setSubgraphActiveCids(new Set())
+    setSubgraphActiveTags(new Set())
     setSubgraphActiveDomains(new Set())
   }
 
@@ -206,7 +206,10 @@ export function useSubgraphManager(clusters: ClustersLegend) {
         !n.au.toLowerCase().includes(q)
       )
         return false
-      if (subgraphActiveCids.size > 0 && !subgraphActiveCids.has(n.cid))
+      if (
+        subgraphActiveTags.size > 0 &&
+        !n.tags.some((t) => subgraphActiveTags.has(t))
+      )
         return false
       if (subgraphActiveDomains.size > 0 && !subgraphActiveDomains.has(n.dm))
         return false
@@ -215,7 +218,7 @@ export function useSubgraphManager(clusters: ClustersLegend) {
   }, [
     subgraphNodes,
     debouncedSubgraphQuery,
-    subgraphActiveCids,
+    subgraphActiveTags,
     subgraphActiveDomains,
   ])
 
@@ -254,13 +257,13 @@ export function useSubgraphManager(clusters: ClustersLegend) {
     subgraphQuery,
     setSubgraphQuery,
     debouncedSubgraphQuery,
-    subgraphActiveCids,
+    subgraphActiveTags,
     subgraphActiveDomains,
-    toggleSubgraphCluster,
+    toggleSubgraphTag,
     toggleSubgraphDomain,
     clearSubgraphFilters,
     hasActiveSubgraphFilters,
-    subgraphClusterEntries,
+    subgraphTagEntries,
     subgraphAvailableDomains,
     filteredSubgraphNodes,
     subgraphItems,

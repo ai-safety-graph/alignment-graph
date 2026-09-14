@@ -1,5 +1,3 @@
-## Only uses the kmeans clustering
-
 from __future__ import annotations
 
 import numpy as np
@@ -19,22 +17,23 @@ def compute_graph_layout(
     canvas_w: int = 1000, canvas_h: int = 700, canvas_pad: int = 24,
 ) -> int:
     """
-    Compute 2D layout coordinates for kept+clustered papers and persist them
-    to `papers.graph_x` / `papers.graph_y`. Returns the number of papers updated.
+    Compute 2D layout coordinates for kept, topic-embedded papers and persist
+    them to `papers.graph_x` / `papers.graph_y`. Returns the number of papers
+    updated.
     """
     from .db import connect
     from .filters import load_vectors
     conn = connect(db_path)
     try:
-        # 1) Load kept + clustered papers
+        # 1) Load kept + topic-embedded papers
         rows = conn.execute("""
-            SELECT id, kmeans_cluster AS cid
+            SELECT id
             FROM papers
-            WHERE ai_stage2_keep AND kmeans_cluster IS NOT NULL
-            ORDER BY cid ASC, published DESC
+            WHERE ai_stage2_keep AND embedding_topic IS NOT NULL
+            ORDER BY published DESC
         """).fetchall()
         if not rows:
-            raise RuntimeError("No kept/clustered papers. Run filter & cluster first.")
+            raise RuntimeError("No kept/embedded papers. Run filter & embed-topic first.")
 
         ids: list[str] = [r["id"] for r in rows]
 
@@ -42,11 +41,13 @@ def compute_graph_layout(
             print(f"{GREEN}compute-layout:{RESET} coords_method=none, nothing to do")
             return 0
 
-        # 2) Embeddings (already L2-normalized by load_vectors)
-        vec_by_id: dict[str, np.ndarray] = load_vectors(conn, ids)
+        # 2) Embeddings (already L2-normalized by load_vectors). Uses the topic
+        # embedding, not SPECTER2, so graph proximity reflects topical
+        # similarity rather than citation proximity.
+        vec_by_id: dict[str, np.ndarray] = load_vectors(conn, ids, model="topic")
         missing = [pid for pid in ids if pid not in vec_by_id]
         if missing:
-            raise RuntimeError(f"{len(missing)} papers missing embeddings; run embed/cluster.")
+            raise RuntimeError(f"{len(missing)} papers missing topic embeddings; run embed-topic first.")
 
         X = np.vstack([vec_by_id[pid] for pid in ids])
         N = X.shape[0]

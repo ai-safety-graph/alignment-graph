@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 
-from . import clustering, compute_layout, config, embeddings, filters, labeling, oai
+from . import clustering, compute_layout, config, embeddings, filters, labeling, oai, tagging
 from .config import API_HOST, API_PORT, GREEN, RESET
 
 
@@ -35,7 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Copy all raw papers into `papers` (mark ai_regex_hit accordingly)")
     b.set_defaults(func=filters.cmd_stage1)
 
-    c = sp.add_parser("embed", help="Ensure Specter2 embeddings for candidates")
+    c = sp.add_parser("embed", help="Ensure Specter2 embeddings for candidates (used for /api/papers/related)")
     c.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
     c.add_argument("--device", default="auto",
                    help="auto|cpu|mps|cuda|cuda:N (e.g. cuda:0)")
@@ -43,12 +43,25 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Encoding batch size (raise this on GPU, e.g. 256, for much better throughput)")
     c.set_defaults(func=embeddings.cmd_embed)
 
+    ct = sp.add_parser("embed-topic", help="Ensure BGE topic embeddings for candidates (used for tag/search/compute-layout)")
+    ct.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
+    ct.add_argument("--device", default="auto",
+                    help="auto|cpu|mps|cuda|cuda:N (e.g. cuda:0)")
+    ct.add_argument("--batch-size", type=int, default=32, dest="batch_size",
+                    help="Encoding batch size (raise this on GPU, e.g. 256, for much better throughput)")
+    ct.set_defaults(func=embeddings.cmd_embed_topic)
+
     d = sp.add_parser("filter", help="Stage-2 semantic filter")
     d.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
-    d.add_argument("--method", choices=["centroid", "logreg"], default="centroid")
+    d.add_argument("--method", choices=["centroid", "centroid-multi", "logreg"], default="centroid")
     d.add_argument("--seeds", help="Path to seeds.txt (one arXiv id/url per line)")
+    d.add_argument("--seeds-subtopics", dest="seeds_subtopics",
+                    help="Path to seeds_subtopics.tsv (arxiv_id, subtopic, ...) for --method centroid-multi "
+                         "(default: seeds_subtopics.tsv)")
     d.add_argument("--labels", help="labels.csv with columns: id,label (0/1)")
-    d.add_argument("--tau", type=float, default=0.38, help="Threshold on sim/proba")
+    d.add_argument("--tau", type=float, default=0.38,
+                    help="Threshold on sim/proba (centroid: raw cosine; centroid-multi: z-score, "
+                         "not directly comparable to the centroid method's tau)")
     d.set_defaults(func=filters.cmd_filter)
 
     e = sp.add_parser("cluster", help="Cluster only kept papers")
@@ -75,6 +88,13 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument("--topk", type=int, default=4)
     g.add_argument("--extra", type=str, default=None, help="Comma-separated extra candidate topics, on top of taxonomy.TAXONOMY")
     g.set_defaults(func=labeling.cmd_label)
+
+    h = sp.add_parser("tag", help="Multi-label tag papers against a fixed topic taxonomy (see taxonomy.py)")
+    h.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
+    h.add_argument("--floor", type=float, default=0.8, help="Per-phrase z-score floor for keeping a tag")
+    h.add_argument("--top-n", type=int, default=2, dest="top_n", help="Max tags kept per paper")
+    h.add_argument("--extra", type=str, default=None, help="Comma-separated extra candidate topics, on top of taxonomy.TAXONOMY")
+    h.set_defaults(func=tagging.cmd_tag)
 
     srv = sp.add_parser("serve", help="Start the FastAPI server (requires DATABASE_URL)")
     srv.add_argument("--host", default=API_HOST)

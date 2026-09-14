@@ -21,6 +21,13 @@ STATE_FILE = os.getenv("AIS_STATE_FILE", str(DATA_DIR / "last_run.txt"))
 EMB_DIMS = 768
 EMB_MODEL = "specter2"
 
+# Topic embedding: used for tagging, semantic search, and the graph layout --
+# SPECTER2 (above) is trained on citation proximity, a poor fit for matching
+# against generic topic phrases or short queries. Kept separate from
+# EMB_MODEL/EMB_DIMS, which stay describing SPECTER2 for /api/papers/related.
+TOPIC_EMB_DIMS = 768
+TOPIC_EMB_MODEL = "BAAI/bge-base-en-v1.5"
+
 # OAI-PMH
 OAI_BASE = "https://export.arxiv.org/oai2"
 OAI_SETS = ["cs", "stat", "econ", "eess:eess:SY"]

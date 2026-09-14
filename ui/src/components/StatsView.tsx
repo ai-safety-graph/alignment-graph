@@ -24,7 +24,7 @@ import type { NodeCompact } from '../lib/types'
 import { useServerFilters } from '../hooks/useServerFilters'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { useRelatedPapers } from '../hooks/useRelatedPapers'
-import { useClusterCatalog } from '../hooks/useClusterCatalog'
+import { useTagCatalog } from '../hooks/useTagCatalog'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { usePaperBrowser } from '../hooks/usePaperBrowser'
 import { usePaperDetail } from '../hooks/usePaperDetail'
@@ -34,10 +34,10 @@ import { useSubgraphManager } from '../hooks/useSubgraphManager'
 
 export default function StatsView() {
   const {
-    clusters,
+    tags,
     availableDomains,
-    isLoading: clustersLoading,
-  } = useClusterCatalog()
+    isLoading: tagsLoading,
+  } = useTagCatalog()
   const { semanticSearch: semanticSearchEnabled } = useCapabilities()
   const [searchMode, setSearchMode] = useState<'keyword' | 'semantic'>(
     'keyword',
@@ -75,36 +75,36 @@ export default function StatsView() {
     subgraphQuery,
     setSubgraphQuery,
     debouncedSubgraphQuery,
-    subgraphActiveCids,
+    subgraphActiveTags,
     subgraphActiveDomains,
-    toggleSubgraphCluster,
+    toggleSubgraphTag,
     toggleSubgraphDomain,
     clearSubgraphFilters,
     hasActiveSubgraphFilters,
-    subgraphClusterEntries,
+    subgraphTagEntries,
     subgraphAvailableDomains,
     subgraphItems,
     subgraphNodeIds,
-  } = useSubgraphManager(clusters)
+  } = useSubgraphManager()
 
   const {
     fromDate,
     datePreset,
     setDatePreset,
-    activeCids,
+    activeTags,
     activeDomains,
-    clusterEntries,
+    tagEntries,
     hasActiveFilters,
     clearAllFilters,
-    toggleCluster,
+    toggleTag,
     toggleDomain,
-  } = useServerFilters(clusters)
+  } = useServerFilters(tags)
 
   const { papers, total, hasMore, error, loadMore, isFiltering } =
     usePaperBrowser({
       query: debouncedQuery,
       fromDate,
-      activeCids,
+      activeTags,
       activeDomains,
       enabled: searchMode === 'keyword',
     })
@@ -176,7 +176,7 @@ export default function StatsView() {
 
   const items = useMemo(() => (papers ?? []).map((n) => ({ n })), [papers])
 
-  const resetKey = `${debouncedQuery}|${fromDate ?? ''}|${[...activeCids].sort()}|${[...activeDomains].sort()}`
+  const resetKey = `${debouncedQuery}|${fromDate ?? ''}|${[...activeTags].sort()}|${[...activeDomains].sort()}`
 
   useLayoutEffect(() => {
     if (listRef.current) listRef.current.scrollTop = 0
@@ -364,14 +364,14 @@ export default function StatsView() {
   const filterBar =
     isBrowsing && searchMode === 'keyword' && papers ? (
       <FilterBar
-        clusterEntries={clusterEntries}
+        tagEntries={tagEntries}
         availableDomains={availableDomains}
-        isLoading={clustersLoading}
-        activeCids={activeCids}
+        isLoading={tagsLoading}
+        activeTags={activeTags}
         activeDomains={activeDomains}
         datePreset={datePreset}
         hasActiveFilters={hasActiveFilters}
-        onToggleCluster={toggleCluster}
+        onToggleTag={toggleTag}
         onToggleDomain={toggleDomain}
         onSetDatePreset={setDatePreset}
         onClearAll={clearAllFilters}
@@ -379,13 +379,13 @@ export default function StatsView() {
       />
     ) : !isBrowsing && subgraphNodes && subgraphNodes.length > 0 ? (
       <FilterBar
-        clusterEntries={subgraphClusterEntries}
+        tagEntries={subgraphTagEntries}
         availableDomains={subgraphAvailableDomains}
-        isLoading={clustersLoading}
-        activeCids={subgraphActiveCids}
+        isLoading={tagsLoading}
+        activeTags={subgraphActiveTags}
         activeDomains={subgraphActiveDomains}
         hasActiveFilters={hasActiveSubgraphFilters}
-        onToggleCluster={toggleSubgraphCluster}
+        onToggleTag={toggleSubgraphTag}
         onToggleDomain={toggleSubgraphDomain}
         onClearAll={clearSubgraphFilters}
         isExpanded={filterExpanded}
@@ -660,8 +660,6 @@ export default function StatsView() {
                 searchMode === 'semantic' ? (
                   <PaperList
                     items={semanticItems}
-                    clusters={clusters}
-                    clustersLoading={clustersLoading}
                     onSelectId={selectFromList}
                     enableHover
                     resetKey={`semantic|${debouncedQuery}`}
@@ -683,8 +681,6 @@ export default function StatsView() {
                   >
                     <PaperList
                       items={items}
-                      clusters={clusters}
-                      clustersLoading={clustersLoading}
                       onSelectId={selectFromList}
                       enableHover
                       resetKey={resetKey}
@@ -707,11 +703,9 @@ export default function StatsView() {
               ) : (
                 <PaperList
                   items={subgraphItems}
-                  clusters={clusters}
-                  clustersLoading={clustersLoading}
                   onSelectId={selectFromList}
                   enableHover
-                  resetKey={`${selectedSubgraphId ?? ''}|${debouncedSubgraphQuery}|${[...subgraphActiveCids].sort()}|${[...subgraphActiveDomains].sort()}`}
+                  resetKey={`${selectedSubgraphId ?? ''}|${debouncedSubgraphQuery}|${[...subgraphActiveTags].sort()}|${[...subgraphActiveDomains].sort()}`}
                   selectedId={selectedId ?? undefined}
                   onRemoveFromSubgraph={removeFromSubgraphView}
                   subgraphPaperIds={subgraphNodeIds}
@@ -727,8 +721,6 @@ export default function StatsView() {
             {selected ? (
               <StatsPaperDetails
                 paper={selected}
-                clusters={clusters}
-                clustersLoading={clustersLoading}
                 neighbors={neighbors}
                 neighborsLoading={neighborsLoading}
                 navHistory={navHistory}
@@ -785,8 +777,6 @@ export default function StatsView() {
           <div className='relative z-10 w-full max-w-[720px] h-[92dvh] rounded-2xl shadow-2xl overflow-hidden'>
             <MobilePaperDetails
               paper={selected}
-              clusters={clusters}
-              clustersLoading={clustersLoading}
               neighbors={neighbors}
               neighborsLoading={neighborsLoading}
               navHistory={navHistory}
