@@ -11,10 +11,17 @@ by raw similarity at review time, not the full taxonomy) -- a predicted
 tag outside the reviewed set is excluded from precision for that paper,
 and recall is computed only over reviewed positives.
 
+Scores are per-phrase z-scores (see aisafety_pipeline.tagging.zscore), not
+raw cosine similarity -- some taxonomy phrases sit in a denser region of
+embedding space than others (generic-sounding phrases like "robustness and
+generalization" score high against nearly every paper regardless of topic),
+so a shared floor only makes sense once each phrase's column is standardized
+against its own corpus-wide mean/std.
+
 Usage:
-    python scripts/eval_tagging.py                        # score the current CLI default (floor=0.64, top_n=4)
-    python scripts/eval_tagging.py --floor 0.55
-    python scripts/eval_tagging.py --sweep 0.45:0.70:0.01  # scan floors, report precision/recall/F1 per floor
+    python scripts/eval_tagging.py                        # score the current CLI default (floor=0.8, top_n=2)
+    python scripts/eval_tagging.py --floor 0.5
+    python scripts/eval_tagging.py --sweep=-0.5:2.0:0.1    # scan floors, report precision/recall/F1 per floor
 """
 from __future__ import annotations
 
@@ -34,10 +41,15 @@ except ImportError:
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from aisafety_pipeline.db import connect  # noqa: E402
-from aisafety_pipeline.embeddings import TopicEmbeddingGenerator  # noqa: E402
 from aisafety_pipeline.filters import load_vectors  # noqa: E402
-from aisafety_pipeline.tagging import select_tags  # noqa: E402
-from aisafety_pipeline.taxonomy import TAXONOMY, embedding_texts  # noqa: E402
+from aisafety_pipeline.tagging import (  # noqa: E402
+    corpus_phrase_similarities,
+    encode_phrases,
+    phrase_stats,
+    select_tags,
+    zscore,
+)
+from aisafety_pipeline.taxonomy import TAXONOMY  # noqa: E402
 
 GREEN = "\033[92m"; YELLOW = "\033[93m"; BLUE = "\033[94m"; RESET = "\033[0m"
 
@@ -79,9 +91,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--db", default=None, help="PostgreSQL DSN; defaults to $DATABASE_URL")
     ap.add_argument("--eval-set", default="data/tag_eval_set.json")
-    ap.add_argument("--floor", type=float, default=0.64)
-    ap.add_argument("--top-n", type=int, default=4, dest="top_n")
-    ap.add_argument("--sweep", default=None, help="lo:hi:step, e.g. 0.45:0.70:0.01 -- overrides --floor")
+    ap.add_argument("--floor", type=float, default=0.8)
+    ap.add_argument("--top-n", type=int, default=2, dest="top_n")
+    ap.add_argument("--sweep", default=None, help="lo:hi:step, e.g. -0.5:2.0:0.1 -- overrides --floor")
     args = ap.parse_args()
 
     eval_path = Path(args.eval_set)
@@ -96,9 +108,16 @@ def main() -> int:
     reviewed_by_paper = {pid: entry["reviewed"] for pid, entry in eval_set.items()}
     ids = list(reviewed_by_paper.keys())
 
+    phrases = list(TAXONOMY)
+    phrase_embs = encode_phrases(phrases)
+
     conn = connect(args.db)
     try:
         V = load_vectors(conn, ids, model="topic")
+        # Corpus-wide phrase stats for z-score normalization -- computed from
+        # the full tagged population, not the (small, similarity-biased) eval
+        # set, so it matches what tag_papers_default uses in production.
+        _, corpus_sims = corpus_phrase_similarities(conn, phrase_embs)
     finally:
         conn.close()
     missing = [pid for pid in ids if pid not in V]
@@ -109,12 +128,8 @@ def main() -> int:
         print(f"{YELLOW}eval:{RESET} no scorable papers (none have topic embeddings).")
         return 1
 
-    phrases = list(TAXONOMY)
-    eg = TopicEmbeddingGenerator(batch_size=64)
-    phrase_embs = eg.encode_queries(embedding_texts(phrases))
-    phrase_embs = phrase_embs / (np.linalg.norm(phrase_embs, axis=1, keepdims=True) + 1e-12)
-
-    sims_by_paper = {pid: (phrase_embs @ V[pid]) for pid in ids}
+    mean, std = phrase_stats(corpus_sims)
+    sims_by_paper = {pid: zscore(phrase_embs @ V[pid], mean, std) for pid in ids}
     n_reviewed_pairs = sum(len(reviewed_by_paper[pid]) for pid in ids)
     print(f"{BLUE}eval:{RESET} {len(ids)} papers, {n_reviewed_pairs} reviewed phrase judgments\n")
 
