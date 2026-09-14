@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import re
-from typing import Any
-
-import numpy as np
+from typing import TYPE_CHECKING, Any
 
 from .config import DATABASE_URL
+
+if TYPE_CHECKING:
+    import numpy as np
 
 # ---------------------------------------------------------------------------
 # SQL translation helpers
@@ -27,6 +28,8 @@ def vector_to_array(vec: Any) -> np.ndarray:
     and a `Vector` wrapper (with `.to_numpy()`) on others (>=0.5), depending
     on which pgvector-python release is installed.
     """
+    import numpy as np
+
     if hasattr(vec, "to_numpy"):
         return vec.to_numpy().astype(np.float32)
     return np.array(vec, dtype=np.float32)
