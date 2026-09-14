@@ -591,7 +591,8 @@ export default function ArxivGraph({
     }
     ctx.globalAlpha = alpha
     ctx.beginPath()
-    ctx.fillStyle = n.tags[0] ? tagToColor(n.tags[0]) : '#666666'
+    const nodeTags = n.tags ?? []
+    ctx.fillStyle = nodeTags[0] ? tagToColor(nodeTags[0]) : '#666666'
     ctx.arc(n.x, n.y, r, 0, 2 * Math.PI, false)
     ctx.fill()
     ctx.lineWidth = 0.5
@@ -600,7 +601,7 @@ export default function ArxivGraph({
     // Secondary tags: a short colored ring segment per extra tag, dropped at
     // small on-screen radius (same threshold as label text below) since
     // full pie-wedge fills are illegible at the size these nodes render at.
-    const secondaryTags = n.tags.slice(1, 4)
+    const secondaryTags = nodeTags.slice(1, 4)
     if (secondaryTags.length > 0 && globalScale > 0.8) {
       const slice = (2 * Math.PI) / secondaryTags.length
       secondaryTags.forEach((tag, i) => {
