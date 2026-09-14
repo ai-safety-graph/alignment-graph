@@ -43,28 +43,34 @@ export default function MobilePaperDetails({
       <div>
         <div className='py-3 sticky top-0 bg-[#262626]'>
           <div className='min-h-[1.25rem] pb-2'>
-          {navHistory.length > 0 && (
-            <div className='flex items-center gap-1 text-xs text-zinc-500 flex-wrap'>
-              {navHistory.slice(-3).map((entry, i) => {
-                const absoluteIndex = navHistory.length - Math.min(3, navHistory.length) + i
-                return (
-                  <span key={entry.aid} className='flex items-center gap-1'>
-                    <button
-                      onClick={() => onNavigateTo(entry.aid, absoluteIndex)}
-                      className='hover:text-zinc-200 underline underline-offset-2 truncate max-w-[140px] text-left'
-                      title={entry.title}
-                    >
-                      {entry.title.length > 35 ? entry.title.slice(0, 35) + '…' : entry.title}
-                    </button>
-                    <span className='text-zinc-700'>›</span>
-                  </span>
-                )
-              })}
-              <span className='text-zinc-400 truncate max-w-[140px]' title={paper.t}>
-                {paper.t.length > 35 ? paper.t.slice(0, 35) + '…' : paper.t}
-              </span>
-            </div>
-          )}
+            {navHistory.length > 0 && (
+              <div className='flex items-center gap-1 text-xs text-zinc-500 flex-wrap'>
+                {navHistory.slice(-3).map((entry, i) => {
+                  const absoluteIndex =
+                    navHistory.length - Math.min(3, navHistory.length) + i
+                  return (
+                    <span key={entry.aid} className='flex items-center gap-1'>
+                      <button
+                        onClick={() => onNavigateTo(entry.aid, absoluteIndex)}
+                        className='hover:text-zinc-200 underline underline-offset-2 truncate max-w-[140px] text-left'
+                        title={entry.title}
+                      >
+                        {entry.title.length > 35
+                          ? entry.title.slice(0, 35) + '…'
+                          : entry.title}
+                      </button>
+                      <span className='text-zinc-700'>›</span>
+                    </span>
+                  )
+                })}
+                <span
+                  className='text-zinc-400 truncate max-w-[140px]'
+                  title={paper.t}
+                >
+                  {paper.t.length > 35 ? paper.t.slice(0, 35) + '…' : paper.t}
+                </span>
+              </div>
+            )}
           </div>
           <div className='flex items-center justify-between mb-2'>
             <div className='flex items-center gap-2 mb-0.5 text-[13px] text-neutral-400'>
@@ -119,7 +125,10 @@ export default function MobilePaperDetails({
         {neighborsLoading ? (
           <div className='space-y-3 animate-pulse'>
             {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className='py-1.5 border-b border-neutral-800 space-y-1.5'>
+              <div
+                key={i}
+                className='py-1.5 border-b border-neutral-800 space-y-1.5'
+              >
                 <div className='h-3 bg-neutral-800 rounded w-5/6' />
                 <div className='h-3 bg-neutral-800 rounded w-3/6' />
                 <div className='h-3 bg-neutral-800 rounded w-2/6' />
@@ -128,35 +137,35 @@ export default function MobilePaperDetails({
           </div>
         ) : (
           <>
-          <div className='text-[13px] text-neutral-400 mb-1.5'>
-            Showing {neighbors.length} (sorted by similarity)
-          </div>
-          <ul className='list-none p-0 m-0'>
-            {neighbors.map(({ n }) => (
-              <li key={n.aid} className='py-1.5 border-b border-neutral-800'>
-                <div className='flex justify-between gap-2'>
-                  <a
-                    onClick={(e) => {
-                      e.preventDefault()
-                      onSelectPaper(n.aid)
-                    }}
-                    href='#'
-                    className='no-underline text-blue-400 hover:underline flex-1'
-                    title={n.t}
-                  >
-                    {n.t.length > 80 ? n.t.slice(0, 77) + '…' : n.t}
-                  </a>
-                </div>
-                <div className='text-[12px] text-neutral-500'>
-                  <div>{n.au}</div>
-                  <div className='flex items-center gap-2 mb-0.5 text-neutral-400'>
-                    <TagChips tags={n.tags} />
-                    <span>• {domainLabel(n.dm)}</span>
+            <div className='text-[13px] text-neutral-400 mb-1.5'>
+              Showing {neighbors.length} (sorted by similarity)
+            </div>
+            <ul className='list-none p-0 m-0'>
+              {neighbors.map(({ n }) => (
+                <li key={n.aid} className='py-1.5 border-b border-neutral-800'>
+                  <div className='flex justify-between gap-2'>
+                    <a
+                      onClick={(e) => {
+                        e.preventDefault()
+                        onSelectPaper(n.aid)
+                      }}
+                      href='#'
+                      className='no-underline text-blue-400 hover:underline flex-1'
+                      title={n.t}
+                    >
+                      {n.t.length > 80 ? n.t.slice(0, 77) + '…' : n.t}
+                    </a>
                   </div>
-                </div>
-              </li>
-            ))}
-          </ul>
+                  <div className='text-[12px] text-neutral-500'>
+                    <div>{n.au}</div>
+                    <div className='flex items-center gap-2 mb-0.5 text-neutral-400'>
+                      <TagChips tags={n.tags} />
+                      <span>• {domainLabel(n.dm)}</span>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
           </>
         )}
       </div>
