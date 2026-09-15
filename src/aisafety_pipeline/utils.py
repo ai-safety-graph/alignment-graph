@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 
-from . import clustering, compute_layout, config, embeddings, filters, labeling, oai, tagging
+from . import compute_layout, config, embeddings, filters, oai, tagging
 from .config import API_HOST, API_PORT, GREEN, RESET
 
 
@@ -64,13 +64,6 @@ def build_parser() -> argparse.ArgumentParser:
                          "not directly comparable to the centroid method's tau)")
     d.set_defaults(func=filters.cmd_filter)
 
-    e = sp.add_parser("cluster", help="Cluster only kept papers")
-    e.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
-    e.add_argument("--kmeans", type=int, default=8)
-    e.add_argument("--reduce-dim", type=int, default=None)
-    e.add_argument("--device", default="auto")
-    e.set_defaults(func=clustering.cmd_cluster)
-
     cl = sp.add_parser("compute-layout", help="Compute 2D layout coordinates and persist graph_x/y to Postgres")
     cl.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
     cl.add_argument("--coords", choices=["umap", "pca", "none"], default="umap")
@@ -82,12 +75,6 @@ def build_parser() -> argparse.ArgumentParser:
     cl.add_argument("--canvas-h", type=int, default=700)
     cl.add_argument("--canvas-pad", type=int, default=24)
     cl.set_defaults(func=compute_layout.cmd_compute_layout)
-
-    g = sp.add_parser("label", help="Auto-label clusters against a fixed topic taxonomy (see taxonomy.py)")
-    g.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
-    g.add_argument("--topk", type=int, default=4)
-    g.add_argument("--extra", type=str, default=None, help="Comma-separated extra candidate topics, on top of taxonomy.TAXONOMY")
-    g.set_defaults(func=labeling.cmd_label)
 
     h = sp.add_parser("tag", help="Multi-label tag papers against a fixed topic taxonomy (see taxonomy.py)")
     h.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")

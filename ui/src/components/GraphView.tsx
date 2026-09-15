@@ -32,7 +32,7 @@ import type { SavedGraph } from '../lib/storage'
 
 import GraphPaperDetails from './GraphPaperDetails'
 import SearchResultsOverlay from './SearchResultsOverlay'
-import ClusterLegendOverlay from './ClusterLegendOverlay'
+import TagsLegendOverlay from './TagsLegendOverlay'
 import Dropdown from './Dropdown'
 import { useCapabilities } from '../hooks/useCapabilities'
 
@@ -784,7 +784,7 @@ export default function ArxivGraph({
       </div>
 
       {/* Overlays */}
-      {/* Search results overlay flexes to fill the space above the cluster
+      {/* Search results overlay flexes to fill the space above the tags
           legend, so its bottom edge always meets the legend's top edge
           regardless of the legend's (dynamic) height. */}
       <div className='fixed left-4 top-[72px] bottom-4 z-10 flex flex-col items-start justify-end gap-3 pointer-events-none'>
@@ -808,7 +808,7 @@ export default function ArxivGraph({
           </div>
         )}
         <div className='shrink-0 pointer-events-auto'>
-          <ClusterLegendOverlay tags={tags} />
+          <TagsLegendOverlay tags={tags} />
         </div>
       </div>
 

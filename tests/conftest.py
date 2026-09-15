@@ -111,7 +111,6 @@ def insert_paper(
     published: str = "2024-01-01",
     summary: str = "An example abstract.",
     domain_tag: str = "tech",
-    kmeans_cluster: int | None = 0,
     ai_stage2_keep: bool = True,
     embedding: np.ndarray | None = None,
     embedding_topic: np.ndarray | None = None,
@@ -142,22 +141,21 @@ def insert_paper(
         """
         INSERT INTO papers (
             id, title, authors, published, summary, link,
-            domain_tag, kmeans_cluster, ai_stage2_keep, embedding, embedding_topic,
+            domain_tag, ai_stage2_keep, embedding, embedding_topic,
             graph_x, graph_y
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (id) DO UPDATE SET
             title=EXCLUDED.title, authors=EXCLUDED.authors,
             published=EXCLUDED.published, summary=EXCLUDED.summary,
             link=EXCLUDED.link, domain_tag=EXCLUDED.domain_tag,
-            kmeans_cluster=EXCLUDED.kmeans_cluster,
             ai_stage2_keep=EXCLUDED.ai_stage2_keep,
             embedding=EXCLUDED.embedding, embedding_topic=EXCLUDED.embedding_topic,
             graph_x=EXCLUDED.graph_x, graph_y=EXCLUDED.graph_y
         """,
         (
             aid, title, authors, published, summary, link,
-            domain_tag, kmeans_cluster, ai_stage2_keep, vec, vec_topic,
+            domain_tag, ai_stage2_keep, vec, vec_topic,
             graph_x, graph_y,
         ),
     )

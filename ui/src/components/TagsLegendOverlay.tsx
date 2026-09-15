@@ -1,7 +1,7 @@
 import { tagToColor } from '../lib/colors'
 import type { TagsLegend } from '../lib/types'
 
-export default function ClusterLegendOverlay({
+export default function TagsLegendOverlay({
   tags,
 }: {
   tags: TagsLegend

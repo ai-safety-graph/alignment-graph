@@ -11,7 +11,6 @@ router = APIRouter(prefix="/api/papers", tags=["papers"])
 def list_papers(
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
-    cluster: list[int] = Query(default=[]),
     tags: list[str] = Query(default=[]),
     domain: list[str] = Query(default=[]),
     from_date: str | None = Query(None, alias="from"),
@@ -23,10 +22,6 @@ def list_papers(
     where = ["ai_stage2_keep = TRUE"]
     params: list = []
 
-    if cluster:
-        placeholders = ','.join(['%s'] * len(cluster))
-        where.append(f"kmeans_cluster IN ({placeholders})")
-        params.extend(cluster)
     if tags:
         where.append("EXISTS (SELECT 1 FROM paper_tags pt WHERE pt.paper_id = papers.id AND pt.tag = ANY(%s))")
         params.append(tags)
@@ -54,7 +49,7 @@ def list_papers(
 
     rows = conn.execute(
         f"""
-        SELECT id, title, authors, published, link, domain_tag, kmeans_cluster,
+        SELECT id, title, authors, published, link, domain_tag,
                (SELECT array_agg(tag ORDER BY score DESC) FROM paper_tags pt WHERE pt.paper_id = papers.id) AS tags
         FROM papers {where_sql}
         ORDER BY published DESC
@@ -71,8 +66,7 @@ def list_papers(
             "pd": str(r[3]) if r[3] else "",
             "ln": r[4] or r[0],
             "dm": r[5] or "unknown",
-            "cid": r[6],
-            "tags": list(r[7]) if r[7] else [],
+            "tags": list(r[6]) if r[6] else [],
         }
         for r in rows
     ]
@@ -99,7 +93,7 @@ def get_related_papers(
 
     rows = conn.execute(
         """
-        SELECT id, title, authors, published, link, domain_tag, kmeans_cluster,
+        SELECT id, title, authors, published, link, domain_tag,
                graph_x, graph_y, 1 - (embedding <=> %s) AS sim,
                (SELECT array_agg(tag ORDER BY score DESC) FROM paper_tags pt WHERE pt.paper_id = papers.id) AS tags
         FROM papers
@@ -120,11 +114,10 @@ def get_related_papers(
             "pd": str(r[3]) if r[3] else "",
             "ln": r[4] or r[0],
             "dm": r[5] or "unknown",
-            "cid": r[6],
-            "rx": float(r[7]) if r[7] is not None else None,
-            "ry": float(r[8]) if r[8] is not None else None,
-            "sim": float(r[9]),
-            "tags": list(r[10]) if r[10] else [],
+            "rx": float(r[6]) if r[6] is not None else None,
+            "ry": float(r[7]) if r[7] is not None else None,
+            "sim": float(r[8]),
+            "tags": list(r[9]) if r[9] else [],
         }
         for r in rows
     ]
@@ -138,7 +131,7 @@ def get_paper(arxiv_id: str, conn=Depends(get_conn)):
 
     row = conn.execute(
         """
-        SELECT id, title, authors, published, summary, link, domain_tag, kmeans_cluster,
+        SELECT id, title, authors, published, summary, link, domain_tag,
                (SELECT array_agg(tag ORDER BY score DESC) FROM paper_tags pt WHERE pt.paper_id = papers.id) AS tags
         FROM papers WHERE id = %s
         """,
@@ -156,6 +149,5 @@ def get_paper(arxiv_id: str, conn=Depends(get_conn)):
         "sm": row[4] or "",
         "ln": row[5] or row[0],
         "dm": row[6] or "unknown",
-        "cid": row[7],
-        "tags": list(row[8]) if row[8] else [],
+        "tags": list(row[7]) if row[7] else [],
     }

@@ -18,15 +18,14 @@ When implementing any feature:
 
 See the ARCHITECTURE.md files for full detail. Short version:
 
-- **Pipeline** (`src/aisafety_pipeline/`) — harvests arXiv, stores in PostgreSQL, computes embeddings, clusters papers
+- **Pipeline** (`src/aisafety_pipeline/`) — harvests arXiv, stores in PostgreSQL, computes embeddings, tags papers
 - **API** (`src/aisafety_pipeline/api/`) — FastAPI serving live data from PostgreSQL
 - **UI** (`ui/`) — React/Vite frontend, fetches all data from the API
 
 ## Key Invariants
 
 - Paper identity key is the canonical arXiv abs URL (`aid`), not the numeric `id` (which is session-assigned by index — `fetchAllPapers` for the graph, or inline in `fetchPapers` results for MobileView/StatsView)
-- `cid` always means `kmeans_cluster` id
-- Compact node fields are: `id`, `aid`, `t`, `au`, `pd`, `dm`, `ln`, `cid` — do not rename without coordinating across API routes and the UI
+- Compact node fields are: `id`, `aid`, `t`, `au`, `pd`, `dm`, `ln`, `tags` — do not rename without coordinating across API routes and the UI
 - `GET /api/papers/related` must stay registered before `GET /api/papers/{arxiv_id:path}` in `papers.py`
 
 ## Safe Edit Zones
