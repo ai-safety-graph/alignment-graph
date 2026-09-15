@@ -36,16 +36,6 @@ def test_list_papers_filters_by_domain(client, make_paper):
     assert items[0]["dm"] == "gov"
 
 
-def test_list_papers_filters_by_cluster(client, make_paper):
-    make_paper("2401.00030", kmeans_cluster=1)
-    make_paper("2401.00031", kmeans_cluster=2)
-
-    res = client.get("/api/papers", params={"cluster": 2})
-    items = res.json()["items"]
-    assert len(items) == 1
-    assert items[0]["cid"] == 2
-
-
 def test_list_papers_filters_by_tags(client, make_paper):
     make_paper("2401.00035", tags=[("reward hacking", 0.9), ("rlhf", 0.4)])
     make_paper("2401.00036", tags=[("scalable oversight", 0.8)])

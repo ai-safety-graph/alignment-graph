@@ -207,19 +207,10 @@ _PG_SCHEMA = [
     CREATE TABLE IF NOT EXISTS papers (
         id TEXT PRIMARY KEY REFERENCES papers_raw(id) ON DELETE CASCADE,
         title TEXT, authors TEXT, published TEXT, summary TEXT, link TEXT,
-        kmeans_cluster INTEGER,
         ai_regex_hit INTEGER, ai_sem_sim REAL, ai_stage2_keep BOOLEAN,
         ai_stage2_reason TEXT, domain_tag TEXT,
         graph_x REAL, graph_y REAL,
         embedding vector(768)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS cluster_meta (
-        method TEXT NOT NULL, cluster_id INTEGER NOT NULL,
-        label TEXT, confidence REAL, terms TEXT, size INTEGER,
-        created_at TIMESTAMPTZ DEFAULT now(),
-        PRIMARY KEY (method, cluster_id)
     )
     """,
     """
@@ -231,7 +222,6 @@ _PG_SCHEMA = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_papers_keep ON papers (ai_stage2_keep)",
-    "CREATE INDEX IF NOT EXISTS idx_papers_cluster ON papers (kmeans_cluster)",
     "CREATE INDEX IF NOT EXISTS idx_papers_domain ON papers (domain_tag)",
     "CREATE INDEX IF NOT EXISTS idx_paper_tags_tag ON paper_tags (tag)",
 ]
@@ -294,7 +284,6 @@ def _ensure_columns(conn: PgConnection) -> None:
         ("papers", "graph_x", "REAL"),
         ("papers", "graph_y", "REAL"),
         ("papers", "embedding_topic", "vector(768)"),
-        ("cluster_meta", "size", "INTEGER"),
     ]
     for table, col, dtype in _ENSURE:
         try:

@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from ..config import API_CORS_ORIGINS, ENABLE_SEMANTIC_SEARCH
 from .deps import close_pool, init_pool
-from .routes import clusters, graph, papers, search, tags
+from .routes import graph, papers, search, tags
 
 
 @asynccontextmanager
@@ -43,7 +43,6 @@ app.add_middleware(
 app.include_router(graph.router)
 app.include_router(papers.router)
 app.include_router(search.router)
-app.include_router(clusters.router)
 app.include_router(tags.router)
 
 

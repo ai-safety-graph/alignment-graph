@@ -19,7 +19,7 @@ src/aisafety_pipeline/api/
     graph.py       # POST /api/graph/subset
     papers.py      # GET /api/papers, GET /api/papers/related, GET /api/papers/{arxiv_id:path}
     search.py      # POST /api/search
-    clusters.py    # GET /api/clusters
+    tags.py        # GET /api/tags
 ```
 
 ---
@@ -51,11 +51,11 @@ Returns a compact graph for a specific list of paper IDs. This is the only graph
 
 Request body: `{ ids: string[] }` (max 500 IDs)
 
-Response shape: `{ meta, clusters, nodes: NodeCompact[], links: LinkCompact[] }`
+Response shape: `{ meta, tags, nodes: NodeCompact[], links: LinkCompact[] }`
 
 Implementation:
 - Fetches only the requested papers (must be `ai_stage2_keep = TRUE`)
-- Reads `cluster_meta` for labels
+- Builds a `tags` legend (`{tag: {size}}`) from each node's `paper_tags`
 - Re-normalises stored `graph_x/y` coordinates to fit the canvas bounds for the subset
 - Builds neighbor links using pgvector `<=>` cosine similarity (batch queries, threshold 0.85, top-5 per paper)
 
@@ -69,7 +69,7 @@ Paginated paper listing with server-side filtering.
 
 Query params:
 - `page` (default 1), `limit` (default 50, max 200)
-- `cluster` — repeatable; multiple values are OR-ed (`kmeans_cluster IN (...)`)
+- `tags` — repeatable; papers matching any given tag are included (`EXISTS (... pt.tag = ANY(%s))`)
 - `domain` — repeatable; multiple values are OR-ed (`domain_tag IN (...)`)
 - `from` / `to` — `published` date bounds
 - `q` — keyword substring match on `title`/`authors` (`ILIKE`)
@@ -99,7 +99,7 @@ Returns full paper record including `summary`.
 
 Semantic search using pgvector ANN.
 
-Request body: `{ query: str, limit: int = 20 (max 100), domain?: str, cluster?: int }`
+Request body: `{ query: str, limit: int = 20 (max 100), domain?: str, tag?: str }`
 
 Implementation:
 - Embeds `query` using a lazily-initialized `EmbeddingGenerator` singleton (`_generator`)
@@ -108,11 +108,11 @@ Implementation:
 
 Returns: `{ query: str, results: SearchResult[] }` where each result includes `sim` (cosine similarity, 0–1).
 
-### `GET /api/clusters`
+### `GET /api/tags`
 
-All cluster metadata from `cluster_meta` where `method = 'default'`. No join to `papers` — `size` is precomputed and stored on `cluster_meta` by `label_clusters_default` (`labeling.py`) each time the `label` pipeline stage runs, not recomputed per request.
+All tag metadata, computed live from `paper_tags` (not precomputed/cached). `size` counts every paper holding the tag at any rank; `primary_size` counts only papers where it's the top-scored (rank-0) tag — used so pie-chart percentages sum to 100% instead of being inflated by multi-tag overlap.
 
-Returns: array of `{ cid, label, confidence, terms, size }`.
+Returns: `{ [tag]: { size, primary_size } }`.
 
 ### `GET /health`
 
@@ -141,7 +141,6 @@ API docs: `http://localhost:8000/docs`
 - All routes require PostgreSQL — there is no SQLite fallback in the API
 - There is no full-graph endpoint; the frontend always works with subsets or paginated paper lists
 - Related papers and semantic search both require `embedding` to be populated; papers without embeddings are excluded
-- Cluster ids in API responses always refer to `kmeans_cluster` values
 - `GET /api/papers/related` must remain registered before `GET /api/papers/{arxiv_id:path}` in `papers.py` to avoid the catch-all route swallowing it
 
 ---

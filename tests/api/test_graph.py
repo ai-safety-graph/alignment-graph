@@ -11,33 +11,23 @@ def test_subset_rejects_too_many_ids(client):
     assert res.status_code == 422
 
 
-def test_subset_returns_normalized_coords_and_cluster_sizes(client, make_paper):
-    a = make_paper("2401.00080", kmeans_cluster=1)
-    b = make_paper("2401.00081", kmeans_cluster=1)
-    make_paper("2401.00082", kmeans_cluster=2)
+def test_subset_returns_normalized_coords(client, make_paper):
+    a = make_paper("2401.00080")
+    b = make_paper("2401.00081")
 
     res = client.post("/api/graph/subset", json={"ids": [a, b]})
     assert res.status_code == 200
     body = res.json()
 
     assert len(body["nodes"]) == 2
-    assert body["clusters"]["1"]["size"] == 2
     for node in body["nodes"]:
         assert 0 <= node["x"] <= 1000
         assert 0 <= node["y"] <= 700
 
 
-def test_subset_excludes_papers_without_cluster(client, make_paper):
-    aid = make_paper("2401.00090", kmeans_cluster=None)
-
-    res = client.post("/api/graph/subset", json={"ids": [aid]})
-    assert res.status_code == 200
-    assert res.json()["nodes"] == []
-
-
 def test_subset_includes_tags_per_node_and_legend(client, make_paper):
-    a = make_paper("2401.00083", kmeans_cluster=1, tags=[("reward hacking", 0.9), ("rlhf", 0.4)])
-    b = make_paper("2401.00084", kmeans_cluster=1, tags=[("rlhf", 0.8)])
+    a = make_paper("2401.00083", tags=[("reward hacking", 0.9), ("rlhf", 0.4)])
+    b = make_paper("2401.00084", tags=[("rlhf", 0.8)])
 
     res = client.post("/api/graph/subset", json={"ids": [a, b]})
     assert res.status_code == 200

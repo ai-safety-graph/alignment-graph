@@ -29,12 +29,12 @@ class SubsetRequest(BaseModel):
 
 def _build_subgraph(conn, paper_ids: list[str]) -> dict:
     rows = conn.execute("""
-        SELECT id, title, authors, published, link, domain_tag, kmeans_cluster,
+        SELECT id, title, authors, published, link, domain_tag,
                graph_x, graph_y,
                (SELECT array_agg(tag ORDER BY score DESC) FROM paper_tags pt WHERE pt.paper_id = papers.id) AS tags
         FROM papers
-        WHERE id = ANY(%s) AND ai_stage2_keep = TRUE AND kmeans_cluster IS NOT NULL
-        ORDER BY kmeans_cluster ASC, published DESC
+        WHERE id = ANY(%s) AND ai_stage2_keep = TRUE
+        ORDER BY published DESC
     """, (paper_ids,)).fetchall()
 
     if not rows:
@@ -52,42 +52,26 @@ def _build_subgraph(conn, paper_ids: list[str]) -> dict:
                 },
                 "compact": True,
             },
-            "clusters": {},
             "tags": {},
             "nodes": [],
             "links": [],
         }
 
-    labels: dict[int, str] = {}
-    try:
-        lab_rows = conn.execute(
-            "SELECT cluster_id, label FROM cluster_meta WHERE method = 'default'"
-        ).fetchall()
-        for r in lab_rows:
-            labels[int(r[0])] = r[1] or ""
-    except Exception:
-        pass
-
     papers = []
     ids = []
-    cluster_ids = []
-    cluster_counts: dict[int, int] = defaultdict(int)
 
     tag_counts: dict[str, int] = defaultdict(int)
 
     for r in rows:
-        cid = int(r[6]) if r[6] is not None else -1
-        tags = list(r[9]) if r[9] else []
+        tags = list(r[8]) if r[8] else []
         papers.append({
             "aid": r[0], "t": r[1] or "", "au": r[2] or "",
             "pd": str(r[3]) if r[3] else "", "dm": r[5] or "unknown",
-            "ln": r[4] or r[0], "cid": cid, "tags": tags,
-            "raw_x": float(r[7]) if r[7] is not None else None,
-            "raw_y": float(r[8]) if r[8] is not None else None,
+            "ln": r[4] or r[0], "tags": tags,
+            "raw_x": float(r[6]) if r[6] is not None else None,
+            "raw_y": float(r[7]) if r[7] is not None else None,
         })
         ids.append(r[0])
-        cluster_ids.append(cid)
-        cluster_counts[cid] += 1
         for t in tags:
             tag_counts[t] += 1
 
@@ -113,15 +97,10 @@ def _build_subgraph(conn, paper_ids: list[str]) -> dict:
 
     nodes = [
         {"id": i, "aid": p["aid"], "t": p["t"], "au": p["au"],
-         "pd": p["pd"], "dm": p["dm"], "ln": p["ln"], "cid": p["cid"], "tags": p["tags"],
+         "pd": p["pd"], "dm": p["dm"], "ln": p["ln"], "tags": p["tags"],
          "x": p["x"], "y": p["y"], "rx": p["raw_x"], "ry": p["raw_y"]}
         for i, p in enumerate(papers)
     ]
-
-    clusters = {
-        str(cid): {"label": labels.get(cid), "size": int(cluster_counts[cid])}
-        for cid in sorted(set(cluster_ids))
-    }
 
     # Counts every tag a node holds (any rank), matching /api/tags' `size`
     # semantics -- distinct from the pie chart's primary-tag-only counts.
@@ -146,7 +125,6 @@ def _build_subgraph(conn, paper_ids: list[str]) -> dict:
             },
             "compact": True,
         },
-        "clusters": clusters,
         "tags": tags_legend,
         "nodes": nodes,
         "links": [],

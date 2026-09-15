@@ -17,7 +17,7 @@ All data comes from the **FastAPI backend** via `lib/api.ts`. This is **API mode
 
 All data comes from the FastAPI backend via `lib/api.ts`:
 
-- `fetchClusters()` → `GET /api/clusters` — cluster labels and sizes
+- `fetchTags()` → `GET /api/tags` — tag labels and sizes
 - `fetchPapers(params)` → `GET /api/papers` — paginated, server-side filtered listing (used by `StatsView` via `usePaperBrowser`)
 - `fetchSubgraph(ids)` → `POST /api/graph/subset` — graph data for a specific set of paper IDs (desktop `GraphView`)
 - `fetchRelated(arxivId)` → `GET /api/papers/related` — on-demand nearest-neighbor lookup for paper detail panels and graph ghost nodes
@@ -63,7 +63,7 @@ Responsibilities:
 - Neighborhood-only edge visibility
 - Semantic search via `searchPapers` (debounced `POST /api/search`, 350ms)
 - On-demand related papers per selection via `fetchRelated`
-- Cluster legend (`ClusterLegendOverlay`)
+- Tags legend (`TagsLegendOverlay`)
 - Side-panel paper details (`GraphPaperDetails`)
 
 ### Ghost nodes
@@ -86,8 +86,8 @@ Optimized for **local neighborhood exploration**, not full persistent edge displ
 Server-filtered paper browser. Serves both the `/stats` route (all sizes) and the `/` route on mobile (≤768px). Layout adapts: split-pane (list left, `StatsPaperDetails` right) on desktop; single-column list with a `MobilePaperDetails` modal on small screens.
 
 Responsibilities:
-- Paginated, server-side filtered loading via the shared `usePaperBrowser` hook (keyword `q` / `from` date / `clusters` / `domains`; infinite scroll via its `loadMore`)
-- Cluster legend + available domains via the shared `useClusterCatalog` hook (one mount fetch of `fetchClusters`; domains are a hardcoded fixed set — see `useClusterCatalog.ts`)
+- Paginated, server-side filtered loading via the shared `usePaperBrowser` hook (keyword `q` / `from` date / `tags` / `domains`; infinite scroll via its `loadMore`)
+- Tags legend + available domains via the shared `useTagCatalog` hook (one mount fetch of `fetchTags`; domains are a hardcoded fixed set — see `useTagCatalog.ts`)
 - Query debounce via `useDebouncedValue` (300ms)
 - Filter state managed by the `useServerFilters` hook — changing any filter triggers a fresh fetch inside `usePaperBrowser`
 - Filter UI via `FilterBar`; results rendered by `PaperList`
@@ -101,7 +101,7 @@ All filtering in this view is **server-side**. There is no semantic search here 
 
 ## Shared Detail Surface
 
-Three detail components share a common core props interface (`paper`, `clusters`, `onClose`, `onSelectPaper`), with per-renderer differences in how related papers are supplied:
+Three detail components share a common core props interface (`paper`, `onSelectPaper`), with per-renderer differences in how related papers are supplied:
 
 - `GraphPaperDetails.tsx` — fixed side panel for the desktop graph view
 - `StatsPaperDetails.tsx` — right pane for the stats view (desktop)
@@ -125,16 +125,16 @@ In static mode, it fetches `/summaries.json` and caches in module scope.
 
 ### `NodeCompact`
 
-Required fields: `id`, `aid`, `t`, `au`, `pd`, `dm`, `ln`, `cid`
+Required fields: `id`, `aid`, `t`, `au`, `pd`, `dm`, `ln`, `tags`
 Optional: `sm`, `x`, `y` (canvas-normalised coords), `rx`, `ry` (raw stored `graph_x`/`graph_y`, nullable — used to place ghost nodes)
 
 ### `SearchResult` / `RelatedPaper` (from `api.ts`)
 
-`SearchResult` extends `NodeCompact` with `sim: number` (cosine similarity, 0–1). `RelatedPaper` extends it further with `rx`/`ry` raw coords for ghost placement.
+`SearchResult` extends `NodeCompact` with `sim: number | null` (cosine similarity, 0–1). `RelatedPaper` extends it further with `rx`/`ry` raw coords for ghost placement.
 
 ### `GraphDataCompact`
 
-Top-level artifact shape: `{ meta, clusters, nodes: NodeCompact[], links: LinkCompact[] }`
+Top-level artifact shape: `{ meta, tags, nodes: NodeCompact[], links: LinkCompact[] }`
 
 `meta.coords` carries `included`, `method`, `canvas` (`w`/`h`/`pad`), and `bounds` (raw `x_min`/`x_max`/`y_min`/`y_max`, or `null`). `bounds` is what `ghostCoord()` uses to align ghost nodes to the loaded subset's coordinate space.
 
@@ -146,12 +146,12 @@ Central API client. Key exports:
 
 - `BASE_URL` — from `import.meta.env.VITE_API_URL`, trailing slash stripped
 - `hasApi()` — `Boolean(BASE_URL)`
-- `fetchClusters()` — hits `GET /api/clusters`, returns `ClustersLegend`
+- `fetchTags()` — hits `GET /api/tags`, returns `TagsLegend`
 - `fetchSubgraph(ids)` — hits `POST /api/graph/subset`, returns `GraphDataCompact`
 - `fetchRelated(arxivId, limit?)` — hits `GET /api/papers/related`, returns `RelatedPaper[]` (NodeCompact + `sim` + raw coords `rx`/`ry`)
 - `fetchPaper(arxivUrl)` — hits `/api/papers/{id}`, returns `PaperDetail | null` (module-level `paperCache` memoises by id)
 - `searchPapers(query, opts)` — hits `POST /api/search`, returns `SearchResponse` (`sim` may be `null`)
-- `fetchPapers(params)` — hits `GET /api/papers` with optional `q`, `from`, `to`, `clusters: number[]`, `domains: string[]`, `page`, `limit`; returns `PaginatedPapers`; used by `StatsView` (via `usePaperBrowser`) for server-side filtered pagination
+- `fetchPapers(params)` — hits `GET /api/papers` with optional `q`, `from`, `to`, `tags: string[]`, `domains: string[]`, `page`, `limit`; returns `PaginatedPapers`; used by `StatsView` (via `usePaperBrowser`) for server-side filtered pagination
 
 ---
 
@@ -160,10 +160,6 @@ Central API client. Key exports:
 ### Compact schema is the contract
 
 Do not rename compact fields without updating API route responses (`api/routes/graph.py`, `api/routes/papers.py`).
-
-### `cid` means k-means cluster id
-
-Inherited from the backend exporter. Changing this requires coordinated backend and frontend changes.
 
 ### `ghostCoord()` must mirror the backend subset normalisation
 
@@ -202,7 +198,7 @@ High-risk:
 - Compact graph field names (`t`, `au`, `pd`, etc.)
 - Summary URL canonicalization in `lib/summaries.ts`
 - `hasApi()` guard logic
-- `useServerFilters` signature — takes `clusters: ClustersLegend`; returns `activeCids: Set<number>`, `activeDomains: Set<string>`, `fromDate`, `datePreset`/`setDatePreset`, `clusterEntries`, `hasActiveFilters`, and toggle/clear functions; changing any value triggers a server re-fetch in `usePaperBrowser` callers
+- `useServerFilters` signature — takes `tags: TagsLegend`; returns `activeTags: Set<string>`, `activeDomains: Set<string>`, `fromDate`, `datePreset`/`setDatePreset`, `tagEntries`, `hasActiveFilters`, and toggle/clear functions; changing any value triggers a server re-fetch in `usePaperBrowser` callers
 - `GraphDataCompact` typing changes
 
 ---
@@ -212,7 +208,7 @@ High-risk:
 Four layers:
 
 1. **API loading** (`lib/api.ts`, `lib/summaries.ts`)
-2. **Shared data derivation** (`buildAdjacency`, `useServerFilters`, `usePaperSummary`, `useRelatedPapers`, `useClusterCatalog`, `useDebouncedValue`, `usePaperBrowser`, `usePaperDetail`, `useNavHistory`)
+2. **Shared data derivation** (`buildAdjacency`, `useServerFilters`, `usePaperSummary`, `useRelatedPapers`, `useTagCatalog`, `useDebouncedValue`, `usePaperBrowser`, `usePaperDetail`, `useNavHistory`)
 3. **View routing** (`App.tsx` media query split)
 4. **Renderer-specific UX** (`GraphView.tsx`, `StatsView.tsx`)
 

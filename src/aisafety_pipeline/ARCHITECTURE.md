@@ -2,12 +2,12 @@
 
 ## Purpose
 
-`src/aisafety_pipeline/` is the backend package that turns raw arXiv metadata into a filtered, clustered, labeled dataset served live via FastAPI.
+`src/aisafety_pipeline/` is the backend package that turns raw arXiv metadata into a filtered, topic-tagged dataset served live via FastAPI.
 
 Its core job is to manage a staged literature-processing pipeline:
 
 ```text
-harvest -> stage1 -> embed -> filter -> cluster -> label -> compute-layout -> serve
+harvest -> stage1 -> embed -> filter -> tag -> compute-layout -> serve
 ```
 
 The package is PostgreSQL + pgvector only — every pipeline command and the API require `DATABASE_URL` to be set.
@@ -36,7 +36,7 @@ Key exports:
 
 `PgConnection` uses psycopg2 with `DictCursor` and intercepts `BEGIN`/`COMMIT`/`ROLLBACK` strings to map them to connection-level calls. Parameter placeholders (`?`, `:name`) are translated to psycopg2 format (`%s`, `%(name)s`) automatically via `_to_pg_sql()`.
 
-Schema: `papers_raw`, `papers` (with `embedding vector(768)`, `graph_x`, `graph_y`), `cluster_meta` + HNSW index.
+Schema: `papers_raw`, `papers` (with `embedding vector(768)`, `graph_x`, `graph_y`), `paper_tags` + HNSW index.
 
 ### `oai.py`
 
@@ -55,20 +55,13 @@ Vector loading reads `papers.embedding` via `id = ANY(%s)`.
 
 Generates SPECTER2 embeddings and stores them via `UPDATE papers SET embedding = %s WHERE id = %s`.
 
-### `clustering.py`
+### `tagging.py`
 
-Assigns clusters to kept papers. Supports k-means, agglomerative, HDBSCAN.
-
-Reads `papers.embedding` via `id = ANY(%s)`.
-Uses cursor-based fetch + `pd.DataFrame([list(r) for r in rows], ...)` instead of `pd.read_sql_query` (incompatible with the connection wrapper).
-
-### `labeling.py`
-
-Assigns cluster labels and terms into `cluster_meta`. Uses cursor-based DataFrame construction.
+Multi-label, zero-shot tagging: matches each paper's embedding directly against the fixed taxonomy (`taxonomy.TAXONOMY`) by cosine similarity, standardizes per phrase, and keeps every phrase whose z-score clears a floor (capped at `top_n`) as a tag in `paper_tags`.
 
 ### `compute_layout.py`
 
-Computes 2D layout coordinates (umap/pca) from embeddings of filtered + clustered papers, and persists `graph_x` / `graph_y` back to the `papers` table. No JSON output — purely a DB-persistence stage consumed live by `api/routes/graph.py`.
+Computes 2D layout coordinates (umap/pca) from embeddings of filtered papers, and persists `graph_x` / `graph_y` back to the `papers` table. No JSON output — purely a DB-persistence stage consumed live by `api/routes/graph.py`.
 
 ### `api/`
 
@@ -89,8 +82,7 @@ aisafety-pipeline harvest        # OAI-PMH fetch
 aisafety-pipeline stage1         # regex filter
 aisafety-pipeline embed          # SPECTER2 vectors
 aisafety-pipeline filter         # semantic stage-2
-aisafety-pipeline cluster        # k-means / agg / HDBSCAN
-aisafety-pipeline label          # cluster labels
+aisafety-pipeline tag            # topic tags into paper_tags
 aisafety-pipeline compute-layout # persists graph_x/y to DB
 aisafety-pipeline serve          # FastAPI (DATABASE_URL required)
 ```
@@ -117,13 +109,13 @@ Raw upstream metadata from OAI harvest.
 
 Working set and pipeline state.
 
-Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `kmeans_cluster`, `agg_cluster`, `hdbscan_cluster`, `ai_regex_hit`, `ai_sem_sim`, `ai_stage2_keep`, `ai_stage2_reason`, `domain_tag`, `graph_x`, `graph_y`, `embedding vector(768)`
+Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `ai_regex_hit`, `ai_sem_sim`, `ai_stage2_keep`, `ai_stage2_reason`, `domain_tag`, `graph_x`, `graph_y`, `embedding vector(768)`
 
 `CREATE EXTENSION IF NOT EXISTS vector` is run automatically by `init_db()`, along with an HNSW index: `CREATE INDEX ON papers USING hnsw (embedding vector_cosine_ops)`.
 
-### `cluster_meta`
+### `paper_tags`
 
-`(method, cluster_id)` → `label`, `confidence`, `terms`.
+`(paper_id, tag)` → `score`. One row per tag kept for a paper (see `tagging.py`).
 
 ---
 
@@ -133,10 +125,9 @@ Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `kmeans_clust
 2. **Stage 1** → `papers` (regex filter, `ai_regex_hit`)
 3. **Embedding** → `papers.embedding`
 4. **Stage 2 filter** → `papers` (`ai_sem_sim`, `ai_stage2_keep`, `ai_stage2_reason`)
-5. **Clustering** → `papers` (`kmeans_cluster`, `agg_cluster`, `hdbscan_cluster`)
-6. **Labeling** → `cluster_meta`
-7. **Compute layout** → `papers.graph_x/y`
-8. **Serve** → FastAPI reads from PostgreSQL live
+5. **Tagging** → `paper_tags`
+6. **Compute layout** → `papers.graph_x/y`
+7. **Serve** → FastAPI reads from PostgreSQL live
 
 ---
 
@@ -144,7 +135,7 @@ Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `kmeans_clust
 
 ### `compute_layout.py`
 
-Operates only on rows where `ai_stage2_keep = 1` AND `kmeans_cluster IS NOT NULL`.
+Operates only on rows where `ai_stage2_keep = 1`.
 
 Computes a 2D projection (`umap` by default, `pca` fallback) of `papers.embedding`, then persists coords: `UPDATE papers SET graph_x=?, graph_y=? WHERE id=?`
 
@@ -166,7 +157,6 @@ Notable defaults:
 
 - Paper ids are canonical arXiv abs URLs
 - `papers` is the central state table — changes affect all downstream stages
-- `cid` in API responses means k-means cluster id
 - Embeddings live in `papers.embedding` (pgvector)
 - `graph_x/y` are always stored back to DB by `compute-layout`
 
@@ -179,7 +169,7 @@ Safe:
 - CLI help text and ergonomics
 - Internal helpers, logging
 - API metadata fields (coordinated with UI)
-- Labeling heuristics
+- Tagging heuristics
 
 Be careful around:
 
@@ -203,6 +193,6 @@ Be careful around:
 Four layers:
 
 1. **Ingest** (`oai.py`, `papers_raw`)
-2. **Stateful analysis** (`papers`, `embeddings` / `papers.embedding`, filters, clustering, labeling)
+2. **Stateful analysis** (`papers`, `embeddings` / `papers.embedding`, filters, tagging)
 3. **Layout / serving** (`compute_layout.py`, `api/`)
 4. **CLI orchestration** (`utils.py`)

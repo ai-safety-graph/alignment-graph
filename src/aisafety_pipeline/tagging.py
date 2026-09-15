@@ -13,7 +13,7 @@ from .taxonomy import TAXONOMY, embedding_texts
 # standardized per phrase (see `phrase_stats`/`zscore`) since raw cosine has
 # a different typical baseline per phrase; every phrase whose z-score clears
 # `zscore_floor` (capped at `top_n`) is kept as a tag. This replaces the old
-# per-cluster labeling (labeling.py) -- clustering forced every paper into
+# per-cluster labeling approach -- k-means clustering forced every paper into
 # exactly one bucket, which doesn't fit papers that span several topics at
 # once, and needed uniqueness/collision handling that multi-label tagging
 # doesn't.
@@ -59,8 +59,8 @@ def corpus_phrase_similarities(
     """Cosine similarity of every kept, embedded paper against each phrase.
 
     The full corpus (not a sample), paginated by id (keyset), not a
-    single-shot SELECT -- same reasoning as labeling.py's read loop:
-    title/summary are large TOASTed text columns that can exceed a hosted
+    single-shot SELECT -- same reasoning as the old per-cluster labeling's
+    read loop: title/summary are large TOASTed text columns that can exceed a hosted
     DB's statement_timeout if fetched in one go. Feeds `phrase_stats()` for
     z-score normalization -- the population being tagged is exactly the
     population the per-phrase mean/std should describe.

@@ -49,7 +49,7 @@ TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/aisafety_test uv
 This project has a few invariants that aren't obvious from the code alone — see the "Key Invariants" and "Safe Edit Zones" sections of [CLAUDE.md](CLAUDE.md). In particular:
 
 - The paper identity key is the arXiv abs URL (`aid`), not the numeric `id`, which is only assigned per-session.
-- Compact graph node fields (`id`, `aid`, `t`, `au`, `pd`, `dm`, `ln`, `cid`) are relied on by both the API and the UI — don't rename without updating both sides.
+- Compact graph node fields (`id`, `aid`, `t`, `au`, `pd`, `dm`, `ln`, `tags`) are relied on by both the API and the UI — don't rename without updating both sides.
 - `GET /api/papers/related` must stay registered before `GET /api/papers/{arxiv_id:path}` in `papers.py`, or the path parameter will shadow it.
 - SQL schema changes, pgvector operator syntax (`<=>`), and CORS origins in `main.py` are easy to get subtly wrong — double-check these against existing usage before changing them.
 

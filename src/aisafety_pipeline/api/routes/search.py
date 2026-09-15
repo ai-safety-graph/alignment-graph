@@ -23,7 +23,6 @@ class SearchRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=1000)
     limit: int = Field(20, ge=1, le=100)
     domain: str | None = None
-    cluster: int | None = None
     tag: str | None = None
 
 
@@ -45,9 +44,6 @@ def semantic_search(req: SearchRequest, conn=Depends(get_conn)):
     if req.domain:
         filter_clauses.append("domain_tag = %s")
         filter_params.append(req.domain)
-    if req.cluster is not None:
-        filter_clauses.append("kmeans_cluster = %s")
-        filter_params.append(req.cluster)
     if req.tag is not None:
         filter_clauses.append("EXISTS (SELECT 1 FROM paper_tags pt WHERE pt.paper_id = papers.id AND pt.tag = %s)")
         filter_params.append(req.tag)
@@ -57,7 +53,7 @@ def semantic_search(req: SearchRequest, conn=Depends(get_conn)):
     # params: similarity SELECT uses query_vec, WHERE uses filter_params,
     # ORDER BY uses query_vec again, LIMIT uses req.limit
     sql = f"""
-        SELECT id, title, authors, published, link, domain_tag, kmeans_cluster,
+        SELECT id, title, authors, published, link, domain_tag,
                1 - (embedding_topic <=> %s::vector) AS similarity,
                (SELECT array_agg(tag ORDER BY score DESC) FROM paper_tags pt WHERE pt.paper_id = papers.id) AS tags
         FROM papers
@@ -79,9 +75,8 @@ def semantic_search(req: SearchRequest, conn=Depends(get_conn)):
                 "pd": str(r[3]) if r[3] else "",
                 "ln": r[4] or r[0],
                 "dm": r[5] or "unknown",
-                "cid": r[6],
-                "sim": round(float(r[7]), 4) if r[7] is not None else None,
-                "tags": list(r[8]) if r[8] else [],
+                "sim": round(float(r[6]), 4) if r[6] is not None else None,
+                "tags": list(r[7]) if r[7] else [],
             }
             for r in rows
         ],

@@ -32,7 +32,7 @@ function errMessage(e: unknown): string {
 
 /**
  * Owns server-side filtered, paginated paper loading for the list views.
- * Reloads from page 1 whenever the query/date/cluster/domain filters change,
+ * Reloads from page 1 whenever the query/date/tags/domain filters change,
  * and appends subsequent pages via `loadMore` (driven by the list's infinite
  * scroll sentinel). Each filter combo is cached by the QueryClient, so
  * revisiting one (e.g. the default unfiltered view after navigating away and

@@ -1,6 +1,6 @@
 # AI Safety Pipeline & Visualisation
 
-A staged pipeline for harvesting **arXiv** papers → storing in **PostgreSQL + pgvector** → generating **SPECTER2 embeddings** → applying filters → clustering → serving live via **FastAPI**.
+A staged pipeline for harvesting **arXiv** papers → storing in **PostgreSQL + pgvector** → generating **SPECTER2 embeddings** → applying filters → topic tagging → serving live via **FastAPI**.
 
 [Live Web App](https://alignment-graph.netlify.app/)
 
@@ -10,8 +10,7 @@ A staged pipeline for harvesting **arXiv** papers → storing in **PostgreSQL + 
 - 🗄️ Storage: **PostgreSQL + pgvector**
 - 🧠 Embeddings via [SPECTER2](https://huggingface.co/allenai/specter2)
 - 🧹 Two-stage filtering: regex + semantic centroid/logreg
-- 📊 Clustering (k-means, agglomerative, HDBSCAN)
-- 🏷️ Automatic cluster labeling (TF–IDF + semantic refinement)
+- 🏷️ Multi-label topic tagging (zero-shot against a fixed taxonomy)
 - 🔍 Semantic search via pgvector ANN (API mode)
 - 🚀 FastAPI backend with live paper listing, detail, and semantic search endpoints
 - 🗺️ 2D graph layout coordinates (UMAP/PCA) precomputed and served live from Postgres
@@ -30,7 +29,7 @@ source .venv/bin/activate
 # API only (serving an already-populated database):
 uv pip install -e .
 
-# Full pipeline (harvesting, embeddings, clustering, self-hosted semantic search):
+# Full pipeline (harvesting, embeddings, tagging, self-hosted semantic search):
 uv pip install -e ".[pipeline]"
 
 # Install PyTorch (choose your platform / CUDA build) -- only needed for the pipeline extra
@@ -99,25 +98,19 @@ aisafety-pipeline embed --device auto
 aisafety-pipeline filter --method centroid --seeds seeds.txt --tau 0.92
 ```
 
-**5. Cluster**
+**5. Tag papers against the topic taxonomy**
 
 ```bash
-aisafety-pipeline cluster --kmeans 8
+aisafety-pipeline tag
 ```
 
-**6. Auto-label clusters**
-
-```bash
-aisafety-pipeline label
-```
-
-**7a. Compute graph layout**
+**6a. Compute graph layout**
 
 ```bash
 aisafety-pipeline compute-layout --coords umap
 ```
 
-**7b. Start the API**
+**6b. Start the API**
 
 ```bash
 aisafety-pipeline serve --reload
