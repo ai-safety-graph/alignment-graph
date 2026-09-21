@@ -53,5 +53,23 @@ ENABLE_SEMANTIC_SEARCH = os.getenv("ENABLE_SEMANTIC_SEARCH", "false").strip().lo
     "yes",
 )
 
+# LLM classification (post stage-2 combined relevance + taxonomy tagging,
+# see llm_classify.py). Model name is kept as a plain, easily-swappable
+# string -- not validated against a known-model list.
+LLM_MODEL = os.getenv("LLM_MODEL", "gpt-5.6-luna")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "5"))
+LLM_REQUEST_TIMEOUT_SEC = int(os.getenv("LLM_REQUEST_TIMEOUT_SEC", "60"))
+
+# OpenAI enforces an org-wide "enqueued tokens" cap per model across all
+# currently-processing Batch API jobs (separate from the 50k-request and
+# 200MB-file per-batch limits) -- confirmed in production: submitting three
+# ~20k-request batches back to back failed all three with
+# `token_limit_exceeded` at this org's actual limit of 5,000,000. Kept well
+# under that here (not counting on the ceiling being exactly this number,
+# and leaving room for anything else sharing the org's quota); override via
+# env if this org's real limit is confirmed to be different.
+LLM_BATCH_MAX_ENQUEUED_TOKENS = int(os.getenv("LLM_BATCH_MAX_ENQUEUED_TOKENS", "3000000"))
+
 # UI colors (TTY)
 GREEN = "\033[92m"; YELLOW = "\033[93m"; BLUE = "\033[94m"; CYAN = "\033[96m"; RESET = "\033[0m"

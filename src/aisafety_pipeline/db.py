@@ -106,7 +106,25 @@ class PgConnection:
     def __init__(self, dsn: str):
         import psycopg2
         import psycopg2.extras
+        self._dsn = dsn
         self._conn = psycopg2.connect(dsn, cursor_factory=psycopg2.extras.DictCursor)
+        self._conn.autocommit = False
+        self.try_register_vector()
+
+    def reconnect(self) -> None:
+        """Replace a dead underlying connection with a fresh one to the same
+        DSN. Any uncommitted work on the old connection is lost. Only for
+        connections opened via `connect()`/`PgConnection(dsn)`, not pooled
+        ones wrapped with `from_raw` (the pool owns those)."""
+        import psycopg2
+        import psycopg2.extras
+        if getattr(self, "_dsn", None) is None:
+            raise RuntimeError("cannot reconnect a connection wrapped via from_raw")
+        try:
+            self._conn.close()
+        except Exception:
+            pass
+        self._conn = psycopg2.connect(self._dsn, cursor_factory=psycopg2.extras.DictCursor)
         self._conn.autocommit = False
         self.try_register_vector()
 
@@ -276,6 +294,18 @@ def init_db(db_arg: str | None = None) -> PgConnection:
     except Exception:
         pass  # index may fail if embedding_topic col is empty; ok
     conn.commit()
+    try:
+        # Partial index (only in-flight rows) backing llm_classify.py's
+        # release-on-failure query (`WHERE llm_batch_id = %s`). Without it,
+        # that UPDATE was a full sequential scan of `papers` and hit this
+        # DB's 2-minute statement_timeout in practice on a ~23k-row match.
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_papers_llm_batch_id ON papers (llm_batch_id) "
+            "WHERE llm_batch_id IS NOT NULL"
+        )
+    except Exception:
+        pass
+    conn.commit()
     return conn
 
 
@@ -284,6 +314,20 @@ def _ensure_columns(conn: PgConnection) -> None:
         ("papers", "graph_x", "REAL"),
         ("papers", "graph_y", "REAL"),
         ("papers", "embedding_topic", "vector(768)"),
+        # LLM classification stage (llm_classify.py) -- combined relevance +
+        # taxonomy-tag judgment, kept separate from paper_tags (owned by
+        # tagging.py's zero-shot BGE tagging) and not yet read by anything
+        # downstream (API/UI still key off ai_stage2_keep only).
+        ("papers", "llm_relevant", "BOOLEAN"),
+        ("papers", "llm_confidence", "REAL"),
+        ("papers", "llm_tags", "TEXT[]"),
+        ("papers", "llm_reason", "TEXT"),
+        ("papers", "llm_model", "TEXT"),
+        ("papers", "llm_classified_at", "TIMESTAMPTZ"),
+        # Set while a paper is in flight in a submitted-but-uncollected
+        # OpenAI Batch API job (llm_classify.py's submit_batch/collect_batch)
+        # so it isn't also picked up by the synchronous path meanwhile.
+        ("papers", "llm_batch_id", "TEXT"),
     ]
     for table, col, dtype in _ENSURE:
         try:

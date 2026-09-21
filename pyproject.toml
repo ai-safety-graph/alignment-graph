@@ -36,6 +36,10 @@ pipeline = [
   # runtime deps you likely also need:
   # "torch",           # install the correct wheel for your platform/CUDA separately
 ]
+llm = [
+  # OpenAI client for the post-stage-2 llm-classify command.
+  "openai>=1.50",
+]
 dev = [
   "ruff==0.16.5",
 ]
