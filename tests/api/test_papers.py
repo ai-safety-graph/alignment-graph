@@ -123,3 +123,12 @@ def test_related_papers_orders_by_similarity(client, make_paper):
     by_aid = {item["aid"]: item for item in body}
     assert by_aid[close_id]["tags"] == ["reward hacking"]
     assert by_aid[far_id]["tags"] == []
+
+
+def test_list_papers_gates_on_llm_relevant_not_stage2(client, make_paper):
+    yes = make_paper("2401.00120", ai_stage2_keep=False, llm_relevant=True)
+    no = make_paper("2401.00121", ai_stage2_keep=True, llm_relevant=False)
+
+    aids = {i["aid"] for i in client.get("/api/papers?limit=200").json()["items"]}
+    assert yes in aids
+    assert no not in aids

@@ -10,19 +10,18 @@ router = APIRouter(prefix="/api/tags", tags=["tags"])
 # counts and "how many papers match if I filter by this tag"). `primary_size`
 # counts only papers where this tag is their top-scored (rank-0) tag -- used
 # by the pie chart so percentages sum to 100% instead of being inflated by
-# multi-tag overlap. DISTINCT ON picks each paper's single highest-scoring
-# tag row.
+# multi-tag overlap. The LLM lists tags in its own order; the first is
+# treated as primary. Only LLM-relevant papers are counted.
 _TAGS_SQL = """
-    WITH primary_tags AS (
-        SELECT DISTINCT ON (paper_id) paper_id, tag
-        FROM paper_tags
-        ORDER BY paper_id, score DESC
+    WITH relevant AS (
+        SELECT llm_tags FROM papers
+        WHERE llm_relevant = TRUE AND cardinality(llm_tags) > 0
     ),
     sizes AS (
-        SELECT tag, COUNT(*) AS size FROM paper_tags GROUP BY tag
+        SELECT tag, COUNT(*) AS size FROM relevant, unnest(llm_tags) AS tag GROUP BY tag
     ),
     primary_sizes AS (
-        SELECT tag, COUNT(*) AS primary_size FROM primary_tags GROUP BY tag
+        SELECT llm_tags[1] AS tag, COUNT(*) AS primary_size FROM relevant GROUP BY llm_tags[1]
     )
     SELECT s.tag, s.size, COALESCE(p.primary_size, 0) AS primary_size
     FROM sizes s

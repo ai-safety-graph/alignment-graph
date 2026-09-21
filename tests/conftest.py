@@ -117,9 +117,14 @@ def insert_paper(
     graph_x: float | None = 0.0,
     graph_y: float | None = 0.0,
     tags: list[tuple[str, float]] | None = None,
+    llm_relevant: bool | None = None,
 ) -> str:
     """Insert a minimal fixture row into `papers` (and its `papers_raw` parent
-    row, required by the FK) and return the canonical `aid` (paper id)."""
+    row, required by the FK) and return the canonical `aid` (paper id).
+
+    The API gates on `llm_relevant` / `llm_tags`, so those mirror
+    `ai_stage2_keep` and `tags` (highest score first) unless `llm_relevant`
+    is given explicitly."""
     from aisafety_pipeline.arxiv_ids import normalize_arxiv_id_or_url
 
     aid = normalize_arxiv_id_or_url(arxiv_id)
@@ -142,21 +147,24 @@ def insert_paper(
         INSERT INTO papers (
             id, title, authors, published, summary, link,
             domain_tag, ai_stage2_keep, embedding, embedding_topic,
-            graph_x, graph_y
+            graph_x, graph_y, llm_relevant, llm_tags
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (id) DO UPDATE SET
             title=EXCLUDED.title, authors=EXCLUDED.authors,
             published=EXCLUDED.published, summary=EXCLUDED.summary,
             link=EXCLUDED.link, domain_tag=EXCLUDED.domain_tag,
             ai_stage2_keep=EXCLUDED.ai_stage2_keep,
             embedding=EXCLUDED.embedding, embedding_topic=EXCLUDED.embedding_topic,
-            graph_x=EXCLUDED.graph_x, graph_y=EXCLUDED.graph_y
+            graph_x=EXCLUDED.graph_x, graph_y=EXCLUDED.graph_y,
+            llm_relevant=EXCLUDED.llm_relevant, llm_tags=EXCLUDED.llm_tags
         """,
         (
             aid, title, authors, published, summary, link,
             domain_tag, ai_stage2_keep, vec, vec_topic,
             graph_x, graph_y,
+            ai_stage2_keep if llm_relevant is None else llm_relevant,
+            [t for t, _ in sorted(tags, key=lambda p: -p[1])] if tags else [],
         ),
     )
 

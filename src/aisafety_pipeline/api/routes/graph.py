@@ -31,9 +31,9 @@ def _build_subgraph(conn, paper_ids: list[str]) -> dict:
     rows = conn.execute("""
         SELECT id, title, authors, published, link, domain_tag,
                graph_x, graph_y,
-               (SELECT array_agg(tag ORDER BY score DESC) FROM paper_tags pt WHERE pt.paper_id = papers.id) AS tags
+               llm_tags AS tags
         FROM papers
-        WHERE id = ANY(%s) AND ai_stage2_keep = TRUE
+        WHERE id = ANY(%s) AND llm_relevant = TRUE
         ORDER BY published DESC
     """, (paper_ids,)).fetchall()
 

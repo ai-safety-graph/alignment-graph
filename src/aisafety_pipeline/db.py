@@ -245,16 +245,29 @@ _PG_SCHEMA = [
 ]
 
 _PG_VECTOR_INDEX = (
-    "CREATE INDEX IF NOT EXISTS idx_papers_embedding ON papers "
+    "CREATE INDEX IF NOT EXISTS idx_papers_embedding_llm ON papers "
     "USING hnsw (embedding vector_cosine_ops) "
-    "WHERE ai_stage2_keep = TRUE AND embedding IS NOT NULL"
+    "WHERE llm_relevant = TRUE AND embedding IS NOT NULL"
 )
 
 _PG_VECTOR_INDEX_TOPIC = (
-    "CREATE INDEX IF NOT EXISTS idx_papers_embedding_topic ON papers "
+    "CREATE INDEX IF NOT EXISTS idx_papers_embedding_topic_llm ON papers "
     "USING hnsw (embedding_topic vector_cosine_ops) "
-    "WHERE ai_stage2_keep = TRUE AND embedding_topic IS NOT NULL"
+    "WHERE llm_relevant = TRUE AND embedding_topic IS NOT NULL"
 )
+
+# The API gates on llm_relevant / llm_tags (see api/ARCHITECTURE.md). Partial
+# HNSW indexes are only used when the query's WHERE implies the index
+# predicate, so the old ai_stage2_keep-based ones (idx_papers_embedding,
+# idx_papers_embedding_topic) are dead weight once the *_llm ones exist.
+_PG_LLM_INDEXES = [
+    "CREATE INDEX IF NOT EXISTS idx_papers_llm_relevant ON papers (llm_relevant)",
+    "CREATE INDEX IF NOT EXISTS idx_papers_llm_tags ON papers USING gin (llm_tags)",
+]
+_PG_DROP_LEGACY_VECTOR_INDEXES = [
+    "DROP INDEX IF EXISTS idx_papers_embedding",
+    "DROP INDEX IF EXISTS idx_papers_embedding_topic",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -283,17 +296,22 @@ def init_db(db_arg: str | None = None) -> PgConnection:
         cur.execute(stmt)
     conn.commit()
     conn.try_register_vector()  # extension now exists; register if __init__ couldn't
-    try:
-        cur.execute(_PG_VECTOR_INDEX)
-    except Exception:
-        pass  # index may fail if embedding col is empty; ok
+    _ensure_columns(conn)  # adds llm_* columns the indexes below depend on
+    vector_ok = True
+    for stmt in (_PG_VECTOR_INDEX, _PG_VECTOR_INDEX_TOPIC):
+        try:
+            cur.execute(stmt)
+        except Exception:
+            vector_ok = False  # index may fail if the embedding col is empty; ok
+            conn.rollback()
+        conn.commit()
+    for stmt in _PG_LLM_INDEXES:
+        cur.execute(stmt)
     conn.commit()
-    _ensure_columns(conn)
-    try:
-        cur.execute(_PG_VECTOR_INDEX_TOPIC)
-    except Exception:
-        pass  # index may fail if embedding_topic col is empty; ok
-    conn.commit()
+    if vector_ok:
+        for stmt in _PG_DROP_LEGACY_VECTOR_INDEXES:
+            cur.execute(stmt)
+        conn.commit()
     try:
         # Partial index (only in-flight rows) backing llm_classify.py's
         # release-on-failure query (`WHERE llm_batch_id = %s`). Without it,

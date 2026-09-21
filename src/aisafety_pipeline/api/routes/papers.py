@@ -19,11 +19,11 @@ def list_papers(
     conn=Depends(get_conn),
 ):
     offset = (page - 1) * limit
-    where = ["ai_stage2_keep = TRUE"]
+    where = ["llm_relevant = TRUE"]
     params: list = []
 
     if tags:
-        where.append("EXISTS (SELECT 1 FROM paper_tags pt WHERE pt.paper_id = papers.id AND pt.tag = ANY(%s))")
+        where.append("llm_tags && %s")
         params.append(tags)
     if domain:
         placeholders = ','.join(['%s'] * len(domain))
@@ -50,7 +50,7 @@ def list_papers(
     rows = conn.execute(
         f"""
         SELECT id, title, authors, published, link, domain_tag,
-               (SELECT array_agg(tag ORDER BY score DESC) FROM paper_tags pt WHERE pt.paper_id = papers.id) AS tags
+               llm_tags AS tags
         FROM papers {where_sql}
         ORDER BY published DESC
         LIMIT %s OFFSET %s
@@ -95,10 +95,10 @@ def get_related_papers(
         """
         SELECT id, title, authors, published, link, domain_tag,
                graph_x, graph_y, 1 - (embedding <=> %s) AS sim,
-               (SELECT array_agg(tag ORDER BY score DESC) FROM paper_tags pt WHERE pt.paper_id = papers.id) AS tags
+               llm_tags AS tags
         FROM papers
         WHERE id != %s
-          AND ai_stage2_keep = TRUE
+          AND llm_relevant = TRUE
           AND embedding IS NOT NULL
         ORDER BY embedding <=> %s
         LIMIT %s
@@ -132,7 +132,7 @@ def get_paper(arxiv_id: str, conn=Depends(get_conn)):
     row = conn.execute(
         """
         SELECT id, title, authors, published, summary, link, domain_tag,
-               (SELECT array_agg(tag ORDER BY score DESC) FROM paper_tags pt WHERE pt.paper_id = papers.id) AS tags
+               llm_tags AS tags
         FROM papers WHERE id = %s
         """,
         (arxiv_id,),
