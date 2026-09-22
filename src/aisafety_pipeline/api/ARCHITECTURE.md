@@ -45,6 +45,8 @@ Route handlers declare `conn=Depends(get_conn)`.
 
 ## Endpoints
 
+All endpoints gate on the LLM classification stage (`llm_classify.py`): a paper is served only if `papers.llm_relevant = TRUE`, and its tags come from `papers.llm_tags` (taxonomy names, LLM order, no scores). `ai_stage2_keep` and `paper_tags` are no longer read by the API. Unclassified papers (`llm_relevant IS NULL`) are hidden until classified.
+
 ### `POST /api/graph/subset`
 
 Returns a compact graph for a specific list of paper IDs. This is the only graph endpoint — there is no full-graph endpoint.
@@ -54,8 +56,8 @@ Request body: `{ ids: string[] }` (max 500 IDs)
 Response shape: `{ meta, tags, nodes: NodeCompact[], links: LinkCompact[] }`
 
 Implementation:
-- Fetches only the requested papers (must be `ai_stage2_keep = TRUE`)
-- Builds a `tags` legend (`{tag: {size}}`) from each node's `paper_tags`
+- Fetches only the requested papers (must be `llm_relevant = TRUE`)
+- Builds a `tags` legend (`{tag: {size}}`) from each node's `llm_tags`
 - Re-normalises stored `graph_x/y` coordinates to fit the canvas bounds for the subset
 - Builds neighbor links using pgvector `<=>` cosine similarity (batch queries, threshold 0.85, top-5 per paper)
 
@@ -110,7 +112,7 @@ Returns: `{ query: str, results: SearchResult[] }` where each result includes `s
 
 ### `GET /api/tags`
 
-All tag metadata, computed live from `paper_tags` (not precomputed/cached). `size` counts every paper holding the tag at any rank; `primary_size` counts only papers where it's the top-scored (rank-0) tag — used so pie-chart percentages sum to 100% instead of being inflated by multi-tag overlap.
+All tag metadata, computed live from `papers.llm_tags` of `llm_relevant` papers (not precomputed/cached). `size` counts every paper holding the tag at any rank; `primary_size` counts only papers where it's the first-listed, i.e. `llm_tags[1]`) tag — used so pie-chart percentages sum to 100% instead of being inflated by multi-tag overlap.
 
 Returns: `{ [tag]: { size, primary_size } }`.
 

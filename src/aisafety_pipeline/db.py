@@ -106,7 +106,25 @@ class PgConnection:
     def __init__(self, dsn: str):
         import psycopg2
         import psycopg2.extras
+        self._dsn = dsn
         self._conn = psycopg2.connect(dsn, cursor_factory=psycopg2.extras.DictCursor)
+        self._conn.autocommit = False
+        self.try_register_vector()
+
+    def reconnect(self) -> None:
+        """Replace a dead underlying connection with a fresh one to the same
+        DSN. Any uncommitted work on the old connection is lost. Only for
+        connections opened via `connect()`/`PgConnection(dsn)`, not pooled
+        ones wrapped with `from_raw` (the pool owns those)."""
+        import psycopg2
+        import psycopg2.extras
+        if getattr(self, "_dsn", None) is None:
+            raise RuntimeError("cannot reconnect a connection wrapped via from_raw")
+        try:
+            self._conn.close()
+        except Exception:
+            pass
+        self._conn = psycopg2.connect(self._dsn, cursor_factory=psycopg2.extras.DictCursor)
         self._conn.autocommit = False
         self.try_register_vector()
 
@@ -227,16 +245,29 @@ _PG_SCHEMA = [
 ]
 
 _PG_VECTOR_INDEX = (
-    "CREATE INDEX IF NOT EXISTS idx_papers_embedding ON papers "
+    "CREATE INDEX IF NOT EXISTS idx_papers_embedding_llm ON papers "
     "USING hnsw (embedding vector_cosine_ops) "
-    "WHERE ai_stage2_keep = TRUE AND embedding IS NOT NULL"
+    "WHERE llm_relevant = TRUE AND embedding IS NOT NULL"
 )
 
 _PG_VECTOR_INDEX_TOPIC = (
-    "CREATE INDEX IF NOT EXISTS idx_papers_embedding_topic ON papers "
+    "CREATE INDEX IF NOT EXISTS idx_papers_embedding_topic_llm ON papers "
     "USING hnsw (embedding_topic vector_cosine_ops) "
-    "WHERE ai_stage2_keep = TRUE AND embedding_topic IS NOT NULL"
+    "WHERE llm_relevant = TRUE AND embedding_topic IS NOT NULL"
 )
+
+# The API gates on llm_relevant / llm_tags (see api/ARCHITECTURE.md). Partial
+# HNSW indexes are only used when the query's WHERE implies the index
+# predicate, so the old ai_stage2_keep-based ones (idx_papers_embedding,
+# idx_papers_embedding_topic) are dead weight once the *_llm ones exist.
+_PG_LLM_INDEXES = [
+    "CREATE INDEX IF NOT EXISTS idx_papers_llm_relevant ON papers (llm_relevant)",
+    "CREATE INDEX IF NOT EXISTS idx_papers_llm_tags ON papers USING gin (llm_tags)",
+]
+_PG_DROP_LEGACY_VECTOR_INDEXES = [
+    "DROP INDEX IF EXISTS idx_papers_embedding",
+    "DROP INDEX IF EXISTS idx_papers_embedding_topic",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -265,16 +296,33 @@ def init_db(db_arg: str | None = None) -> PgConnection:
         cur.execute(stmt)
     conn.commit()
     conn.try_register_vector()  # extension now exists; register if __init__ couldn't
-    try:
-        cur.execute(_PG_VECTOR_INDEX)
-    except Exception:
-        pass  # index may fail if embedding col is empty; ok
+    _ensure_columns(conn)  # adds llm_* columns the indexes below depend on
+    vector_ok = True
+    for stmt in (_PG_VECTOR_INDEX, _PG_VECTOR_INDEX_TOPIC):
+        try:
+            cur.execute(stmt)
+        except Exception:
+            vector_ok = False  # index may fail if the embedding col is empty; ok
+            conn.rollback()
+        conn.commit()
+    for stmt in _PG_LLM_INDEXES:
+        cur.execute(stmt)
     conn.commit()
-    _ensure_columns(conn)
+    if vector_ok:
+        for stmt in _PG_DROP_LEGACY_VECTOR_INDEXES:
+            cur.execute(stmt)
+        conn.commit()
     try:
-        cur.execute(_PG_VECTOR_INDEX_TOPIC)
+        # Partial index (only in-flight rows) backing llm_classify.py's
+        # release-on-failure query (`WHERE llm_batch_id = %s`). Without it,
+        # that UPDATE was a full sequential scan of `papers` and hit this
+        # DB's 2-minute statement_timeout in practice on a ~23k-row match.
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_papers_llm_batch_id ON papers (llm_batch_id) "
+            "WHERE llm_batch_id IS NOT NULL"
+        )
     except Exception:
-        pass  # index may fail if embedding_topic col is empty; ok
+        pass
     conn.commit()
     return conn
 
@@ -284,6 +332,20 @@ def _ensure_columns(conn: PgConnection) -> None:
         ("papers", "graph_x", "REAL"),
         ("papers", "graph_y", "REAL"),
         ("papers", "embedding_topic", "vector(768)"),
+        # LLM classification stage (llm_classify.py) -- combined relevance +
+        # taxonomy-tag judgment, kept separate from paper_tags (owned by
+        # tagging.py's zero-shot BGE tagging) and not yet read by anything
+        # downstream (API/UI still key off ai_stage2_keep only).
+        ("papers", "llm_relevant", "BOOLEAN"),
+        ("papers", "llm_confidence", "REAL"),
+        ("papers", "llm_tags", "TEXT[]"),
+        ("papers", "llm_reason", "TEXT"),
+        ("papers", "llm_model", "TEXT"),
+        ("papers", "llm_classified_at", "TIMESTAMPTZ"),
+        # Set while a paper is in flight in a submitted-but-uncollected
+        # OpenAI Batch API job (llm_classify.py's submit_batch/collect_batch)
+        # so it isn't also picked up by the synchronous path meanwhile.
+        ("papers", "llm_batch_id", "TEXT"),
     ]
     for table, col, dtype in _ENSURE:
         try:

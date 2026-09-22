@@ -38,14 +38,14 @@ def semantic_search(req: SearchRequest, conn=Depends(get_conn)):
     embs = gen.encode_queries([req.query])
     query_vec = embs[0].tolist()
 
-    filter_clauses = ["ai_stage2_keep = TRUE", "embedding_topic IS NOT NULL"]
+    filter_clauses = ["llm_relevant = TRUE", "embedding_topic IS NOT NULL"]
     filter_params: list = []
 
     if req.domain:
         filter_clauses.append("domain_tag = %s")
         filter_params.append(req.domain)
     if req.tag is not None:
-        filter_clauses.append("EXISTS (SELECT 1 FROM paper_tags pt WHERE pt.paper_id = papers.id AND pt.tag = %s)")
+        filter_clauses.append("%s = ANY(llm_tags)")
         filter_params.append(req.tag)
 
     where_sql = "WHERE " + " AND ".join(filter_clauses)
@@ -55,7 +55,7 @@ def semantic_search(req: SearchRequest, conn=Depends(get_conn)):
     sql = f"""
         SELECT id, title, authors, published, link, domain_tag,
                1 - (embedding_topic <=> %s::vector) AS similarity,
-               (SELECT array_agg(tag ORDER BY score DESC) FROM paper_tags pt WHERE pt.paper_id = papers.id) AS tags
+               llm_tags AS tags
         FROM papers
         {where_sql}
         ORDER BY embedding_topic <=> %s::vector

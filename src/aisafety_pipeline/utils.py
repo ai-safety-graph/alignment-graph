@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 
-from . import compute_layout, config, embeddings, filters, oai, tagging
+from . import compute_layout, config, embeddings, filters, llm_classify, oai, tagging
 from .config import API_HOST, API_PORT, GREEN, RESET
 
 
@@ -82,6 +82,58 @@ def build_parser() -> argparse.ArgumentParser:
     h.add_argument("--top-n", type=int, default=2, dest="top_n", help="Max tags kept per paper")
     h.add_argument("--extra", type=str, default=None, help="Comma-separated extra candidate topics, on top of taxonomy.TAXONOMY")
     h.set_defaults(func=tagging.cmd_tag)
+
+    lc = sp.add_parser("llm-classify", help="LLM-based combined relevance + taxonomy classification (post stage-2)")
+    lc.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
+    lc.add_argument("--model", default=config.LLM_MODEL, help="OpenAI model name/id")
+    lc.add_argument("--limit", type=int, default=None, help="Max papers to classify this run")
+    lc.add_argument("--dry-run", action="store_true", dest="dry_run",
+                     help="Call the LLM and print results, but do not write to the DB")
+    lc.add_argument("--force", action="store_true",
+                     help="Re-classify papers that already have llm_classified_at set")
+    lc.set_defaults(func=llm_classify.cmd_llm_classify)
+
+    lcs = sp.add_parser("llm-classify-submit",
+                         help="Submit an OpenAI Batch API job for post-stage-2 LLM classification "
+                              "(cheaper + much faster at scale than `llm-classify`, results ready within 24h)")
+    lcs.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
+    lcs.add_argument("--model", default=config.LLM_MODEL, help="OpenAI model name/id")
+    lcs.add_argument("--limit", type=int, default=None,
+                      help="Max papers to include in this batch, before the file-size/enqueued-token "
+                           "caps (whichever binds first) trim it further")
+    lcs.add_argument("--dry-run", action="store_true", dest="dry_run",
+                      help="Preview the batch (count + first request) without submitting or writing to the DB")
+    lcs.add_argument("--force", action="store_true",
+                      help="Include papers that already have llm_classified_at or llm_batch_id set")
+    lcs.add_argument("--allow-concurrent", action="store_true", dest="allow_concurrent",
+                      help="Submit even if other tracked batches are still processing (OpenAI enforces "
+                           "an org-wide enqueued-token cap per model; skip this check only if you've "
+                           "confirmed there's headroom)")
+    lcs.set_defaults(func=llm_classify.cmd_llm_classify_submit)
+
+    lcc = sp.add_parser("llm-classify-collect",
+                         help="Check status of / collect results from submitted llm-classify-submit batch job(s)")
+    lcc.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
+    lcc.add_argument("--batch-id", default=None, dest="batch_id",
+                      help="Collect a specific batch id; default: every tracked, not-yet-collected batch")
+    lcc.add_argument("--dry-run", action="store_true", dest="dry_run",
+                      help="Report status/results without writing to the DB")
+    lcc.add_argument("--wait", action="store_true",
+                      help="Poll until each batch reaches a terminal status instead of checking once")
+    lcc.add_argument("--poll-interval", type=int, default=60, dest="poll_interval",
+                      help="Seconds between polls when --wait is set")
+    lcc.set_defaults(func=llm_classify.cmd_llm_classify_collect)
+
+    lcr = sp.add_parser("llm-classify-run",
+                         help="Submit + wait + collect in a loop until the whole corpus is classified "
+                              "(one batch at a time, respecting OpenAI's org-wide enqueued-token cap)")
+    lcr.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
+    lcr.add_argument("--model", default=config.LLM_MODEL, help="OpenAI model name/id")
+    lcr.add_argument("--force", action="store_true",
+                      help="Include papers that already have llm_classified_at set")
+    lcr.add_argument("--poll-interval", type=int, default=60, dest="poll_interval",
+                      help="Seconds between status polls while waiting for each batch")
+    lcr.set_defaults(func=llm_classify.cmd_llm_classify_run)
 
     srv = sp.add_parser("serve", help="Start the FastAPI server (requires DATABASE_URL)")
     srv.add_argument("--host", default=API_HOST)
