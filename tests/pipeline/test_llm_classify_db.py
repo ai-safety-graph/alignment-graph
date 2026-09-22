@@ -466,12 +466,43 @@ def test_collect_batch_completed_writes_results(conn, make_paper, cleanup_ids, b
     assert result == {"status": "completed", "collected": True, "classified": 1, "relevant": 1, "errors": 0}
 
     row = conn.execute(
-        "SELECT llm_relevant, llm_tags, llm_model, llm_classified_at FROM papers WHERE id = %s", (pid,)
+        "SELECT llm_relevant, llm_tags, llm_model, llm_classified_at, llm_batch_id FROM papers WHERE id = %s", (pid,)
     ).fetchone()
     assert row["llm_relevant"] is True
     assert list(row["llm_tags"]) == ["alignment and value specification"]
     assert row["llm_model"] == "test-model"
     assert row["llm_classified_at"] is not None
+    assert row["llm_batch_id"] is None  # cleared on successful write, not left in-flight
 
     state = json.loads(batch_state_file.read_text())
     assert state[0]["status"] == "collected"
+
+
+def test_collect_batch_completed_releases_per_request_errors(conn, make_paper, cleanup_ids, batch_state_file):
+    """A per-request error inside an otherwise-completed batch must not
+    leave the paper permanently ineligible: `_eligibility_clause` requires
+    `llm_batch_id IS NULL`, so a paper whose classification was never
+    written still needs its llm_batch_id released for a future submit to
+    pick it up again."""
+    pid = make_paper("2401.20007", ai_stage2_keep=True)
+    cleanup_ids.append(pid)
+    conn.execute("UPDATE papers SET llm_batch_id = %s WHERE id = %s", ("batch_4", pid))
+    conn.commit()
+    llm_classify._record_batch_state(batch_id="batch_4", status="submitted")
+
+    error_line = json.dumps({"custom_id": pid, "response": None, "error": {"message": "boom"}})
+
+    fake_batch = SimpleNamespace(
+        id="batch_4", status="completed", output_file_id="file_out", error_file_id=None,
+        model="test-model", request_counts=SimpleNamespace(completed=0, total=1, failed=1),
+        usage=None,
+    )
+    client = _FakeClient(batch=fake_batch, file_contents={"file_out": error_line})
+
+    result = collect_batch(conn, "batch_4", client=client)
+    assert result["classified"] == 0
+    assert result["errors"] == 1
+
+    row = conn.execute("SELECT llm_batch_id, llm_classified_at FROM papers WHERE id = %s", (pid,)).fetchone()
+    assert row["llm_batch_id"] is None
+    assert row["llm_classified_at"] is None

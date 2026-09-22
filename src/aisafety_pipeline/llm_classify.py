@@ -374,7 +374,8 @@ _UPDATE_LLM = """
       llm_tags = v.tags,
       llm_reason = v.reason,
       llm_model = v.model,
-      llm_classified_at = v.classified_at
+      llm_classified_at = v.classified_at,
+      llm_batch_id = NULL
     FROM (VALUES %s) AS v(id, relevant, confidence, tags, reason, model, classified_at)
     WHERE p.id = v.id
 """
@@ -1000,6 +1001,14 @@ def collect_batch(conn, batch_id: str, *, dry_run: bool = False, client=None) ->
 
     if not dry_run:
         _write_results_committed(conn, write_batch)
+        # _write_results_committed clears llm_batch_id for the papers it
+        # wrote (_UPDATE_LLM sets it to NULL alongside the classification).
+        # Anything left still marked with this batch_id is a per-request
+        # error (see the output_text/error_text loops above) that was never
+        # written -- release those too so a future submit can retry them,
+        # rather than leaving them permanently ineligible (_eligibility_clause
+        # requires llm_batch_id IS NULL).
+        _release_batch_papers(conn, batch_id)
         _update_batch_state(batch_id, status="collected")
 
     cost_str = "n/a"
