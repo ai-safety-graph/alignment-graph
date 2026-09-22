@@ -10,7 +10,7 @@ A staged pipeline for harvesting **arXiv** papers → storing in **PostgreSQL + 
 - 🗄️ Storage: **PostgreSQL + pgvector**
 - 🧠 Embeddings via [SPECTER2](https://huggingface.co/allenai/specter2)
 - 🧹 Two-stage filtering: regex + semantic centroid/logreg
-- 🏷️ Multi-label topic tagging (zero-shot against a fixed taxonomy)
+- 🏷️ LLM-based relevance + multi-label taxonomy tagging (OpenAI, sync or Batch API) — the live tag source served by the API
 - 🔍 Semantic search via pgvector ANN (API mode)
 - 🚀 FastAPI backend with live paper listing, detail, and semantic search endpoints
 - 🗺️ 2D graph layout coordinates (UMAP/PCA) precomputed and served live from Postgres
@@ -98,11 +98,13 @@ aisafety-pipeline embed --device auto
 aisafety-pipeline filter --method centroid --seeds seeds.txt --tau 0.92
 ```
 
-**5. Tag papers against the topic taxonomy**
+**5. Classify papers (relevance + topic tags) via LLM**
 
 ```bash
-aisafety-pipeline tag
+aisafety-pipeline llm-classify-run
 ```
+
+This submits, waits for, and collects OpenAI Batch API jobs until every unclassified paper has `llm_relevant`/`llm_tags` set — this is what the API serves. (`aisafety-pipeline tag`, the older zero-shot tagger writing to `paper_tags`, still exists but its output is no longer read by the API.)
 
 **6a. Compute graph layout**
 
