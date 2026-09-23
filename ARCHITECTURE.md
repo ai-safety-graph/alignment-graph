@@ -25,7 +25,7 @@ arXiv OAI-PMH
   -> FastAPI backend                -> React frontend
 ```
 
-The API is gated on `llm_relevant`/`llm_tags` (written by `llm_classify.py`), not the legacy `paper_tags` table — see Key Invariants below.
+The API is gated on `llm_relevant`/`llm_tags` (written by `llm_classify.py`) — see Key Invariants below.
 
 Canonical CLI workflow:
 
@@ -39,8 +39,6 @@ aisafety-pipeline compute-layout     # persists graph_x/y to DB
 aisafety-pipeline serve              # start FastAPI
 ```
 
-`aisafety-pipeline tag` (zero-shot BGE tagging into `paper_tags`) still exists but is legacy — its output is no longer read by the API or UI.
-
 ---
 
 ## Major Subsystems
@@ -53,7 +51,7 @@ Primary backend package. Owns:
 - Persistence (PostgreSQL + pgvector via `PgConnection`)
 - Embedding generation and storage
 - Filtering (regex + semantic centroid)
-- LLM-based relevance + multi-label taxonomy classification (live tag source; via OpenAI, sync or Batch API) — plus a legacy zero-shot tagger (`tagging.py`) that is no longer consumed downstream
+- LLM-based relevance + multi-label taxonomy classification (via OpenAI, sync or Batch API) — the live tag source
 - Graph layout computation (UMAP/PCA) and coordinate persistence to PostgreSQL
 
 See `src/aisafety_pipeline/ARCHITECTURE.md` for module-level details.
@@ -109,7 +107,6 @@ The public orchestration surface is defined in `src/aisafety_pipeline/utils.py`:
 - `embed` — SPECTER2 embeddings
 - `filter` — semantic stage-2 filter
 - `llm-classify` / `llm-classify-submit` / `llm-classify-collect` / `llm-classify-run` — LLM relevance + taxonomy classification into `llm_relevant`/`llm_tags` (the live tag source; `llm-classify-run` is the recommended production command — submits, waits, and collects Batch API jobs until the corpus is classified)
-- `tag` — legacy zero-shot topic tags into `paper_tags` (no longer read by the API)
 - `compute-layout` — persists `graph_x/y` to DB (UMAP/PCA)
 - `serve` — start FastAPI with uvicorn (`--host`, `--port`, `--reload`)
 
@@ -119,7 +116,7 @@ The public orchestration surface is defined in `src/aisafety_pipeline/utils.py`:
 
 ### PostgreSQL + pgvector (only supported backend)
 
-Tables: `papers_raw`, `papers` (includes `embedding vector(768)`, `graph_x`, `graph_y`, and the LLM classification columns `llm_relevant`/`llm_tags`/etc.), `paper_tags` (legacy — no longer read by the API)
+Tables: `papers_raw`, `papers` (includes `embedding vector(768)`, `graph_x`, `graph_y`, and the LLM classification columns `llm_relevant`/`llm_tags`/etc.)
 
 Requires the `DATABASE_URL` env var to be set to a valid PostgreSQL DSN — `db.connect()` raises `RuntimeError` otherwise. Vector search uses an HNSW index (`vector_cosine_ops`). Run `aisafety-pipeline init-db` (or any pipeline command — `harvest` already bootstraps the schema) against a fresh database to create tables/extensions.
 

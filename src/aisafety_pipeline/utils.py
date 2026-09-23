@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 
-from . import compute_layout, config, embeddings, filters, llm_classify, oai, tagging
+from . import compute_layout, config, embeddings, filters, llm_classify, oai
 from .config import API_HOST, API_PORT, GREEN, RESET
 
 
@@ -43,7 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Encoding batch size (raise this on GPU, e.g. 256, for much better throughput)")
     c.set_defaults(func=embeddings.cmd_embed)
 
-    ct = sp.add_parser("embed-topic", help="Ensure BGE topic embeddings for candidates (used for tag/search/compute-layout)")
+    ct = sp.add_parser("embed-topic", help="Ensure BGE topic embeddings for candidates (used for search/compute-layout)")
     ct.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
     ct.add_argument("--device", default="auto",
                     help="auto|cpu|mps|cuda|cuda:N (e.g. cuda:0)")
@@ -75,13 +75,6 @@ def build_parser() -> argparse.ArgumentParser:
     cl.add_argument("--canvas-h", type=int, default=700)
     cl.add_argument("--canvas-pad", type=int, default=24)
     cl.set_defaults(func=compute_layout.cmd_compute_layout)
-
-    h = sp.add_parser("tag", help="Multi-label tag papers against a fixed topic taxonomy (see taxonomy.py)")
-    h.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
-    h.add_argument("--floor", type=float, default=0.8, help="Per-phrase z-score floor for keeping a tag")
-    h.add_argument("--top-n", type=int, default=2, dest="top_n", help="Max tags kept per paper")
-    h.add_argument("--extra", type=str, default=None, help="Comma-separated extra candidate topics, on top of taxonomy.TAXONOMY")
-    h.set_defaults(func=tagging.cmd_tag)
 
     lc = sp.add_parser("llm-classify", help="LLM-based combined relevance + taxonomy classification (post stage-2)")
     lc.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")

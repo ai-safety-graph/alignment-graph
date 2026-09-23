@@ -153,7 +153,7 @@ class EmbeddingGenerator:
         return embs.astype(np.float32)
 ######
 
-# -------- Topic embedding model (tagging / search / graph layout) --------
+# -------- Topic embedding model (search / graph layout) --------
 
 _BGE_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
 
@@ -167,7 +167,7 @@ def _apply_query_prefix(texts: list[str]) -> list[str]:
 
 
 class TopicEmbeddingGenerator:
-    """BGE-based encoder for tagging, semantic search, and the graph layout.
+    """BGE-based encoder for semantic search and the graph layout.
 
     SPECTER2 (EmbeddingGenerator, above) is trained on citation proximity --
     a poor fit for matching against generic topic phrases or short queries,

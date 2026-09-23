@@ -295,10 +295,9 @@ def _col_zscore(sims: np.ndarray) -> np.ndarray:
     mean/std across the scored population.
 
     Different sub-centroids sit at different baseline cosine-similarity
-    levels against arbitrary paper text (the same per-phrase bias
-    `tagging.zscore` corrects for taxonomy phrases), so thresholding raw
-    cosine across sub-centroids would systematically favor whichever one
-    happens to run high, not whichever is actually the best-matching topic.
+    levels against arbitrary paper text, so thresholding raw cosine across
+    sub-centroids would systematically favor whichever one happens to run
+    high, not whichever is actually the best-matching topic.
     """
     mean = sims.mean(axis=0)
     std = sims.std(axis=0)
