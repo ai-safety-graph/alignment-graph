@@ -1,0 +1,19 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY pyproject.toml README.md seeds.txt seeds_subtopics.tsv ./
+COPY src ./src
+
+# Unlike the API's Dockerfile, this image needs the full pipeline: numpy,
+# transformers/sentence-transformers (SPECTER2 + BGE embeddings), umap, and
+# the OpenAI client for llm-classify. Deliberately not merged into the API
+# image -- see Dockerfile's comment -- so the always-on API service stays
+# light. Install the CPU-only torch wheel explicitly first so pip doesn't
+# pull the much larger default (CUDA) build; this job runs on Railway CPU.
+RUN pip install --no-cache-dir \
+      --extra-index-url https://download.pytorch.org/whl/cpu \
+      torch \
+    && pip install --no-cache-dir ".[pipeline,llm]"
+
+CMD ["aisafety-pipeline", "run-all"]

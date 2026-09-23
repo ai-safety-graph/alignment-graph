@@ -4,7 +4,7 @@ import argparse
 import datetime as dt
 
 from . import compute_layout, config, embeddings, filters, llm_classify, oai
-from .config import API_HOST, API_PORT, GREEN, RESET
+from .config import API_HOST, API_PORT, BLUE, GREEN, RED, RESET, YELLOW
 
 
 def iso_date(d: dt.date) -> str: return d.strftime("%Y-%m-%d")
@@ -134,6 +134,22 @@ def build_parser() -> argparse.ArgumentParser:
     srv.add_argument("--reload", action="store_true", help="Enable auto-reload for development")
     srv.set_defaults(func=_cmd_serve)
 
+    ra = sp.add_parser(
+        "run-all",
+        help="Chain harvest -> stage1 -> embed -> filter -> embed-topic -> llm-classify-run -> "
+             "compute-layout in order, for unattended/cron use",
+    )
+    ra.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
+    ra.add_argument("--seeds", default="seeds.txt", help="Path to seeds.txt for the stage-2 filter")
+    ra.add_argument("--tau", type=float, default=0.92, help="Stage-2 filter threshold")
+    ra.add_argument("--filter-method", dest="filter_method", choices=["centroid", "centroid-multi", "logreg"],
+                     default="centroid")
+    ra.add_argument("--device", default="auto", help="auto|cpu|mps|cuda|cuda:N (embed / embed-topic)")
+    ra.add_argument("--coords", choices=["umap", "pca", "none"], default="umap")
+    ra.add_argument("--skip", action="append", default=[], choices=_RUN_ALL_STAGE_NAMES,
+                     help="Skip a stage (repeatable) -- for manual recovery/debugging, not normal cron use")
+    ra.set_defaults(func=_cmd_run_all)
+
     return ap
 
 
@@ -142,6 +158,61 @@ def _cmd_init_db(args):
     conn = init_db(args.db)
     conn.close()
     print(f"{GREEN}init-db:{RESET} schema ready.")
+
+
+# Fixed pipeline order for `run-all`. embed-topic runs *after* filter --
+# it only embeds ai_stage2_keep=TRUE rows (see embeddings.py's
+# ensure_topic_embeddings_for_candidates docstring), and compute-layout
+# requires topic embeddings on every kept row or it raises. Running these
+# out of order was the actual cause of "layout failures occur late"
+# (compute-layout hard-failing on newly-kept papers with no topic vector
+# yet) -- see ARCHITECTURE.md.
+_RUN_ALL_STAGES = [
+    ("harvest", oai.cmd_harvest),
+    ("stage1", filters.cmd_stage1),
+    ("embed", embeddings.cmd_embed),
+    ("filter", filters.cmd_filter),
+    ("embed-topic", embeddings.cmd_embed_topic),
+    ("llm-classify", llm_classify.cmd_llm_classify_run),
+    ("compute-layout", compute_layout.cmd_compute_layout),
+]
+_RUN_ALL_STAGE_NAMES = [name for name, _ in _RUN_ALL_STAGES]
+
+
+def _cmd_run_all(args) -> None:
+    """Chain every pipeline stage in the order above, for unattended/cron
+    use. Stops immediately on the first stage failure (non-zero exit) --
+    running a later stage after e.g. a failed embed-topic would just
+    reproduce the compute-layout crash this ordering already fixes."""
+    ns = argparse.Namespace(
+        db=args.db,
+        # harvest
+        from_date=None, until_date=None, state_file=config.STATE_FILE,
+        # stage1
+        keep_all_and_filter=False,
+        # embed / embed-topic
+        device=args.device, batch_size=32,
+        # filter
+        method=args.filter_method, seeds=args.seeds, seeds_subtopics=None, labels=None, tau=args.tau,
+        # llm-classify-run
+        model=config.LLM_MODEL, force=False, poll_interval=60,
+        # compute-layout
+        coords=args.coords, umap_n_neighbors=15, umap_min_dist=0.10, umap_rand=42, pca_rand=42,
+        canvas_w=1000, canvas_h=700, canvas_pad=24,
+    )
+
+    for name, fn in _RUN_ALL_STAGES:
+        if name in args.skip:
+            print(f"{YELLOW}run-all:{RESET} skipping {name} (--skip)")
+            continue
+        print(f"{BLUE}run-all:{RESET} starting {name}...")
+        try:
+            fn(ns)
+        except Exception as exc:
+            print(f"{RED}run-all: FAILED at stage {name}:{RESET} {exc}")
+            raise
+
+    print(f"{GREEN}run-all: complete{RESET}")
 
 
 def _cmd_serve(args):

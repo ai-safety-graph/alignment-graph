@@ -13,6 +13,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from .config import BLUE, GREEN, OAI_BASE, OAI_PREFIX, OAI_SETS, OAI_THROTTLE_SEC, RESET, STATE_FILE
+from .db import get_state, set_state
 
 _HARVEST_BATCH_SIZE = 500
 
@@ -177,7 +178,13 @@ def harvest_arxiv_oai_to_papers_raw(conn, from_date: str | None = None, until_da
     if not until_date:
         until_date = _today_iso()
     if not from_date:
-        if os.path.exists(state_file):
+        # DB watermark takes priority over the local file: a cron-triggered
+        # service gets a fresh container per run with no guaranteed
+        # persisted disk, so the file is only reliable for local/manual use.
+        db_watermark = get_state(conn, "harvest_watermark")
+        if db_watermark and db_watermark.get("until_date"):
+            from_date = db_watermark["until_date"]
+        elif os.path.exists(state_file):
             from_date = Path(state_file).read_text().strip() or "2005-09-16"
         else:
             from_date = "2005-09-16"
@@ -220,7 +227,11 @@ def harvest_arxiv_oai_to_papers_raw(conn, from_date: str | None = None, until_da
 
     # Reached only on a fully successful run — commits from completed batches
     # above are already durable even if a later batch or a rerun fails.
-    Path(state_file).write_text(until_date)
+    set_state(conn, "harvest_watermark", {"until_date": until_date})
+    try:
+        Path(state_file).write_text(until_date)
+    except OSError:
+        pass  # best-effort local mirror; the DB watermark above is authoritative
     print(f"{GREEN}OAI done.{RESET} scanned={scanned} saved={saved} (state → {state_file})")
     return scanned, saved
 

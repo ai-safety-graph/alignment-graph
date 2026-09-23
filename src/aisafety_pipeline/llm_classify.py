@@ -13,7 +13,6 @@ from psycopg2.extras import execute_values
 
 from .config import (
     BLUE,
-    DATA_DIR,
     GREEN,
     LLM_BATCH_MAX_ENQUEUED_TOKENS,
     LLM_MAX_RETRIES,
@@ -23,6 +22,7 @@ from .config import (
     RESET,
     YELLOW,
 )
+from .db import get_state, set_state
 from .taxonomy import TAXONOMY, TAXONOMY_DESCRIPTIONS
 
 # Combined relevance + taxonomy-tag classification via a small LLM, run after
@@ -537,10 +537,15 @@ def cmd_llm_classify(args) -> None:
 #   that ends "failed"/"expired"/"cancelled" has its papers' `llm_batch_id`
 #   cleared so a future submit can pick them up again.
 #
-# Tracked batches live in a small local JSON file (_BATCH_STATE_FILE) --
+# Tracked batches live in the `pipeline_state` table (key "llm_batches") --
 # there's no server-side "list batches I care about" scoped to this
 # pipeline, so this is just enough bookkeeping for `llm-classify-collect`
 # to know what to check without the caller re-supplying every batch id.
+# DB-backed (not a local file) so a batch submitted by one cron-triggered
+# run is still visible to the next one, which gets a fresh container --
+# losing this file would silently strand those papers forever, since
+# they're already marked llm_batch_id and _eligibility_clause excludes
+# anything with llm_batch_id set.
 
 _BATCH_ENDPOINT = "/v1/chat/completions"
 _BATCH_COMPLETION_WINDOW = "24h"
@@ -554,7 +559,7 @@ _BATCH_MAX_REQUESTS = 50_000  # OpenAI Batch API's per-batch request cap
 # the request count alone; leftover eligible papers just get picked up by
 # the next submit call, same as hitting _BATCH_MAX_REQUESTS.
 _BATCH_MAX_FILE_BYTES = 190_000_000
-_BATCH_STATE_FILE = DATA_DIR / "llm_batches.json"
+_BATCH_STATE_KEY = "llm_batches"
 
 # Rough chars-per-token used only to bound LLM_BATCH_MAX_ENQUEUED_TOKENS
 # while streaming a batch file (no tokenizer dependency in this repo).
@@ -622,32 +627,29 @@ def parse_batch_output_line(line: dict) -> tuple[str, LlmClassification | None, 
     return custom_id, classification, usage, None
 
 
-def _load_batch_state() -> list[dict]:
-    if _BATCH_STATE_FILE.exists():
-        return json.loads(_BATCH_STATE_FILE.read_text())
-    return []
+def _load_batch_state(conn) -> list[dict]:
+    return get_state(conn, _BATCH_STATE_KEY, default=[])
 
 
-def _save_batch_state(records: list[dict]) -> None:
-    _BATCH_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _BATCH_STATE_FILE.write_text(json.dumps(records, indent=2))
+def _save_batch_state(conn, records: list[dict]) -> None:
+    set_state(conn, _BATCH_STATE_KEY, records)
 
 
-def _record_batch_state(**fields) -> None:
-    records = _load_batch_state()
+def _record_batch_state(conn, **fields) -> None:
+    records = _load_batch_state(conn)
     records.append(fields)
-    _save_batch_state(records)
+    _save_batch_state(conn, records)
 
 
-def _update_batch_state(batch_id: str, **updates) -> None:
-    records = _load_batch_state()
+def _update_batch_state(conn, batch_id: str, **updates) -> None:
+    records = _load_batch_state(conn)
     for r in records:
         if r.get("batch_id") == batch_id:
             r.update(updates)
-    _save_batch_state(records)
+    _save_batch_state(conn, records)
 
 
-def _uncollected_batch_ids() -> list[str]:
+def _uncollected_batch_ids(conn) -> list[str]:
     """Locally tracked batches not yet resolved to a terminal outcome
     (collected, or released after failed/expired/cancelled) -- purely from
     local state, no API call. Used to resume a run that was interrupted
@@ -656,18 +658,18 @@ def _uncollected_batch_ids() -> list[str]:
     OpenAI's side while this process was down; collect_batch resolves
     those immediately on the first check rather than needing a wait.
     """
-    return [r["batch_id"] for r in _load_batch_state() if r.get("status") == "submitted"]
+    return [r["batch_id"] for r in _load_batch_state(conn) if r.get("status") == "submitted"]
 
 
-def _pending_batch_ids(client) -> list[str]:
+def _pending_batch_ids(conn, client) -> list[str]:
     """Tracked batches that are still consuming the org's enqueued-token
     quota for their model right now (checked live via the API, since the
-    local state file's "submitted" status doesn't update on its own until
-    something calls collect_batch) -- used only to gate new submissions;
-    see _uncollected_batch_ids for resuming an interrupted run instead.
+    tracked "submitted" status doesn't update on its own until something
+    calls collect_batch) -- used only to gate new submissions; see
+    _uncollected_batch_ids for resuming an interrupted run instead.
     """
     pending = []
-    for batch_id in _uncollected_batch_ids():
+    for batch_id in _uncollected_batch_ids(conn):
         try:
             b = client.batches.retrieve(batch_id)
         except Exception:
@@ -771,7 +773,7 @@ def submit_batch(
         return None
 
     if not allow_concurrent:
-        pending = _pending_batch_ids(client or _get_client())
+        pending = _pending_batch_ids(conn, client or _get_client())
         if pending:
             print(
                 f"{YELLOW}llm-classify-submit:{RESET} {len(pending)} batch(es) still processing "
@@ -836,6 +838,7 @@ def submit_batch(
     # no local record of it -- that happened in practice (a statement
     # timeout mid-marking crashed the whole call before this line ran).
     _record_batch_state(
+        conn,
         batch_id=batch.id,
         input_file_id=file_obj.id,
         model=model,
@@ -959,7 +962,7 @@ def collect_batch(conn, batch_id: str, *, dry_run: bool = False, client=None) ->
         )
         if not dry_run:
             _release_batch_papers(conn, batch_id)
-            _update_batch_state(batch_id, status=batch.status)
+            _update_batch_state(conn, batch_id, status=batch.status)
         return {"status": batch.status, "collected": False, "classified": 0, "relevant": 0, "errors": 0}
 
     # status == "completed"
@@ -1008,7 +1011,7 @@ def collect_batch(conn, batch_id: str, *, dry_run: bool = False, client=None) ->
         # rather than leaving them permanently ineligible (_eligibility_clause
         # requires llm_batch_id IS NULL).
         _release_batch_papers(conn, batch_id)
-        _update_batch_state(batch_id, status="collected")
+        _update_batch_state(conn, batch_id, status="collected")
 
     cost_str = "n/a"
     if batch.usage is not None:
@@ -1053,7 +1056,7 @@ def cmd_llm_classify_collect(args) -> None:
             batch_ids = [args.batch_id]
         else:
             batch_ids = [
-                r["batch_id"] for r in _load_batch_state()
+                r["batch_id"] for r in _load_batch_state(conn)
                 if r.get("status") not in ("collected", *_FAILED_BATCH_STATUSES)
             ]
         if not batch_ids:
@@ -1112,7 +1115,7 @@ def run_until_done(
         total_relevant += status["relevant"]
         total_errors += status["errors"]
 
-    for batch_id in _uncollected_batch_ids():
+    for batch_id in _uncollected_batch_ids(conn):
         print(f"{BLUE}llm-classify-run:{RESET} resuming: resolving already-submitted batch {batch_id}...")
         _wait_for(batch_id)
 
