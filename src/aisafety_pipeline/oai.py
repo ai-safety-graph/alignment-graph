@@ -6,14 +6,21 @@ import random
 import time as _time
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import requests
 from psycopg2.extras import execute_values
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
 from .config import BLUE, GREEN, OAI_BASE, OAI_PREFIX, OAI_SETS, OAI_THROTTLE_SEC, RESET, STATE_FILE
 from .db import get_state, set_state
+
+if TYPE_CHECKING:
+    import requests
+
+# `requests` is only in the `pipeline` extra -- lazy-imported inside the two
+# functions that need it (below) so importing this module (and anything
+# that imports it, like utils.py) doesn't require it, matching the
+# lazy-import convention used for other pipeline-only deps (openai,
+# transformers, etc.) elsewhere in this package.
 
 _HARVEST_BATCH_SIZE = 500
 
@@ -33,6 +40,10 @@ def _get_session() -> requests.Session:
     global _SESSION
     if _SESSION is not None:
         return _SESSION
+    import requests
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
+
     s = requests.Session()
     retry = Retry(
         total=8,                      # overall cap
@@ -66,6 +77,8 @@ def _oai_fetch(params: dict) -> str:
       - honors 503 Retry-After
       - applies polite throttle between successful requests
     """
+    import requests
+
     s = _get_session()
     # Slightly longer read timeout; separate connect/read tuple
     timeout = (10, 120)  # connect=10s, read=120s
