@@ -7,7 +7,7 @@
 Its core job is to manage a staged literature-processing pipeline:
 
 ```text
-harvest -> stage1 -> embed -> filter -> llm-classify(-run) -> compute-layout -> serve
+harvest -> stage1 -> embed -> filter -> embed-topic -> llm-classify(-run) -> compute-layout -> serve
 ```
 
 The package is PostgreSQL + pgvector only — every pipeline command and the API require `DATABASE_URL` to be set.
@@ -33,6 +33,7 @@ Key exports:
 - `connect(db_arg)` — returns a `PgConnection`; raises `RuntimeError` if neither `db_arg` (a `postgresql://`/`postgres://` DSN) nor `DATABASE_URL` is set
 - `init_db(db_arg)` — creates the schema (tables, `vector` extension, HNSW index)
 - `PgConnection` — thin wrapper around psycopg2
+- `get_state(conn, key, default)` / `set_state(conn, key, value)` — read/write one `pipeline_state` key/value row (JSONB). Used for cross-run bookkeeping that used to live in local files under `data/` (the harvest watermark in `oai.py`, in-flight OpenAI batch tracking in `llm_classify.py`) — those files aren't safe for a cron-triggered container that gets a fresh filesystem per run, so this is the durable, DB-backed replacement.
 
 `PgConnection` uses psycopg2 with `DictCursor` and intercepts `BEGIN`/`COMMIT`/`ROLLBACK` strings to map them to connection-level calls. Parameter placeholders (`?`, `:name`) are translated to psycopg2 format (`%s`, `%(name)s`) automatically via `_to_pg_sql()`.
 
@@ -53,7 +54,7 @@ Vector loading reads `papers.embedding` via `id = ANY(%s)`.
 
 ### `embeddings.py`
 
-Generates SPECTER2 embeddings and stores them via `UPDATE papers SET embedding = %s WHERE id = %s`.
+Generates SPECTER2 embeddings (`papers.embedding`, CLI `embed`) for every stage-1 candidate, and BGE topic embeddings (`papers.embedding_topic`, CLI `embed-topic`) for kept papers only. `embed-topic` must run *after* `filter` — it only embeds rows where `ai_stage2_keep = TRUE`, and `compute_layout.py` requires every kept row to already have a topic embedding.
 
 ### `llm_classify.py`
 
@@ -69,7 +70,7 @@ FastAPI backend module. See `src/aisafety_pipeline/api/ARCHITECTURE.md`.
 
 ### `utils.py`
 
-CLI parser and public command surface. Registers all subcommands including `serve` (starts uvicorn with the FastAPI app).
+CLI parser and public command surface. Registers all subcommands including `serve` (starts uvicorn with the FastAPI app) and `run-all` (chains every stage in order for unattended/cron use — see `Dockerfile.pipeline`/`railway.pipeline.json` at the repo root for the scheduled Railway job that runs it daily).
 
 ---
 
@@ -82,12 +83,13 @@ aisafety-pipeline harvest           # OAI-PMH fetch
 aisafety-pipeline stage1            # regex filter
 aisafety-pipeline embed             # SPECTER2 vectors
 aisafety-pipeline filter            # semantic stage-2
+aisafety-pipeline embed-topic       # BGE topic vectors (kept rows only, after filter)
 aisafety-pipeline llm-classify-run  # LLM relevance + taxonomy tags (live source, into llm_relevant/llm_tags)
 aisafety-pipeline compute-layout    # persists graph_x/y to DB
 aisafety-pipeline serve             # FastAPI (DATABASE_URL required)
 ```
 
-Each pipeline stage persists its outputs back into the database. `serve` requires PostgreSQL — as does every other command.
+Each pipeline stage persists its outputs back into the database. `serve` requires PostgreSQL — as does every other command. `aisafety-pipeline run-all` chains harvest through compute-layout in this exact order for unattended use (the daily Railway cron job).
 
 ---
 
@@ -121,9 +123,10 @@ Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `ai_regex_hit
 2. **Stage 1** → `papers` (regex filter, `ai_regex_hit`)
 3. **Embedding** → `papers.embedding`
 4. **Stage 2 filter** → `papers` (`ai_sem_sim`, `ai_stage2_keep`, `ai_stage2_reason`)
-5. **LLM classification** → `papers` (`llm_relevant`, `llm_tags`, etc.) — the live tag source read by the API
-6. **Compute layout** → `papers.graph_x/y`
-7. **Serve** → FastAPI reads from PostgreSQL live
+5. **Topic embedding** → `papers.embedding_topic` (kept rows only)
+6. **LLM classification** → `papers` (`llm_relevant`, `llm_tags`, etc.) — the live tag source read by the API
+7. **Compute layout** → `papers.graph_x/y`
+8. **Serve** → FastAPI reads from PostgreSQL live
 
 ---
 
@@ -180,7 +183,7 @@ Be careful around:
 ## Known Architecture Weak Points
 
 1. **Schema migrations are implicit**: `db.py` does `CREATE TABLE IF NOT EXISTS` + `ALTER TABLE ADD COLUMN` for new columns, but has no formal migration framework.
-2. **Layout failures occur late**: missing embeddings only caught when `compute-layout` runs.
+2. **Layout failures occur late when stages are run manually out of order**: `compute-layout` hard-fails if any kept paper is missing its *topic* embedding (`embedding_topic`, from `embed-topic` — not the SPECTER2 `embedding` from `embed`). `run-all` avoids this by always running `embed-topic` after `filter` and before `compute-layout`; running individual CLI commands by hand in the wrong order can still hit it.
 
 ---
 

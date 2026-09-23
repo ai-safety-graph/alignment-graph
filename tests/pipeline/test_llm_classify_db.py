@@ -142,13 +142,19 @@ class _FakeClient:
 
 
 @pytest.fixture
-def batch_state_file(tmp_path, monkeypatch):
-    """Point llm_classify's batch-tracking state file at a scratch path so
-    tests never read/write the real data/llm_batches.json used by actual
-    submit/collect runs."""
-    path = tmp_path / "llm_batches.json"
-    monkeypatch.setattr(llm_classify, "_BATCH_STATE_FILE", path)
-    return path
+def batch_state_file(conn):
+    """Reset the DB-backed batch-tracking state (pipeline_state's
+    "llm_batches" key) before and after each test.
+
+    submit_batch/collect_batch commit their writes (same as classify_papers
+    -- see cleanup_ids), so the `conn` fixture's rollback-on-teardown can't
+    undo them; without this, one test's tracked batches would leak into the
+    next test's _uncollected_batch_ids/_pending_batch_ids checks."""
+    conn.execute("DELETE FROM pipeline_state WHERE key = %s", ("llm_batches",))
+    conn.commit()
+    yield
+    conn.execute("DELETE FROM pipeline_state WHERE key = %s", ("llm_batches",))
+    conn.commit()
 
 
 def test_submit_batch_marks_papers_and_records_state(conn, make_paper, cleanup_ids, batch_state_file):
@@ -169,7 +175,7 @@ def test_submit_batch_marks_papers_and_records_state(conn, make_paper, cleanup_i
     row = conn.execute("SELECT llm_batch_id FROM papers WHERE id = %s", (a,)).fetchone()
     assert row["llm_batch_id"] == "batch_abc"
 
-    state = json.loads(batch_state_file.read_text())
+    state = llm_classify._load_batch_state(conn)
     assert state[0]["batch_id"] == "batch_abc"
     assert state[0]["status"] == "submitted"
 
@@ -204,7 +210,7 @@ def test_submit_batch_excludes_papers_already_in_flight(conn, make_paper, cleanu
 def test_submit_batch_blocks_when_another_batch_is_still_processing(conn, make_paper, cleanup_ids, batch_state_file):
     pid = make_paper("2401.20007", ai_stage2_keep=True)
     cleanup_ids.append(pid)
-    llm_classify._record_batch_state(batch_id="batch_pending", status="submitted")
+    llm_classify._record_batch_state(conn, batch_id="batch_pending", status="submitted")
 
     # The pending batch is still "in_progress" when checked live -- this is
     # the exact scenario that caused a real token_limit_exceeded failure
@@ -222,7 +228,7 @@ def test_submit_batch_blocks_when_another_batch_is_still_processing(conn, make_p
 def test_submit_batch_allow_concurrent_bypasses_the_pending_check(conn, make_paper, cleanup_ids, batch_state_file):
     pid = make_paper("2401.20008", ai_stage2_keep=True)
     cleanup_ids.append(pid)
-    llm_classify._record_batch_state(batch_id="batch_pending2", status="submitted")
+    llm_classify._record_batch_state(conn, batch_id="batch_pending2", status="submitted")
 
     # allow_concurrent=True skips the pending-batches check entirely, so it
     # never calls batches.retrieve -- only batches.create, for the new batch.
@@ -350,7 +356,7 @@ def test_run_until_done_resumes_an_already_pending_batch_first(conn, make_paper,
     cleanup_ids += [already_submitted, fresh]
 
     conn.execute("UPDATE papers SET llm_batch_id = %s WHERE id = %s", ("batch_pending", already_submitted))
-    llm_classify._record_batch_state(batch_id="batch_pending", status="submitted")
+    llm_classify._record_batch_state(conn, batch_id="batch_pending", status="submitted")
 
     client = _AutoCompletingFakeClient()
     # Register the pending batch directly (bypassing _batches_create, which
@@ -408,7 +414,7 @@ def test_collect_batch_failed_releases_papers_for_resubmission(conn, make_paper,
     pid = make_paper("2401.20005", ai_stage2_keep=True)
     cleanup_ids.append(pid)
     conn.execute("UPDATE papers SET llm_batch_id = %s WHERE id = %s", ("batch_2", pid))
-    llm_classify._record_batch_state(batch_id="batch_2", status="submitted")
+    llm_classify._record_batch_state(conn, batch_id="batch_2", status="submitted")
 
     fake_batch = SimpleNamespace(
         id="batch_2", status="failed", output_file_id=None, error_file_id=None,
@@ -422,14 +428,14 @@ def test_collect_batch_failed_releases_papers_for_resubmission(conn, make_paper,
     row = conn.execute("SELECT llm_batch_id FROM papers WHERE id = %s", (pid,)).fetchone()
     assert row["llm_batch_id"] is None
 
-    state = json.loads(batch_state_file.read_text())
+    state = llm_classify._load_batch_state(conn)
     assert state[0]["status"] == "failed"
 
 
 def test_collect_batch_completed_writes_results(conn, make_paper, cleanup_ids, batch_state_file):
     pid = make_paper("2401.20006", ai_stage2_keep=True)
     cleanup_ids.append(pid)
-    llm_classify._record_batch_state(batch_id="batch_3", status="submitted")
+    llm_classify._record_batch_state(conn, batch_id="batch_3", status="submitted")
 
     output_line = json.dumps({
         "custom_id": pid,
@@ -474,7 +480,7 @@ def test_collect_batch_completed_writes_results(conn, make_paper, cleanup_ids, b
     assert row["llm_classified_at"] is not None
     assert row["llm_batch_id"] is None  # cleared on successful write, not left in-flight
 
-    state = json.loads(batch_state_file.read_text())
+    state = llm_classify._load_batch_state(conn)
     assert state[0]["status"] == "collected"
 
 
@@ -488,7 +494,7 @@ def test_collect_batch_completed_releases_per_request_errors(conn, make_paper, c
     cleanup_ids.append(pid)
     conn.execute("UPDATE papers SET llm_batch_id = %s WHERE id = %s", ("batch_4", pid))
     conn.commit()
-    llm_classify._record_batch_state(batch_id="batch_4", status="submitted")
+    llm_classify._record_batch_state(conn, batch_id="batch_4", status="submitted")
 
     error_line = json.dumps({"custom_id": pid, "response": None, "error": {"message": "boom"}})
 

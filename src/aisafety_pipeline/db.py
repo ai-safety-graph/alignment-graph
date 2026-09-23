@@ -238,6 +238,18 @@ _PG_SCHEMA = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_papers_keep ON papers (ai_stage2_keep)",
     "CREATE INDEX IF NOT EXISTS idx_papers_domain ON papers (domain_tag)",
+    # Small key/value store for cross-run pipeline bookkeeping (harvest
+    # watermark, in-flight OpenAI batch tracking) that used to live in local
+    # JSON files under data/ -- unsafe for a cron-triggered service, which
+    # gets a fresh container per run with no guaranteed persisted disk. See
+    # get_state/set_state below.
+    """
+    CREATE TABLE IF NOT EXISTS pipeline_state (
+        key TEXT PRIMARY KEY,
+        value JSONB NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+    """,
 ]
 
 _PG_VECTOR_INDEX = (
@@ -283,6 +295,27 @@ def connect(db_arg: str | None = None) -> PgConnection:
             "DATABASE_URL is not set. This tool requires PostgreSQL — see .env.example."
         )
     return PgConnection(dsn)
+
+
+def get_state(conn: PgConnection, key: str, default: Any = None) -> Any:
+    """Read one `pipeline_state` value (already JSON-decoded), or `default`
+    if `key` has never been set."""
+    row = conn.execute("SELECT value FROM pipeline_state WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row is not None else default
+
+
+def set_state(conn: PgConnection, key: str, value: Any) -> None:
+    """Upsert one `pipeline_state` value. Commits immediately so the write
+    survives even if the caller's transaction later rolls back or the
+    process crashes right after -- this is bookkeeping state, not part of
+    the atomic unit of work it's recorded alongside."""
+    import psycopg2.extras
+    conn.execute(
+        "INSERT INTO pipeline_state (key, value, updated_at) VALUES (?, ?, now()) "
+        "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()",
+        (key, psycopg2.extras.Json(value)),
+    )
+    conn.commit()
 
 
 def init_db(db_arg: str | None = None) -> PgConnection:
