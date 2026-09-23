@@ -212,6 +212,11 @@ class PgConnection:
 # Schema
 # ---------------------------------------------------------------------------
 
+# NOTE: the legacy `paper_tags` table (zero-shot tagging, superseded by
+# llm_relevant/llm_tags on `papers`) is no longer created here. Existing
+# databases that already have it are left untouched -- dropping it against
+# the live database is a separate, deliberately later step.
+
 _PG_SCHEMA = [
     "CREATE EXTENSION IF NOT EXISTS vector",
     """
@@ -231,17 +236,8 @@ _PG_SCHEMA = [
         embedding vector(768)
     )
     """,
-    """
-    CREATE TABLE IF NOT EXISTS paper_tags (
-        paper_id TEXT NOT NULL REFERENCES papers(id) ON DELETE CASCADE,
-        tag TEXT NOT NULL,
-        score REAL,
-        PRIMARY KEY (paper_id, tag)
-    )
-    """,
     "CREATE INDEX IF NOT EXISTS idx_papers_keep ON papers (ai_stage2_keep)",
     "CREATE INDEX IF NOT EXISTS idx_papers_domain ON papers (domain_tag)",
-    "CREATE INDEX IF NOT EXISTS idx_paper_tags_tag ON paper_tags (tag)",
 ]
 
 _PG_VECTOR_INDEX = (
@@ -333,9 +329,8 @@ def _ensure_columns(conn: PgConnection) -> None:
         ("papers", "graph_y", "REAL"),
         ("papers", "embedding_topic", "vector(768)"),
         # LLM classification stage (llm_classify.py) -- combined relevance +
-        # taxonomy-tag judgment, kept separate from paper_tags (owned by
-        # tagging.py's zero-shot BGE tagging) and not yet read by anything
-        # downstream (API/UI still key off ai_stage2_keep only).
+        # taxonomy-tag judgment. This is what the API gates on (llm_relevant)
+        # and serves as tags (llm_tags) -- see api/ARCHITECTURE.md.
         ("papers", "llm_relevant", "BOOLEAN"),
         ("papers", "llm_confidence", "REAL"),
         ("papers", "llm_tags", "TEXT[]"),

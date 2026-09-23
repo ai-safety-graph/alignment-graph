@@ -45,7 +45,7 @@ Route handlers declare `conn=Depends(get_conn)`.
 
 ## Endpoints
 
-All endpoints gate on the LLM classification stage (`llm_classify.py`): a paper is served only if `papers.llm_relevant = TRUE`, and its tags come from `papers.llm_tags` (taxonomy names, LLM order, no scores). `ai_stage2_keep` and `paper_tags` are no longer read by the API. Unclassified papers (`llm_relevant IS NULL`) are hidden until classified.
+All endpoints gate on the LLM classification stage (`llm_classify.py`): a paper is served only if `papers.llm_relevant = TRUE`, and its tags come from `papers.llm_tags` (taxonomy names, LLM order, no scores). `ai_stage2_keep` is not read by the API; the legacy zero-shot tagger and its `paper_tags` table have been removed from the codebase entirely. Unclassified papers (`llm_relevant IS NULL`) are hidden until classified.
 
 ### `POST /api/graph/subset`
 
@@ -71,7 +71,7 @@ Paginated paper listing with server-side filtering.
 
 Query params:
 - `page` (default 1), `limit` (default 50, max 200)
-- `tags` — repeatable; papers matching any given tag are included (`EXISTS (... pt.tag = ANY(%s))`)
+- `tags` — repeatable; papers matching any given tag are included (`llm_tags && %s`, array overlap)
 - `domain` — repeatable; multiple values are OR-ed (`domain_tag IN (...)`)
 - `from` / `to` — `published` date bounds
 - `q` — keyword substring match on `title`/`authors` (`ILIKE`)

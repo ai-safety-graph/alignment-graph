@@ -10,8 +10,6 @@ Its core job is to manage a staged literature-processing pipeline:
 harvest -> stage1 -> embed -> filter -> llm-classify(-run) -> compute-layout -> serve
 ```
 
-(`tag` — zero-shot topic tagging into `paper_tags` — is a legacy stage still registered on the CLI but no longer consumed downstream; `llm-classify-run` is the live source of tags served by the API.)
-
 The package is PostgreSQL + pgvector only — every pipeline command and the API require `DATABASE_URL` to be set.
 
 ---
@@ -38,7 +36,7 @@ Key exports:
 
 `PgConnection` uses psycopg2 with `DictCursor` and intercepts `BEGIN`/`COMMIT`/`ROLLBACK` strings to map them to connection-level calls. Parameter placeholders (`?`, `:name`) are translated to psycopg2 format (`%s`, `%(name)s`) automatically via `_to_pg_sql()`.
 
-Schema: `papers_raw`, `papers` (with `embedding vector(768)`, `graph_x`, `graph_y`), `paper_tags` + HNSW index.
+Schema: `papers_raw`, `papers` (with `embedding vector(768)`, `graph_x`, `graph_y`, `llm_relevant`/`llm_tags`/etc.) + HNSW index.
 
 ### `oai.py`
 
@@ -56,10 +54,6 @@ Vector loading reads `papers.embedding` via `id = ANY(%s)`.
 ### `embeddings.py`
 
 Generates SPECTER2 embeddings and stores them via `UPDATE papers SET embedding = %s WHERE id = %s`.
-
-### `tagging.py`
-
-**Legacy — no longer consumed by the API or UI.** Multi-label, zero-shot tagging: matches each paper's embedding directly against the fixed taxonomy (`taxonomy.TAXONOMY`) by cosine similarity, standardizes per phrase, and keeps every phrase whose z-score clears a floor (capped at `top_n`) as a tag in `paper_tags`. Still a registered CLI subcommand (`aisafety-pipeline tag`); running it is harmless but has no effect on what's served. Superseded by `llm_classify.py`.
 
 ### `llm_classify.py`
 
@@ -91,9 +85,6 @@ aisafety-pipeline filter            # semantic stage-2
 aisafety-pipeline llm-classify-run  # LLM relevance + taxonomy tags (live source, into llm_relevant/llm_tags)
 aisafety-pipeline compute-layout    # persists graph_x/y to DB
 aisafety-pipeline serve             # FastAPI (DATABASE_URL required)
-
-# legacy, not read by the API:
-aisafety-pipeline tag               # zero-shot topic tags into paper_tags
 ```
 
 Each pipeline stage persists its outputs back into the database. `serve` requires PostgreSQL — as does every other command.
@@ -118,13 +109,9 @@ Raw upstream metadata from OAI harvest.
 
 Working set and pipeline state.
 
-Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `ai_regex_hit`, `ai_sem_sim`, `ai_stage2_keep`, `ai_stage2_reason`, `domain_tag`, `graph_x`, `graph_y`, `embedding vector(768)`, plus LLM classification columns `llm_relevant`, `llm_confidence`, `llm_tags`, `llm_reason`, `llm_model`, `llm_classified_at`, `llm_batch_id` (written by `llm_classify.py`; these — not `paper_tags` — are what the API reads)
+Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `ai_regex_hit`, `ai_sem_sim`, `ai_stage2_keep`, `ai_stage2_reason`, `domain_tag`, `graph_x`, `graph_y`, `embedding vector(768)`, plus LLM classification columns `llm_relevant`, `llm_confidence`, `llm_tags`, `llm_reason`, `llm_model`, `llm_classified_at`, `llm_batch_id` (written by `llm_classify.py`; these are what the API reads)
 
 `CREATE EXTENSION IF NOT EXISTS vector` is run automatically by `init_db()`, along with an HNSW index: `CREATE INDEX ON papers USING hnsw (embedding vector_cosine_ops)`.
-
-### `paper_tags`
-
-`(paper_id, tag)` → `score`. One row per tag kept for a paper (see `tagging.py`). **Legacy — no longer read by the API**; superseded by `papers.llm_tags`.
 
 ---
 
@@ -134,7 +121,7 @@ Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `ai_regex_hit
 2. **Stage 1** → `papers` (regex filter, `ai_regex_hit`)
 3. **Embedding** → `papers.embedding`
 4. **Stage 2 filter** → `papers` (`ai_sem_sim`, `ai_stage2_keep`, `ai_stage2_reason`)
-5. **LLM classification** → `papers` (`llm_relevant`, `llm_tags`, etc.) — the live tag source read by the API (legacy: **Tagging** → `paper_tags`, no longer read downstream)
+5. **LLM classification** → `papers` (`llm_relevant`, `llm_tags`, etc.) — the live tag source read by the API
 6. **Compute layout** → `papers.graph_x/y`
 7. **Serve** → FastAPI reads from PostgreSQL live
 
@@ -178,7 +165,7 @@ Safe:
 - CLI help text and ergonomics
 - Internal helpers, logging
 - API metadata fields (coordinated with UI)
-- Tagging heuristics
+- LLM classification prompt/taxonomy descriptions (`taxonomy.py`, `llm_classify.py`)
 
 Be careful around:
 
@@ -202,6 +189,6 @@ Be careful around:
 Four layers:
 
 1. **Ingest** (`oai.py`, `papers_raw`)
-2. **Stateful analysis** (`papers`, `embeddings` / `papers.embedding`, filters, tagging)
+2. **Stateful analysis** (`papers`, `embeddings` / `papers.embedding`, filters, LLM classification)
 3. **Layout / serving** (`compute_layout.py`, `api/`)
 4. **CLI orchestration** (`utils.py`)

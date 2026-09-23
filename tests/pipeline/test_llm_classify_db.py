@@ -42,7 +42,7 @@ def cleanup_ids(conn):
     connection -- including this test's `make_paper` inserts -- not just the
     classification write. That means the `conn` fixture's rollback-on-
     teardown can't undo them. Explicitly delete each test's own rows
-    (cascades papers -> paper_tags) so the local test DB doesn't accumulate
+    (cascades papers_raw -> papers) so the local test DB doesn't accumulate
     permanent rows across runs; safe to call even when nothing was actually
     committed (the delete/commit pair is then a no-op)."""
     ids: list[str] = []

@@ -168,12 +168,4 @@ def insert_paper(
         ),
     )
 
-    if tags is not None:
-        conn.execute("DELETE FROM paper_tags WHERE paper_id = %s", (aid,))
-        for tag, score in tags:
-            conn.execute(
-                "INSERT INTO paper_tags (paper_id, tag, score) VALUES (%s, %s, %s)",
-                (aid, tag, score),
-            )
-
     return aid

@@ -28,9 +28,8 @@ from .taxonomy import TAXONOMY, TAXONOMY_DESCRIPTIONS
 # Combined relevance + taxonomy-tag classification via a small LLM, run after
 # stage-2 (filters.cmd_filter) instead of relying purely on cosine similarity
 # to decide "is this actually AI safety/alignment" and "which topics apply".
-# Output is written to new `papers` columns (llm_*), kept separate from
-# `paper_tags` (owned by tagging.py's zero-shot BGE tagging) -- see
-# db.py::_ensure_columns.
+# Output is written to new `papers` columns (llm_*) -- see db.py::_ensure_columns.
+# This is the live source of the tags the API serves (see api/ARCHITECTURE.md).
 #
 # Prompt caching: SYSTEM_PROMPT is a module-level constant, byte-identical
 # across every call, sent first in the messages list -- this is all OpenAI's
@@ -396,10 +395,10 @@ def classify_papers(
 ) -> dict:
     """Classify unclassified (or, with force=True, all) stage-2-kept papers.
 
-    Takes an already-open `conn` (mirrors tagging.py's `tag_papers_default`
-    split from `cmd_tag`) so it can be exercised directly against a test
-    fixture connection -- a CLI command that opens its own connection via
-    `connect()` wouldn't see another connection's uncommitted fixture rows.
+    Takes an already-open `conn` (split out from `cmd_llm_classify`) so it
+    can be exercised directly against a test fixture connection -- a CLI
+    command that opens its own connection via `connect()` wouldn't see
+    another connection's uncommitted fixture rows.
     """
     write_cur = conn.raw_cursor()
     scanned = classified = relevant_count = errors = bad_tags = 0

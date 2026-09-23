@@ -104,7 +104,7 @@ aisafety-pipeline filter --method centroid --seeds seeds.txt --tau 0.92
 aisafety-pipeline llm-classify-run
 ```
 
-This submits, waits for, and collects OpenAI Batch API jobs until every unclassified paper has `llm_relevant`/`llm_tags` set — this is what the API serves. (`aisafety-pipeline tag`, the older zero-shot tagger writing to `paper_tags`, still exists but its output is no longer read by the API.)
+This submits, waits for, and collects OpenAI Batch API jobs until every unclassified paper has `llm_relevant`/`llm_tags` set — this is what the API serves.
 
 **6a. Compute graph layout**
 
