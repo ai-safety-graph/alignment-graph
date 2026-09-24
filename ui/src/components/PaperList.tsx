@@ -2,7 +2,6 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import SharePlusIcon from './icons/SharePlusIcon'
 import ShareMinusIcon from './icons/ShareMinusIcon'
 import type { NodeCompact } from '../lib/types'
-import { domainLabel } from '../lib/domain'
 import TagChips from './TagChips'
 
 interface PaperListProps {
@@ -80,8 +79,6 @@ export default function PaperList({
               <div className='mt-1 text-[12px] text-neutral-400'>
                 <div className='flex items-center gap-2 mb-0.5'>
                   <TagChips tags={n.tags} max={2} />
-                  <span>•</span>
-                  <span>{domainLabel(n.dm)}</span>
                 </div>
               </div>
             </button>

@@ -212,7 +212,7 @@ export default function StatsView() {
     onHome || isSmall ? null : (
       <Link
         to='/'
-        className='shrink-0 px-2 py-1 rounded-md cursor-pointer bg-[#2a2a2a] border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors'
+        className='shrink-0 px-2 py-1 rounded-md cursor-pointer bg-transparent border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors'
         aria-label='Back to graph'
       >
         <Share2 size={18} />
@@ -223,7 +223,7 @@ export default function StatsView() {
     <button
       type='button'
       onClick={startCreatingSubgraph}
-      className='shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#2a2a2a] border border-neutral-700 hover:border-neutral-500 text-[13px] text-neutral-300 hover:text-white whitespace-nowrap cursor-pointer transition-colors'
+      className='shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-transparent border border-neutral-700 hover:border-neutral-500 text-[13px] text-neutral-300 hover:text-white whitespace-nowrap cursor-pointer transition-colors'
     >
       New Graph
       <Plus size={13} />
@@ -313,7 +313,7 @@ export default function StatsView() {
             onClick={() =>
               setSearchMode((m) => (m === 'semantic' ? 'keyword' : 'semantic'))
             }
-            className={`shrink-0 px-2 py-1 rounded-md bg-[#2a2a2a] border cursor-pointer transition-colors ${
+            className={`shrink-0 px-2 py-1 rounded-md bg-transparent border cursor-pointer transition-colors ${
               searchMode === 'semantic'
                 ? 'border-[#4ea8de] text-[#4ea8de]'
                 : 'border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white'
@@ -398,7 +398,7 @@ export default function StatsView() {
       onClick={() => setFilterExpanded((v) => !v)}
       title={filterExpanded ? 'Collapse filters' : 'Expand filters'}
       aria-label={filterExpanded ? 'Collapse filters' : 'Expand filters'}
-      className={`shrink-0 flex items-center gap-1.5 px-2 py-0.5 rounded-md cursor-pointer border border-neutral-700 hover:border-neutral-500 hover:text-white transition-colors ${filterExpanded ? 'bg-neutral-950 text-white' : 'bg-[#2a2a2a] text-neutral-300'}`}
+      className={`shrink-0 flex items-center gap-1.5 px-2 py-0.5 rounded-md cursor-pointer bg-transparent border border-neutral-700 hover:border-neutral-500 hover:text-white transition-colors ${filterExpanded ? 'text-white' : 'text-neutral-300'}`}
     >
       <SlidersHorizontal size={15} />
       Filters
@@ -425,7 +425,7 @@ export default function StatsView() {
             rel='noopener noreferrer'
             title='Export subgraph'
             aria-label='Open shareable subgraph page'
-            className={`shrink-0 px-1.5 py-1 rounded-md cursor-pointer border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors ${filterExpanded ? 'bg-neutral-950' : 'bg-[#2a2a2a]'}`}
+            className='shrink-0 px-1.5 py-1 rounded-md cursor-pointer bg-transparent border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors'
           >
             <ExternalLink size={15} />
           </Link>
@@ -436,7 +436,7 @@ export default function StatsView() {
             onClick={() => setIsConfirmingDelete(true)}
             title='Delete graph'
             aria-label='Delete graph'
-            className={`shrink-0 px-1.5 py-1 rounded-md cursor-pointer border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-red-400 transition-colors ${filterExpanded ? 'bg-neutral-950' : 'bg-[#2a2a2a]'}`}
+            className='shrink-0 px-1.5 py-1 rounded-md cursor-pointer bg-transparent border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-red-400 transition-colors'
           >
             <Trash2 size={15} />
           </button>
@@ -450,7 +450,7 @@ export default function StatsView() {
           aria-label={
             viewMode === 'subgraph' ? 'Back to all papers' : 'View graph papers'
           }
-          className={`shrink-0 px-1.5 py-1 rounded-md cursor-pointer border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors ${filterExpanded ? 'bg-neutral-950' : 'bg-[#2a2a2a]'}`}
+          className='shrink-0 px-1.5 py-1 rounded-md cursor-pointer bg-transparent border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors'
         >
           {viewMode === 'subgraph' ? <Globe size={15} /> : <List size={15} />}
         </button>
@@ -647,7 +647,7 @@ export default function StatsView() {
                     <button
                       type='button'
                       onClick={toggleViewMode}
-                      className='flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#2a2a2a] border border-[#333333] text-sm text-neutral-300 hover:text-neutral-100 cursor-pointer'
+                      className='flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-transparent border border-[#333333] text-sm text-neutral-300 hover:text-neutral-100 cursor-pointer'
                     >
                       <Plus size={14} />
                       Add papers
@@ -812,7 +812,7 @@ export default function StatsView() {
               <button
                 type='button'
                 onClick={() => setIsConfirmingDelete(false)}
-                className='px-3 py-1.5 rounded-md text-sm text-neutral-300 bg-[#2a2a2a] border border-[#333333] hover:text-neutral-100 cursor-pointer'
+                className='px-3 py-1.5 rounded-md text-sm text-neutral-300 bg-transparent border border-[#333333] hover:text-neutral-100 cursor-pointer'
               >
                 Cancel
               </button>

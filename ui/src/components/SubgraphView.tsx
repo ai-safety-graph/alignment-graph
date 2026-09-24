@@ -72,7 +72,7 @@ export default function SubgraphView() {
   const backLink = (
     <Link
       to='/stats'
-      className='shrink-0 p-2 rounded-full cursor-pointer bg-[#2a2a2a] border border-[#333333] text-neutral-400 hover:text-neutral-200'
+      className='shrink-0 p-2 rounded-full cursor-pointer bg-transparent border border-[#333333] text-neutral-400 hover:text-neutral-200'
       aria-label='Back to papers'
     >
       <ArrowLeft size={18} />
@@ -85,7 +85,7 @@ export default function SubgraphView() {
         <p className='text-neutral-400'>Graph not found.</p>
         <Link
           to='/stats'
-          className='px-3 py-2 rounded-full bg-[#2a2a2a] border border-[#333333] text-sm text-neutral-300 hover:text-neutral-100'
+          className='px-3 py-2 rounded-full bg-transparent border border-[#333333] text-sm text-neutral-300 hover:text-neutral-100'
         >
           Back to papers
         </Link>

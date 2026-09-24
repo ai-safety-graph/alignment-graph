@@ -54,7 +54,6 @@ export default function GraphPaperDetails({
           <div className='flex items-center justify-between mb-2'>
             <div className='flex items-center gap-2 mb-0.5 text-[13px] text-neutral-400'>
               <TagChips tags={paper.tags} />
-              <span>• {domainLabel(paper.dm)}</span>
             </div>
             <div className='flex items-center gap-1'>
               <kbd className='px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-600 text-[10px] font-mono text-neutral-300'>
@@ -81,7 +80,7 @@ export default function GraphPaperDetails({
                   ? onRemoveFromSubgraph?.(paper.aid)
                   : onAddToSubgraph?.(paper.aid)
               }
-              className='group flex items-center gap-1.5 text-[13px] text-neutral-300 hover:text-white bg-[#2a2a2a] border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 mb-2 cursor-pointer transition-colors'
+              className='group flex items-center gap-1.5 text-[13px] text-neutral-300 hover:text-white bg-transparent border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 mb-2 cursor-pointer transition-colors'
             >
               {isPaperInSubgraph ? (
                 <>
@@ -108,6 +107,9 @@ export default function GraphPaperDetails({
         </div>
         <div className='text-[13px] mb-1.5'>
           <strong>Published:</strong> {paper.pd || '—'}
+        </div>
+        <div className='text-[13px] mb-1.5'>
+          <strong>arXiv domain:</strong> {domainLabel(paper.dm)}
         </div>
 
         <div className='flex gap-2 mb-3'>
@@ -196,7 +198,6 @@ export default function GraphPaperDetails({
                     <div>{r.au}</div>
                     <div className='flex items-center gap-2 mb-0.5 text-neutral-400'>
                       <TagChips tags={r.tags} />
-                      <span>• {domainLabel(r.dm)}</span>
                     </div>
                   </div>
                 </li>

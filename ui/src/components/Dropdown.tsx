@@ -27,7 +27,7 @@ export default function Dropdown({
     <div className='relative' ref={ref}>
       <button
         onClick={() => canOpen && setIsOpen((o) => !o)}
-        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#2a2a2a] border border-neutral-700 text-[13px] text-neutral-300 whitespace-nowrap transition-colors${canOpen ? ' hover:text-white hover:border-neutral-500 cursor-pointer' : ' cursor-default'}`}
+        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-transparent border border-neutral-700 text-[13px] text-neutral-300 whitespace-nowrap transition-colors${canOpen ? ' hover:text-white hover:border-neutral-500 cursor-pointer' : ' cursor-default'}`}
       >
         {label}
         {canOpen && (

@@ -1,6 +1,5 @@
 import SharePlusIcon from './icons/SharePlusIcon'
 import ShareMinusIcon from './icons/ShareMinusIcon'
-import { domainLabel } from '../lib/domain'
 import type { NodeCompact } from '../lib/types'
 import TagChips from './TagChips'
 
@@ -66,7 +65,6 @@ export default function SearchResultsOverlay({
                   </div>
                   <div className='text-[12px] text-neutral-400 flex items-center gap-2 mb-0.5'>
                     <TagChips tags={n.tags} max={2} />
-                    <span>• {domainLabel(n.dm)}</span>
                   </div>
                 </div>
                 {(onAddToSubgraph || onRemoveFromSubgraph) && (
