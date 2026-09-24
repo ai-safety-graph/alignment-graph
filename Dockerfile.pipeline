@@ -18,14 +18,22 @@ RUN pip install --no-cache-dir \
 
 # torch/numpy's BLAS backends default to one thread per CPU core reported by
 # /proc/cpuinfo, which in a container is often the *host's* full core count,
-# not this service's actual cgroup CPU quota -- confirmed in practice on
-# Railway (8 vCPU limit, embed spawned enough threads to show ~10 vCPU of
-# contention and made no progress for 10+ minutes). Capping thread counts
-# below the quota avoids the context-switch thrashing; override via a
-# Railway service variable if the plan's CPU limit changes.
+# not this service's actual cgroup CPU quota -- observed in practice on
+# Railway (8 vCPU limit, embed showed ~10 vCPU of contention). Capping
+# thread counts below the quota avoids that context-switch thrashing;
+# override via a Railway service variable if the plan's CPU limit changes.
 ENV OMP_NUM_THREADS=4 \
     MKL_NUM_THREADS=4 \
     OPENBLAS_NUM_THREADS=4 \
     NUMEXPR_NUM_THREADS=4
+
+# Python fully buffers stdout (rather than line-buffering) whenever it's not
+# attached to a TTY -- which is exactly the case for a container's log
+# collector. Without this, every run-all/stage progress print() sits in an
+# internal buffer and never reaches Railway's logs until it fills or the
+# process exits, making a working run look stalled (only stderr-based
+# warnings.warn() calls leaked through in practice, which is what made this
+# so confusing to debug live). Standard fix for any containerized Python app.
+ENV PYTHONUNBUFFERED=1
 
 CMD ["aisafety-pipeline", "run-all"]
