@@ -3,6 +3,8 @@ import { domainLabel } from '../lib/domain'
 import type { NodeCompact } from '../lib/types'
 import { useRef, useLayoutEffect } from 'react'
 import TagChips from './TagChips'
+import SharePlusIcon from './icons/SharePlusIcon'
+import ShareMinusIcon from './icons/ShareMinusIcon'
 
 type NeighborEntry = { n: NodeCompact; w: number }
 
@@ -15,6 +17,10 @@ interface Props {
   onSelectPaper: (aid: string) => void
   navHistory: { aid: string; title: string }[]
   onNavigateTo: (aid: string, historyIndex: number) => void
+  onAddToSubgraph?: (aid: string) => void
+  onRemoveFromSubgraph?: (aid: string) => void
+  subgraphPaperIds?: Set<string>
+  subgraphName?: string
 }
 
 export default function MobilePaperDetails({
@@ -25,7 +31,13 @@ export default function MobilePaperDetails({
   onSelectPaper,
   navHistory,
   onNavigateTo,
+  onAddToSubgraph,
+  onRemoveFromSubgraph,
+  subgraphPaperIds,
+  subgraphName,
 }: Props) {
+  const isPaperInSubgraph = subgraphPaperIds?.has(paper.aid) ?? false
+  const subgraphLabel = subgraphName ?? 'Subgraph'
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const summaryText = paper.sm
 
@@ -88,6 +100,36 @@ export default function MobilePaperDetails({
           <h4 className='mt-1 mb-2 text-lg font-semibold leading-snug text-[#e5e5e5]'>
             {paper.t}
           </h4>
+          {(onAddToSubgraph || onRemoveFromSubgraph) && (
+            <div className='mb-2'>
+              <button
+                onClick={() =>
+                  isPaperInSubgraph
+                    ? onRemoveFromSubgraph?.(paper.aid)
+                    : onAddToSubgraph?.(paper.aid)
+                }
+                className='group flex items-center gap-1.5 max-w-full text-[13px] text-neutral-300 hover:text-white bg-transparent border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 cursor-pointer transition-colors'
+              >
+                {isPaperInSubgraph ? (
+                  <>
+                    <span className='truncate'>Remove from {subgraphLabel}</span>
+                    <ShareMinusIcon
+                      size={14}
+                      className='shrink-0 text-red-800 group-hover:text-red-500 transition-colors'
+                    />
+                  </>
+                ) : (
+                  <>
+                    <span className='truncate'>Add to {subgraphLabel}</span>
+                    <SharePlusIcon
+                      size={14}
+                      className='shrink-0 text-green-800 group-hover:text-green-500 transition-colors'
+                    />
+                  </>
+                )}
+              </button>
+            </div>
+          )}
         </div>
         <div className='text-[13px] mb-1.5'>
           <strong>Authors:</strong> {paper.au}
