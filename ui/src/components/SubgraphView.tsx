@@ -174,6 +174,9 @@ export default function SubgraphView() {
               onClose={close}
               onSelectPaper={handleSelectRelated}
               onNavigateTo={navigateTo}
+              onRemoveFromSubgraph={removeFromSubgraph}
+              subgraphPaperIds={subgraphPaperIds}
+              subgraphName={graphName ?? undefined}
             />
           </div>
         </div>

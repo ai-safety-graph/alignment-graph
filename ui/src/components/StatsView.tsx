@@ -48,7 +48,10 @@ export default function StatsView() {
     null,
   )
   const [semanticLoading, setSemanticLoading] = useState(false)
-  const [filterExpanded, setFilterExpanded] = useState(true)
+  // Expanded by default on desktop (Tailwind `md`), collapsed on mobile.
+  const [filterExpanded, setFilterExpanded] = useState(
+    () => window.matchMedia('(min-width: 768px)').matches,
+  )
 
   const {
     subgraphs,
@@ -223,9 +226,11 @@ export default function StatsView() {
     <button
       type='button'
       onClick={startCreatingSubgraph}
-      className='shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-transparent border border-neutral-700 hover:border-neutral-500 text-[13px] text-neutral-300 hover:text-white whitespace-nowrap cursor-pointer transition-colors'
+      title='New graph'
+      aria-label='New graph'
+      className='shrink-0 flex items-center md:gap-1.5 px-2.5 py-1 rounded-md bg-transparent border border-neutral-700 hover:border-neutral-500 text-[13px] text-neutral-300 hover:text-white whitespace-nowrap cursor-pointer transition-colors'
     >
-      New Graph
+      <span className='hidden md:inline'>New Graph</span>
       <Plus size={13} />
     </button>
   )
@@ -322,7 +327,7 @@ export default function StatsView() {
             <Sparkles size={15} />
           </button>
           <span
-            className={`shrink-0 text-[13px] whitespace-nowrap transition-colors ${searchMode === 'semantic' ? 'text-[#4ea8de]' : 'text-neutral-500'}`}
+            className={`hidden md:inline shrink-0 text-[13px] whitespace-nowrap transition-colors ${searchMode === 'semantic' ? 'text-[#4ea8de]' : 'text-neutral-500'}`}
           >
             {searchMode === 'semantic'
               ? 'semantic search on'
@@ -398,10 +403,49 @@ export default function StatsView() {
       onClick={() => setFilterExpanded((v) => !v)}
       title={filterExpanded ? 'Collapse filters' : 'Expand filters'}
       aria-label={filterExpanded ? 'Collapse filters' : 'Expand filters'}
-      className={`shrink-0 flex items-center gap-1.5 px-2 py-0.5 rounded-md cursor-pointer bg-transparent border border-neutral-700 hover:border-neutral-500 hover:text-white transition-colors ${filterExpanded ? 'text-white' : 'text-neutral-300'}`}
+      className={`shrink-0 flex items-center md:gap-1.5 px-2 py-0.5 rounded-md cursor-pointer bg-transparent border border-neutral-700 hover:border-neutral-500 hover:text-white transition-colors ${filterExpanded ? 'text-white' : 'text-neutral-300'}`}
     >
       <SlidersHorizontal size={15} />
-      Filters
+      <span className='hidden md:inline'>Filters</span>
+    </button>
+  )
+
+  const exportSubgraphLink = (
+    <Link
+      to={`/subgraph/${selectedSubgraphId}`}
+      target='_blank'
+      rel='noopener noreferrer'
+      title='Export subgraph'
+      aria-label='Open shareable subgraph page'
+      className='shrink-0 px-1.5 py-1 rounded-md cursor-pointer bg-transparent border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors'
+    >
+      <ExternalLink size={15} />
+    </Link>
+  )
+
+  const deleteSubgraphButton = (
+    <button
+      type='button'
+      onClick={() => setIsConfirmingDelete(true)}
+      title='Delete graph'
+      aria-label='Delete graph'
+      className='shrink-0 px-1.5 py-1 rounded-md cursor-pointer bg-transparent border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-red-400 transition-colors'
+    >
+      <Trash2 size={15} />
+    </button>
+  )
+
+  const viewModeToggleButton = (
+    <button
+      type='button'
+      onClick={toggleViewMode}
+      title={viewMode === 'subgraph' ? 'Browse all papers' : 'View subgraph'}
+      aria-label={
+        viewMode === 'subgraph' ? 'Back to all papers' : 'View graph papers'
+      }
+      className='shrink-0 px-1.5 py-1 rounded-md cursor-pointer bg-transparent border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors'
+    >
+      {viewMode === 'subgraph' ? <Globe size={15} /> : <List size={15} />}
     </button>
   )
 
@@ -418,42 +462,9 @@ export default function StatsView() {
       <div className='flex-1 flex justify-end items-center gap-2'>
         {isBrowsing && newGraphControl}
         {filterBar && filterToggleButton}
-        {viewMode === 'subgraph' && (
-          <Link
-            to={`/subgraph/${selectedSubgraphId}`}
-            target='_blank'
-            rel='noopener noreferrer'
-            title='Export subgraph'
-            aria-label='Open shareable subgraph page'
-            className='shrink-0 px-1.5 py-1 rounded-md cursor-pointer bg-transparent border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors'
-          >
-            <ExternalLink size={15} />
-          </Link>
-        )}
-        {viewMode === 'subgraph' && (
-          <button
-            type='button'
-            onClick={() => setIsConfirmingDelete(true)}
-            title='Delete graph'
-            aria-label='Delete graph'
-            className='shrink-0 px-1.5 py-1 rounded-md cursor-pointer bg-transparent border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-red-400 transition-colors'
-          >
-            <Trash2 size={15} />
-          </button>
-        )}
-        <button
-          type='button'
-          onClick={toggleViewMode}
-          title={
-            viewMode === 'subgraph' ? 'Browse all papers' : 'View subgraph'
-          }
-          aria-label={
-            viewMode === 'subgraph' ? 'Back to all papers' : 'View graph papers'
-          }
-          className='shrink-0 px-1.5 py-1 rounded-md cursor-pointer bg-transparent border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors'
-        >
-          {viewMode === 'subgraph' ? <Globe size={15} /> : <List size={15} />}
-        </button>
+        {viewMode === 'subgraph' && exportSubgraphLink}
+        {viewMode === 'subgraph' && deleteSubgraphButton}
+        {viewModeToggleButton}
       </div>
     </div>
   ) : isBrowsing ? (
@@ -544,8 +555,15 @@ export default function StatsView() {
                       </span>
                     )}
                     <div className='ml-auto flex items-center gap-2'>
-                      {filterBar && filterToggleButton}
                       {selectedSubgraph && isBrowsing && newGraphControl}
+                      {filterBar && filterToggleButton}
+                      {selectedSubgraph && viewMode === 'subgraph' && (
+                        <>
+                          {exportSubgraphLink}
+                          {deleteSubgraphButton}
+                        </>
+                      )}
+                      {selectedSubgraph && viewModeToggleButton}
                     </div>
                   </div>
                 )}
@@ -783,6 +801,22 @@ export default function StatsView() {
               onClose={close}
               onSelectPaper={handleSelectRelated}
               onNavigateTo={navigateTo}
+              onAddToSubgraph={
+                isBrowsing && selectedSubgraphId
+                  ? addToSelectedSubgraph
+                  : undefined
+              }
+              onRemoveFromSubgraph={
+                isBrowsing
+                  ? selectedSubgraphId
+                    ? removeFromSelectedSubgraph
+                    : undefined
+                  : removeFromSubgraphView
+              }
+              subgraphPaperIds={
+                isBrowsing ? selectedSubgraphPaperIds : subgraphNodeIds
+              }
+              subgraphName={selectedSubgraph?.name}
             />
           </div>
         </div>
