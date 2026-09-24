@@ -764,7 +764,7 @@ export default function ArxivGraph({
                   m === 'semantic' ? 'keyword' : 'semantic',
                 )
               }
-              className={`shrink-0 px-2 py-1 rounded-md bg-[#2a2a2a] border cursor-pointer transition-colors ${
+              className={`shrink-0 px-2 py-1 rounded-md bg-transparent border cursor-pointer transition-colors ${
                 searchMode === 'semantic'
                   ? 'border-[#4ea8de] text-[#4ea8de]'
                   : 'border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white'
@@ -841,7 +841,7 @@ export default function ArxivGraph({
         <Link
           to='/stats'
           aria-label='Show stats'
-          className='px-2 py-1 rounded-md cursor-pointer bg-[#2a2a2a] border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors'
+          className='px-2 py-1 rounded-md cursor-pointer bg-transparent border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors'
         >
           <Library size={18} />
         </Link>
@@ -893,7 +893,7 @@ export default function ArxivGraph({
         {/* <Link
           to='/stats'
           aria-label='Show stats'
-          className='shrink-0 flex items-center gap-1.5 px-3 py-[7px] rounded-full bg-[#2a2a2a] border border-[#333333] text-sm text-neutral-400 hover:text-neutral-200 whitespace-nowrap cursor-pointer'
+          className='shrink-0 flex items-center gap-1.5 px-3 py-[7px] rounded-full bg-transparent border border-[#333333] text-sm text-neutral-400 hover:text-neutral-200 whitespace-nowrap cursor-pointer'
         >
           New Graph
           <Plus size={13} />

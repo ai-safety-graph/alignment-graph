@@ -85,7 +85,6 @@ export default function StatsPaperDetails({
           <div className='flex items-center justify-between mb-2'>
             <div className='flex items-center gap-2 mb-0.5 text-[13px] text-neutral-400'>
               <TagChips tags={paper.tags} />
-              <span>• {domainLabel(paper.dm)}</span>
             </div>
 
             {(onAddToSubgraph || onRemoveFromSubgraph) && (
@@ -95,7 +94,7 @@ export default function StatsPaperDetails({
                     ? onRemoveFromSubgraph?.(paper.aid)
                     : onAddToSubgraph?.(paper.aid)
                 }
-                className='group flex items-center gap-1.5 text-[13px] text-neutral-300 hover:text-white bg-[#2a2a2a] border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 cursor-pointer transition-colors'
+                className='group flex items-center gap-1.5 text-[13px] text-neutral-300 hover:text-white bg-transparent border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 cursor-pointer transition-colors'
               >
                 {isPaperInSubgraph ? (
                   <>
@@ -128,6 +127,9 @@ export default function StatsPaperDetails({
           </div>
           <div className='text-[13px] mb-1.5'>
             <strong>Published:</strong> {paper.pd || '—'}
+          </div>
+          <div className='text-[13px] mb-1.5'>
+            <strong>arXiv domain:</strong> {domainLabel(paper.dm)}
           </div>
 
           <div className='flex gap-2 mb-3'>
@@ -226,7 +228,6 @@ export default function StatsPaperDetails({
                         <div>{n.au}</div>
                         <div className='flex items-center gap-2 mb-0.5 text-neutral-400'>
                           <TagChips tags={n.tags} />
-                          <span>• {domainLabel(n.dm)}</span>
                         </div>
                       </div>
                     </li>

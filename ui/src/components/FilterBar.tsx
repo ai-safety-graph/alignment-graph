@@ -55,7 +55,7 @@ export default function FilterBar({
 
         {datePreset !== undefined && onSetDatePreset && (
           <div className='flex items-center gap-2'>
-            <span className='shrink-0 text-xs text-neutral-500 w-12'>
+            <span className='shrink-0 text-xs text-neutral-500 w-24'>
               Date
             </span>
             <input
@@ -80,7 +80,7 @@ export default function FilterBar({
           availableYears.length > 0 &&
           onToggleYear && (
             <div className='flex items-start gap-2'>
-              <span className='shrink-0 text-xs text-neutral-500 w-12 pt-1'>
+              <span className='shrink-0 text-xs text-neutral-500 w-24 pt-1'>
                 Year
               </span>
               <div className='flex flex-wrap gap-2'>
@@ -91,7 +91,7 @@ export default function FilterBar({
                     className={`px-3 py-1 rounded-md border text-xs whitespace-nowrap ${
                       activeYear === year
                         ? 'bg-neutral-600 border-neutral-500 text-white'
-                        : 'bg-neutral-950 border-neutral-700 hover:border-neutral-500'
+                        : 'bg-transparent border-neutral-700 hover:border-neutral-500'
                     }`}
                   >
                     {year}
@@ -103,8 +103,8 @@ export default function FilterBar({
 
         {(isLoading || availableDomains.length > 0) && (
           <div className='flex items-center gap-2 overflow-x-auto scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent'>
-            <span className='shrink-0 text-xs text-neutral-500 w-12'>
-              Domain
+            <span className='shrink-0 text-xs text-neutral-500 w-24'>
+              arXiv domain:
             </span>
             {isLoading
               ? Array.from({ length: 4 }).map((_, i) => (
@@ -121,7 +121,7 @@ export default function FilterBar({
                     className={`shrink-0 px-3 py-1 rounded-md border text-xs whitespace-nowrap ${
                       activeDomains.has(dm)
                         ? 'bg-neutral-600 border-neutral-500 text-white'
-                        : 'bg-neutral-950 border-neutral-700 hover:border-neutral-500'
+                        : 'bg-transparent border-neutral-700 hover:border-neutral-500'
                     }`}
                   >
                     {domainLabel(dm)}
@@ -131,7 +131,7 @@ export default function FilterBar({
         )}
 
         <div className='flex items-start gap-2'>
-          <span className='shrink-0 text-xs text-neutral-500 w-12 pt-1'>
+          <span className='shrink-0 text-xs text-neutral-500 w-24 pt-1'>
             Tags
           </span>
           <div className='flex flex-wrap gap-2'>
@@ -150,7 +150,7 @@ export default function FilterBar({
                     className={`px-3 py-1 rounded-md border text-xs whitespace-nowrap ${
                       activeTags.has(tag)
                         ? 'bg-neutral-800 border-neutral-500'
-                        : 'bg-neutral-950 border-neutral-700 hover:border-neutral-500'
+                        : 'bg-transparent border-neutral-700 hover:border-neutral-500'
                     }`}
                   >
                     <span
@@ -165,11 +165,11 @@ export default function FilterBar({
         </div>
 
         <div className='flex items-start gap-2'>
-          <span className='shrink-0 w-12' aria-hidden />
+          <span className='shrink-0 w-24' aria-hidden />
           <button
             onClick={onClearAll}
             disabled={!hasActiveFilters}
-            className='flex items-center gap-1 px-3 py-1 rounded-md border bg-neutral-950 border-neutral-700 text-xs text-neutral-400 hover:text-neutral-200 hover:border-neutral-500 disabled:text-neutral-700 disabled:hover:text-neutral-700 disabled:hover:border-neutral-700 disabled:cursor-not-allowed'
+            className='flex items-center gap-1 px-3 py-1 rounded-md border bg-transparent border-neutral-700 text-xs text-neutral-400 hover:text-neutral-200 hover:border-neutral-500 disabled:text-neutral-700 disabled:hover:text-neutral-700 disabled:hover:border-neutral-700 disabled:cursor-not-allowed'
           >
             Clear Filters
             <RotateCcw size={13} />

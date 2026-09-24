@@ -75,7 +75,6 @@ export default function MobilePaperDetails({
           <div className='flex items-center justify-between mb-2'>
             <div className='flex items-center gap-2 mb-0.5 text-[13px] text-neutral-400'>
               <TagChips tags={paper.tags} />
-              <span>• {domainLabel(paper.dm)}</span>
             </div>
             <button
               onClick={onClose}
@@ -95,6 +94,9 @@ export default function MobilePaperDetails({
         </div>
         <div className='text-[13px] mb-1.5'>
           <strong>Published:</strong> {paper.pd || '—'}
+        </div>
+        <div className='text-[13px] mb-1.5'>
+          <strong>arXiv domain:</strong> {domainLabel(paper.dm)}
         </div>
 
         <div className='flex gap-2 mb-3'>
@@ -160,7 +162,6 @@ export default function MobilePaperDetails({
                     <div>{n.au}</div>
                     <div className='flex items-center gap-2 mb-0.5 text-neutral-400'>
                       <TagChips tags={n.tags} />
-                      <span>• {domainLabel(n.dm)}</span>
                     </div>
                   </div>
                 </li>
