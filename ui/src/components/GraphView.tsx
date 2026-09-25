@@ -18,7 +18,6 @@ import { Trash, Search, Library, Sparkles } from 'lucide-react'
 
 import { useForceConfig } from '../hooks/useForceConfig'
 import { useGraphShortcuts } from '../hooks/useGraphShortcuts'
-import { tagToColor } from '../lib/colors'
 import { buildAdjacency, clamp } from '../lib/graph'
 import type {
   TagsLegend,
@@ -39,6 +38,12 @@ import { useCapabilities } from '../hooks/useCapabilities'
 // Safety cap on the fallback graph's size; the from/to date window is what
 // actually bounds it under normal volume.
 const RECENT_PAPERS_LIMIT = 200
+
+// Node fills: papers in the loaded subgraph vs. ghost nodes surfaced as
+// related papers or by search.
+const SUBGRAPH_NODE_COLOR = '#6A93B0'
+const RELATED_GHOST_NODE_COLOR = '#F4A261'
+const SEARCH_GHOST_NODE_COLOR = '#8BD17C'
 
 // A node once it's in the force simulation: always has a live x/y position,
 // and fx/fy when pinned (dragged, hovered while locked, or coordinate-pinned).
@@ -236,13 +241,14 @@ export default function ArxivGraph({
     return m
   }, [simNodes, ghostSimNodes, relatedGhostNodes])
 
+  const searchGhostIds = useMemo(
+    () => new Set(ghostSimNodes.map((n) => n.id)),
+    [ghostSimNodes],
+  )
   const ghostIds = useMemo(
     () =>
-      new Set([
-        ...ghostSimNodes.map((n) => n.id),
-        ...relatedGhostNodes.map((n) => n.id),
-      ]),
-    [ghostSimNodes, relatedGhostNodes],
+      new Set([...searchGhostIds, ...relatedGhostNodes.map((n) => n.id)]),
+    [searchGhostIds, relatedGhostNodes],
   )
 
   const { byId, adj, tags } = useMemo(() => {
@@ -345,19 +351,30 @@ export default function ArxivGraph({
   }
 
   // Neighbor highlight
+  // Last subgraph (non-ghost) node that was locked. Ghosts have no edges, so
+  // while one is locked (e.g. a related paper clicked from a selection) the
+  // subgraph keeps the dimming of the node it was reached from.
+  const [dimAnchorId, setDimAnchorId] = useState<number | null>(null)
+  useEffect(() => {
+    if (lockedId == null) setDimAnchorId(null)
+    else if (!ghostIds.has(lockedId)) setDimAnchorId(lockedId)
+  }, [lockedId, ghostIds])
+
   const neighborSet = useMemo(() => {
     if (activeId == null) return null
-    if (ghostIds.has(activeId)) return null
-    const s = new Set<number>([activeId])
-    for (const { id } of adj.get(activeId) ?? []) s.add(id)
+    const rootId = ghostIds.has(activeId) ? dimAnchorId : activeId
+    if (rootId == null) return null
+    const s = new Set<number>([rootId])
+    for (const { id } of adj.get(rootId) ?? []) s.add(id)
     return s
-  }, [activeId, adj, ghostIds])
+  }, [activeId, dimAnchorId, adj, ghostIds])
 
   // Interaction gating
   const isInteractive = useCallback(
     (id: number) => {
       if (ghostIds.has(id)) return true
-      if (activeId != null && ghostIds.has(activeId)) return true
+      if (activeId != null && ghostIds.has(activeId))
+        return neighborSet ? neighborSet.has(id) : true
       if (lockedId != null || selectedId != null) return !!neighborSet?.has(id)
       return true
     },
@@ -585,36 +602,22 @@ export default function ArxivGraph({
     let alpha = 1
     if (ghostIds.has(n.id)) {
       // ghosts (search + related) keep their own alpha, never dimmed by neighborSet
-      alpha = activeId === n.id ? 0.85 : 0.35
+      alpha = activeId === n.id ? 0.85 : 0.55
     } else if (neighborSet) {
       alpha = neighborSet.has(n.id) ? 1 : 0.08
     }
     ctx.globalAlpha = alpha
     ctx.beginPath()
-    const nodeTags = n.tags ?? []
-    ctx.fillStyle = nodeTags[0] ? tagToColor(nodeTags[0]) : '#666666'
+    ctx.fillStyle = searchGhostIds.has(n.id)
+      ? SEARCH_GHOST_NODE_COLOR
+      : ghostIds.has(n.id)
+        ? RELATED_GHOST_NODE_COLOR
+        : SUBGRAPH_NODE_COLOR
     ctx.arc(n.x, n.y, r, 0, 2 * Math.PI, false)
     ctx.fill()
     ctx.lineWidth = 0.5
     ctx.strokeStyle = 'rgba(255,255,255,0.7)'
     ctx.stroke()
-    // Secondary tags: a short colored ring segment per extra tag, dropped at
-    // small on-screen radius (same threshold as label text below) since
-    // full pie-wedge fills are illegible at the size these nodes render at.
-    const secondaryTags = nodeTags.slice(1, 4)
-    if (secondaryTags.length > 0 && globalScale > 0.8) {
-      const slice = (2 * Math.PI) / secondaryTags.length
-      secondaryTags.forEach((tag, i) => {
-        ctx.save()
-        ctx.globalAlpha = alpha
-        ctx.strokeStyle = tagToColor(tag)
-        ctx.lineWidth = 1.5
-        ctx.beginPath()
-        ctx.arc(n.x, n.y, r + 3, i * slice, i * slice + slice * 0.8)
-        ctx.stroke()
-        ctx.restore()
-      })
-    }
     if (relatedLoading && selectedId === n.id) {
       const angle = (Date.now() / 300) % (Math.PI * 2)
       ctx.save()
