@@ -33,6 +33,7 @@ import GraphPaperDetails from './GraphPaperDetails'
 import SearchResultsOverlay from './SearchResultsOverlay'
 import TagsLegendOverlay from './TagsLegendOverlay'
 import Dropdown from './Dropdown'
+import LoadingIndicator from './LoadingIndicator'
 import { useCapabilities } from '../hooks/useCapabilities'
 
 // Safety cap on the fallback graph's size; the from/to date window is what
@@ -123,7 +124,11 @@ export default function ArxivGraph({
 
   // Fallback graph when nothing is explicitly selected: papers published in
   // the last month, refetched periodically so the default view stays fresh.
-  const { data: recentPapers } = useQuery({
+  const {
+    data: recentPapers,
+    isLoading: isRecentLoading,
+    error: recentError,
+  } = useQuery({
     queryKey: ['recentPapers'],
     queryFn: async () => {
       const { fetchPapers } = await import('../lib/api')
@@ -199,9 +204,14 @@ export default function ArxivGraph({
     // empty ids list, so skip the request and show an empty-state instead.
     enabled: ids.length > 0,
   })
-  const error = queryError
-    ? `Failed to load graph: ${queryError.message}`
-    : null
+  const error = recentError
+    ? `Failed to load recent papers: ${recentError.message}`
+    : queryError
+      ? `Failed to load graph: ${queryError.message}`
+      : null
+  // The subgraph query stays disabled (and so not "loading") until recent
+  // papers arrive, so cover that first request too.
+  const showLoading = isRecentLoading || (isGraphLoading && ids.length > 0)
 
   // Prepare simulation nodes (mutable x/y)
   // Stored coords are pinned, so the collide force never runs on them; resolve
@@ -681,11 +691,8 @@ export default function ArxivGraph({
 
   return (
     <div className='fixed inset-0 bg-neutral-950 text-[#e5e5e5]'>
-      {isGraphLoading && ids.length > 0 && (
-        <div className='absolute inset-0 flex flex-col items-center justify-center gap-3'>
-          <span className='h-8 w-8 rounded-full border-2 border-neutral-700 border-t-neutral-300 animate-spin' />
-          <p className='text-sm text-neutral-500'>Loading graph…</p>
-        </div>
+      {showLoading && (
+        <LoadingIndicator label='Loading graph…' className='absolute inset-0' />
       )}
       {isEmptySavedGraph && (
         <div className='absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center'>
