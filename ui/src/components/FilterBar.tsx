@@ -1,5 +1,5 @@
 import { RotateCcw } from 'lucide-react'
-import { tagToColor } from '../lib/colors'
+import { tagIcon } from '../lib/tags'
 import { domainLabel } from '../lib/domain'
 import { DATE_PRESETS } from '../hooks/useServerFilters'
 import type { DatePreset } from '../hooks/useServerFilters'
@@ -143,24 +143,28 @@ export default function FilterBar({
                     aria-hidden
                   />
                 ))
-              : tagEntries.map(([tag, meta]) => (
-                  <button
-                    key={tag}
-                    onClick={() => onToggleTag(tag)}
-                    className={`px-3 py-1 rounded-md border text-xs whitespace-nowrap ${
-                      activeTags.has(tag)
-                        ? 'bg-neutral-800 border-neutral-500'
-                        : 'bg-transparent border-neutral-700 hover:border-neutral-500'
-                    }`}
-                  >
-                    <span
-                      className='inline-block w-2 h-2 mr-2 rounded-full border border-[#333333]'
-                      style={{ backgroundColor: tagToColor(tag) }}
-                      aria-hidden
-                    />
-                    {tag + ' • ' + meta.size}
-                  </button>
-                ))}
+              : tagEntries.map(([tag, meta]) => {
+                  const Icon = tagIcon(tag)
+                  const active = activeTags.has(tag)
+                  return (
+                    <button
+                      key={tag}
+                      onClick={() => onToggleTag(tag)}
+                      className={`inline-flex items-center px-3 py-1 rounded-md border text-xs whitespace-nowrap ${
+                        active
+                          ? 'bg-neutral-800 border-neutral-500'
+                          : 'bg-transparent border-neutral-700 hover:border-neutral-500'
+                      }`}
+                    >
+                      <Icon
+                        size={12}
+                        className={`shrink-0 mr-1.5 ${active ? 'text-[#4ea8de]' : ''}`}
+                        aria-hidden
+                      />
+                      {tag + ' • ' + meta.size}
+                    </button>
+                  )
+                })}
           </div>
         </div>
 

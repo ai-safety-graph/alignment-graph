@@ -1,4 +1,4 @@
-import { tagToColor } from '../lib/colors'
+import { tagIcon } from '../lib/tags'
 
 interface TagChipsProps {
   tags: string[]
@@ -25,19 +25,18 @@ export default function TagChips({ tags, isLoading = false, max }: TagChipsProps
 
   return (
     <span className='inline-flex flex-wrap items-center gap-1'>
-      {shown.map((tag, i) => (
-        <span
-          key={tag}
-          className={`inline-flex items-center gap-1 ${i === 0 ? 'text-neutral-200' : 'text-neutral-400'}`}
-        >
+      {shown.map((tag) => {
+        const Icon = tagIcon(tag)
+        return (
           <span
-            className='inline-block w-2 h-2 rounded-full border border-[#333333]'
-            style={{ background: tagToColor(tag) }}
-            aria-hidden
-          />
-          {tag}
-        </span>
-      ))}
+            key={tag}
+            className='inline-flex items-center gap-1 text-neutral-300'
+          >
+            <Icon size={12} className='shrink-0' aria-hidden />
+            {tag}
+          </span>
+        )
+      })}
       {hidden > 0 && (
         <span className='text-neutral-500'>+{hidden}</span>
       )}
