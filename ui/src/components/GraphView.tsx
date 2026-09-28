@@ -14,11 +14,23 @@ import type {
   LinkObject,
   NodeObject,
 } from 'react-force-graph-2d'
-import { Trash, Search, Library, Sparkles } from 'lucide-react'
+import {
+  Trash,
+  Search,
+  Library,
+  Sparkles,
+  SlidersHorizontal,
+} from 'lucide-react'
 
 import { useForceConfig } from '../hooks/useForceConfig'
 import { useGraphShortcuts } from '../hooks/useGraphShortcuts'
-import { buildAdjacency, clamp, separatePoints } from '../lib/graph'
+import { useServerFilters } from '../hooks/useServerFilters'
+import {
+  buildAdjacency,
+  clamp,
+  nodeMatchesFilters,
+  separatePoints,
+} from '../lib/graph'
 import type {
   TagsLegend,
   GraphDataCompact,
@@ -31,8 +43,8 @@ import type { SavedGraph } from '../lib/storage'
 
 import GraphPaperDetails from './GraphPaperDetails'
 import SearchResultsOverlay from './SearchResultsOverlay'
-import TagsLegendOverlay from './TagsLegendOverlay'
 import Dropdown from './Dropdown'
+import FilterBar from './FilterBar'
 import LoadingIndicator from './LoadingIndicator'
 import { useCapabilities } from '../hooks/useCapabilities'
 
@@ -286,6 +298,51 @@ export default function ArxivGraph({
     for (const n of relatedGhostNodes) byId.set(n.id, n)
     return { byId, adj, tags: data.tags }
   }, [data, ghostSimNodes, relatedGhostNodes])
+
+  // Filters (client-side, over the loaded subgraph). Excluded subgraph nodes
+  // and their links are dropped from graphData; ghosts are always shown since
+  // they're results the user explicitly asked for.
+  const {
+    fromDate,
+    datePreset,
+    setDatePreset,
+    activeTags,
+    activeDomains,
+    tagEntries,
+    hasActiveFilters,
+    clearAllFilters,
+    toggleTag,
+    toggleDomain,
+  } = useServerFilters(tags)
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const filtersRef = useRef<HTMLDivElement | null>(null)
+  const activeFilterCount =
+    activeTags.size + activeDomains.size + (datePreset !== 'all' ? 1 : 0)
+
+  // Capture phase: d3-zoom on the graph canvas stops mousedown propagation,
+  // so a bubbling listener would never see clicks on the graph itself.
+  useEffect(() => {
+    if (!filtersOpen) return
+    const h = (e: PointerEvent) => {
+      if (filtersRef.current && !filtersRef.current.contains(e.target as Node))
+        setFiltersOpen(false)
+    }
+    document.addEventListener('pointerdown', h, true)
+    return () => document.removeEventListener('pointerdown', h, true)
+  }, [filtersOpen])
+
+  const availableDomains = useMemo(
+    () => [...new Set(simNodes.map((n) => n.dm))].sort(),
+    [simNodes],
+  )
+
+  const visibleIds = useMemo(() => {
+    if (!hasActiveFilters) return null
+    const f = { tags: activeTags, domains: activeDomains, fromDate }
+    return new Set(
+      simNodes.filter((n) => nodeMatchesFilters(n, f)).map((n) => n.id),
+    )
+  }, [simNodes, hasActiveFilters, activeTags, activeDomains, fromDate])
 
   // Debounced backend search
   const searchTimerRef = useRef<number | null>(null)
@@ -625,9 +682,35 @@ export default function ArxivGraph({
   useGraphShortcuts({ query, setQuery, onBackgroundClick, searchInputRef })
 
   const allSimNodes = useMemo(
-    () => [...simNodes, ...ghostSimNodes, ...relatedGhostNodes],
-    [simNodes, ghostSimNodes, relatedGhostNodes],
+    () => [
+      ...(visibleIds ? simNodes.filter((n) => visibleIds.has(n.id)) : simNodes),
+      ...ghostSimNodes,
+      ...relatedGhostNodes,
+    ],
+    [simNodes, visibleIds, ghostSimNodes, relatedGhostNodes],
   )
+
+  const graphData = useMemo(() => {
+    const links = data?.links ?? []
+    return {
+      nodes: allSimNodes,
+      links: visibleIds
+        ? links.filter((l) => visibleIds.has(l.s) && visibleIds.has(l.t))
+        : links,
+    }
+  }, [allSimNodes, data, visibleIds])
+
+  // Drop the selection/hover when a filter hides the node it points at.
+  useEffect(() => {
+    if (!visibleIds) return
+    const isHidden = (id: number | null) =>
+      id != null && !ghostIds.has(id) && !visibleIds.has(id)
+    if (isHidden(selectedId) || isHidden(lockedId) || isHidden(hoverId)) {
+      setLockedId(null)
+      setHoverId(null)
+      setSelectedId(null)
+    }
+  }, [visibleIds, ghostIds, selectedId, lockedId, hoverId])
 
   if (error) return <div className='text-red-600 p-4'>{error}</div>
 
@@ -705,15 +788,26 @@ export default function ArxivGraph({
           </p>
         </div>
       )}
+      {data && visibleIds?.size === 0 && (
+        <div className='absolute inset-0 z-[1] flex flex-col items-center justify-center gap-3 px-4 text-center pointer-events-none'>
+          <p className='text-lg text-neutral-300'>
+            No papers match these filters
+          </p>
+          <button
+            type='button'
+            onClick={clearAllFilters}
+            className='pointer-events-auto px-3 py-1 rounded-md border bg-transparent border-neutral-700 text-sm text-neutral-400 hover:text-neutral-200 hover:border-neutral-500 cursor-pointer'
+          >
+            Clear filters
+          </button>
+        </div>
+      )}
       {data && width > 0 && height > 0 && (
         <ForceGraph2D<NodeCompact, LinkCompact>
           ref={fgRef}
           width={width}
           height={height}
-          graphData={{
-            nodes: allSimNodes,
-            links: data.links,
-          }}
+          graphData={graphData}
           backgroundColor='#1a1a1a'
           nodeId='id'
           linkSource='s'
@@ -825,9 +919,7 @@ export default function ArxivGraph({
       </div>
 
       {/* Overlays */}
-      {/* Search results overlay flexes to fill the space above the tags
-          legend, so its bottom edge always meets the legend's top edge
-          regardless of the legend's (dynamic) height. */}
+      {/* Search results overlay flexes to fill the left column. */}
       <div className='fixed left-4 top-[72px] bottom-4 z-10 flex flex-col items-start justify-end gap-3 pointer-events-none'>
         {query && (searchResults.length > 0 || isSearching) && (
           <div className='flex-1 min-h-0 w-[360px] pointer-events-auto'>
@@ -848,9 +940,6 @@ export default function ArxivGraph({
             />
           </div>
         )}
-        <div className='shrink-0 pointer-events-auto'>
-          <TagsLegendOverlay tags={tags} />
-        </div>
       </div>
 
       {selected && (
@@ -930,6 +1019,44 @@ export default function ArxivGraph({
             </button>
           )}
         </Dropdown>
+
+        <div ref={filtersRef}>
+          <button
+            type='button'
+            onClick={() => setFiltersOpen((v) => !v)}
+            aria-label={filtersOpen ? 'Collapse filters' : 'Expand filters'}
+            aria-expanded={filtersOpen}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md cursor-pointer bg-transparent border text-[13px] transition-colors ${
+              hasActiveFilters
+                ? 'border-[#4ea8de] text-[#4ea8de]'
+                : `border-neutral-700 hover:border-neutral-500 hover:text-white ${filtersOpen ? 'text-white' : 'text-neutral-300'}`
+            }`}
+          >
+            <SlidersHorizontal size={14} />
+            Filters
+            {activeFilterCount > 0 && (
+              <span className='min-w-4 px-1 rounded-full bg-[#4ea8de] text-[11px] leading-4 text-neutral-950'>
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+          {filtersOpen && (
+            <div className='fixed top-14 left-4 z-20 w-[min(900px,calc(100vw-2rem))] max-h-[80vh] overflow-auto shadow-lg rounded-lg'>
+              <FilterBar
+                tagEntries={tagEntries}
+                availableDomains={availableDomains}
+                activeTags={activeTags}
+                activeDomains={activeDomains}
+                datePreset={datePreset}
+                hasActiveFilters={hasActiveFilters}
+                onToggleTag={toggleTag}
+                onToggleDomain={toggleDomain}
+                onSetDatePreset={setDatePreset}
+                onClearAll={clearAllFilters}
+              />
+            </div>
+          )}
+        </div>
 
         {/* <Link
           to='/stats'

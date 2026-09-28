@@ -44,3 +44,19 @@ export function buildAdjacency(nodes: NodeCompact[], links: LinkCompact[]) {
   for (const arr of adj.values()) arr.sort((a, b) => b.w - a.w)
   return { byId, adj }
 }
+
+export type NodeFilters = {
+  tags: Set<string>
+  domains: Set<string>
+  fromDate?: string
+}
+
+// Client-side counterpart of /api/papers filtering: any selected tag (OR),
+// domain in the selected set, published on or after fromDate. Groups AND
+// together; an empty set / undefined date imposes no constraint.
+export function nodeMatchesFilters(n: NodeCompact, f: NodeFilters): boolean {
+  if (f.tags.size > 0 && !n.tags.some((t) => f.tags.has(t))) return false
+  if (f.domains.size > 0 && !f.domains.has(n.dm)) return false
+  if (f.fromDate && (!n.pd || n.pd.slice(0, 10) < f.fromDate)) return false
+  return true
+}
