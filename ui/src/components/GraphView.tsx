@@ -796,7 +796,7 @@ export default function ArxivGraph({
           <button
             type='button'
             onClick={clearAllFilters}
-            className='pointer-events-auto px-3 py-1 rounded-md border bg-transparent border-neutral-700 text-sm text-neutral-400 hover:text-neutral-200 hover:border-neutral-500 cursor-pointer'
+            className='pointer-events-auto px-3 py-1 rounded-md border bg-neutral-950 border-neutral-700 text-sm text-neutral-400 hover:text-neutral-200 hover:border-neutral-500 cursor-pointer'
           >
             Clear filters
           </button>
@@ -847,7 +847,7 @@ export default function ArxivGraph({
 
       {/* Search bar */}
       <div className='fixed top-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2'>
-        <div className='bg-[#2a2a2a] backdrop-blur-xs rounded-md w-[min(550px,80vw)] border border-[#333333]'>
+        <div className='bg-[#2a2a2a] backdrop-blur-xs rounded-md w-[min(550px,80vw)]'>
           <div className='flex items-center gap-2'>
             <div className='relative flex-1'>
               <Search
@@ -899,7 +899,7 @@ export default function ArxivGraph({
                   m === 'semantic' ? 'keyword' : 'semantic',
                 )
               }
-              className={`shrink-0 px-2 py-1 rounded-md bg-transparent border cursor-pointer transition-colors ${
+              className={`shrink-0 px-2 py-1 rounded-md bg-neutral-950 border cursor-pointer transition-colors ${
                 searchMode === 'semantic'
                   ? 'border-[#4ea8de] text-[#4ea8de]'
                   : 'border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white'
@@ -971,7 +971,7 @@ export default function ArxivGraph({
         <Link
           to='/stats'
           aria-label='Show stats'
-          className='px-2 py-1 rounded-md cursor-pointer bg-transparent border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors'
+          className='px-2 py-1 rounded-md cursor-pointer bg-neutral-950 border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors'
         >
           <Library size={18} />
         </Link>
@@ -1026,10 +1026,10 @@ export default function ArxivGraph({
             onClick={() => setFiltersOpen((v) => !v)}
             aria-label={filtersOpen ? 'Collapse filters' : 'Expand filters'}
             aria-expanded={filtersOpen}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md cursor-pointer bg-transparent border text-[13px] transition-colors ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md cursor-pointer bg-neutral-950 border text-[13px] transition-colors ${
               hasActiveFilters
                 ? 'border-[#4ea8de] text-[#4ea8de]'
-                : `border-neutral-700 hover:border-neutral-500 hover:text-white ${filtersOpen ? 'text-white' : 'text-neutral-300'}`
+                : `hover:border-neutral-500 hover:text-white ${filtersOpen ? 'border-neutral-500 text-white' : 'border-neutral-700 text-neutral-300'}`
             }`}
           >
             <SlidersHorizontal size={14} />
@@ -1061,7 +1061,7 @@ export default function ArxivGraph({
         {/* <Link
           to='/stats'
           aria-label='Show stats'
-          className='shrink-0 flex items-center gap-1.5 px-3 py-[7px] rounded-full bg-transparent border border-[#333333] text-sm text-neutral-400 hover:text-neutral-200 whitespace-nowrap cursor-pointer'
+          className='shrink-0 flex items-center gap-1.5 px-3 py-[7px] rounded-full bg-neutral-950 border border-[#333333] text-sm text-neutral-400 hover:text-neutral-200 whitespace-nowrap cursor-pointer'
         >
           New Graph
           <Plus size={13} />

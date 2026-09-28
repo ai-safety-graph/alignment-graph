@@ -47,14 +47,11 @@ export default function GraphPaperDetails({
   return (
     <aside
       ref={scrollerRef}
-      className='fixed top-[72px] right-4 bottom-4 w-[440px] z-10 bg-[#262626] backdrop-blur-md border border-[#333333] rounded-xl pb-3 px-3 overflow-auto text-[#e5e5e5] scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent scrollbar-hover:scrollbar-thumb-[#666]'
+      className='fixed top-[72px] right-4 bottom-4 w-[440px] z-10 bg-neutral-950 backdrop-blur-md border border-[#333333] rounded-xl pb-3 px-3 overflow-auto text-[#e5e5e5] scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent scrollbar-hover:scrollbar-thumb-[#666]'
     >
       <div>
-        <div className='py-3 sticky top-0 bg-[#262626]'>
-          <div className='flex items-center justify-between mb-2'>
-            <div className='flex items-center gap-2 mb-0.5 text-[13px] text-neutral-400'>
-              <TagChips tags={paper.tags} />
-            </div>
+        <div className='py-3 sticky top-0 bg-neutral-950'>
+          <div className='flex items-center justify-end mb-2'>
             <div className='flex items-center gap-1'>
               <kbd className='px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-600 text-[10px] font-mono text-neutral-300'>
                 Esc
@@ -72,6 +69,9 @@ export default function GraphPaperDetails({
           <h4 className='mt-1 mb-2 text-lg font-semibold leading-snug text-[#e5e5e5]'>
             {paper.t}
           </h4>
+          <div className='flex items-center gap-2 mb-2 text-[13px] text-neutral-400'>
+            <TagChips tags={paper.tags} />
+          </div>
 
           {(onAddToSubgraph || onRemoveFromSubgraph) && (
             <button
@@ -80,7 +80,7 @@ export default function GraphPaperDetails({
                   ? onRemoveFromSubgraph?.(paper.aid)
                   : onAddToSubgraph?.(paper.aid)
               }
-              className='group flex items-center gap-1.5 text-[13px] text-neutral-300 hover:text-white bg-transparent border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 mb-2 cursor-pointer transition-colors'
+              className='group flex items-center gap-1.5 text-[13px] text-neutral-300 hover:text-white bg-neutral-950 border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 mb-2 cursor-pointer transition-colors'
             >
               {isPaperInSubgraph ? (
                 <>
@@ -179,29 +179,64 @@ export default function GraphPaperDetails({
               Showing {related.length} (sorted by similarity)
             </div>
             <ul className='list-none p-0 m-0'>
-              {related.map((r) => (
-                <li key={r.aid} className='py-1.5 border-b border-neutral-800'>
-                  <div className='flex justify-between gap-2'>
-                    <a
-                      onClick={(e) => {
-                        e.preventDefault()
-                        onSelectPaper(r.aid)
-                      }}
-                      href='#'
-                      className='no-underline text-blue-400 hover:underline flex-1'
-                      title={r.t}
-                    >
-                      {r.t.length > 80 ? r.t.slice(0, 77) + '…' : r.t}
-                    </a>
-                  </div>
-                  <div className='text-[12px] text-neutral-500'>
-                    <div>{r.au}</div>
-                    <div className='flex items-center gap-2 mb-0.5 text-neutral-400'>
-                      <TagChips tags={r.tags} />
+              {related.map((r) => {
+                const inSubgraph = subgraphPaperIds?.has(r.aid) ?? false
+                return (
+                  <li
+                    key={r.aid}
+                    className='py-1.5 border-b border-neutral-800'
+                  >
+                    <div className='flex gap-2'>
+                      <div className='flex-1 min-w-0'>
+                        <a
+                          onClick={(e) => {
+                            e.preventDefault()
+                            onSelectPaper(r.aid)
+                          }}
+                          href='#'
+                          className='no-underline text-blue-400 hover:underline'
+                          title={r.t}
+                        >
+                          {r.t.length > 80 ? r.t.slice(0, 77) + '…' : r.t}
+                        </a>
+                        <div className='text-[12px] text-neutral-500'>
+                          <div>{r.au}</div>
+                          <div className='flex items-center gap-2 mb-0.5 text-neutral-400'>
+                            <TagChips tags={r.tags} />
+                          </div>
+                        </div>
+                      </div>
+                      {(onAddToSubgraph || onRemoveFromSubgraph) && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (inSubgraph) onRemoveFromSubgraph?.(r.aid)
+                            else onAddToSubgraph?.(r.aid)
+                          }}
+                          aria-label={
+                            inSubgraph
+                              ? `Remove from ${subgraphLabel}`
+                              : `Add to ${subgraphLabel}`
+                          }
+                          className='group shrink-0 self-start p-1 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200 transition-colors'
+                        >
+                          {inSubgraph ? (
+                            <ShareMinusIcon
+                              size={14}
+                              className='text-red-800 group-hover:text-red-500 transition-colors'
+                            />
+                          ) : (
+                            <SharePlusIcon
+                              size={14}
+                              className='text-green-800 group-hover:text-green-500 transition-colors'
+                            />
+                          )}
+                        </button>
+                      )}
                     </div>
-                  </div>
-                </li>
-              ))}
+                  </li>
+                )
+              })}
             </ul>
           </>
         )}

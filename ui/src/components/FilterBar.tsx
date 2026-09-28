@@ -49,7 +49,7 @@ export default function FilterBar({
       : -1
 
   return (
-    <div className='w-full my-2 rounded-lg border border-neutral-700 bg-[#1f1f1f]'>
+    <div className='w-full my-2 rounded-lg border border-neutral-700 bg-neutral-950'>
       <div className='px-5 py-3 space-y-2'>
         <div className='text-xs font-medium text-neutral-400'>Filter by</div>
 
@@ -91,7 +91,7 @@ export default function FilterBar({
                     className={`px-3 py-1 rounded-md border text-xs whitespace-nowrap ${
                       activeYear === year
                         ? 'bg-neutral-600 border-neutral-500 text-white'
-                        : 'bg-transparent border-neutral-700 hover:border-neutral-500'
+                        : 'bg-neutral-950 border-neutral-700 hover:border-neutral-500'
                     }`}
                   >
                     {year}
@@ -121,7 +121,7 @@ export default function FilterBar({
                     className={`shrink-0 px-3 py-1 rounded-md border text-xs whitespace-nowrap ${
                       activeDomains.has(dm)
                         ? 'bg-neutral-600 border-neutral-500 text-white'
-                        : 'bg-transparent border-neutral-700 hover:border-neutral-500'
+                        : 'bg-neutral-950 border-neutral-700 hover:border-neutral-500'
                     }`}
                   >
                     {domainLabel(dm)}
@@ -153,7 +153,7 @@ export default function FilterBar({
                       className={`inline-flex items-center px-3 py-1 rounded-md border text-xs whitespace-nowrap ${
                         active
                           ? 'bg-neutral-800 border-neutral-500'
-                          : 'bg-transparent border-neutral-700 hover:border-neutral-500'
+                          : 'bg-neutral-950 border-neutral-700 hover:border-neutral-500'
                       }`}
                     >
                       <Icon
@@ -173,7 +173,7 @@ export default function FilterBar({
           <button
             onClick={onClearAll}
             disabled={!hasActiveFilters}
-            className='flex items-center gap-1 px-3 py-1 rounded-md border bg-transparent border-neutral-700 text-xs text-neutral-400 hover:text-neutral-200 hover:border-neutral-500 disabled:text-neutral-700 disabled:hover:text-neutral-700 disabled:hover:border-neutral-700 disabled:cursor-not-allowed'
+            className='flex items-center gap-1 px-3 py-1 rounded-md border bg-neutral-950 border-neutral-700 text-xs text-neutral-400 hover:text-neutral-200 hover:border-neutral-500 disabled:text-neutral-700 disabled:hover:text-neutral-700 disabled:hover:border-neutral-700 disabled:cursor-not-allowed'
           >
             Clear Filters
             <RotateCcw size={13} />
