@@ -18,7 +18,7 @@ import { Trash, Search, Library, Sparkles } from 'lucide-react'
 
 import { useForceConfig } from '../hooks/useForceConfig'
 import { useGraphShortcuts } from '../hooks/useGraphShortcuts'
-import { buildAdjacency, clamp } from '../lib/graph'
+import { buildAdjacency, clamp, separatePoints } from '../lib/graph'
 import type {
   TagsLegend,
   GraphDataCompact,
@@ -44,6 +44,11 @@ const RECENT_PAPERS_LIMIT = 200
 const SUBGRAPH_NODE_COLOR = '#6A93B0'
 const RELATED_GHOST_NODE_COLOR = '#F4A261'
 const SEARCH_GHOST_NODE_COLOR = '#8BD17C'
+
+// Node radius in graph units, and the minimum centre-to-centre spacing that
+// pinned nodes are separated to (2 × radius plus a small gap).
+const NODE_RADIUS = 4
+const NODE_MIN_DIST = 2 * NODE_RADIUS + 2
 
 // A node once it's in the force simulation: always has a live x/y position,
 // and fx/fy when pinned (dragged, hovered while locked, or coordinate-pinned).
@@ -199,14 +204,21 @@ export default function ArxivGraph({
     : null
 
   // Prepare simulation nodes (mutable x/y)
+  // Stored coords are pinned, so the collide force never runs on them; resolve
+  // overlaps once up front instead.
   const simNodes = useMemo(() => {
     if (!data) return [] as SimNode[]
     const pin = data.meta.coords.included
-    return data.nodes.map((n) => ({
+    const pos = pin
+      ? separatePoints(
+          data.nodes.map((n) => ({ x: n.x ?? 0, y: n.y ?? 0 })),
+          { minDist: NODE_MIN_DIST },
+        )
+      : data.nodes.map((n) => ({ x: n.x ?? 0, y: n.y ?? 0 }))
+    return data.nodes.map((n, i) => ({
       ...n,
-      x: n.x ?? 0,
-      y: n.y ?? 0,
-      ...(pin ? { fx: n.x ?? 0, fy: n.y ?? 0 } : {}),
+      ...pos[i],
+      ...(pin ? { fx: pos[i].x, fy: pos[i].y } : {}),
     }))
   }, [data])
 
@@ -302,11 +314,19 @@ export default function ArxivGraph({
           let nextId = maxId
           const coords = dataRef.current?.meta.coords
           const pin = !!coords?.included
-          const ghosts = ghostData.nodes.map((n) => {
-            const pos =
-              coords?.bounds && n.rx != null && n.ry != null
-                ? ghostCoord(n.rx, n.ry, coords)
-                : { x: n.x ?? 0, y: n.y ?? 0 }
+          const rawPos = ghostData.nodes.map((n) =>
+            coords?.bounds && n.rx != null && n.ry != null
+              ? ghostCoord(n.rx, n.ry, coords)
+              : { x: n.x ?? 0, y: n.y ?? 0 },
+          )
+          const positions = pin
+            ? separatePoints(rawPos, {
+                minDist: NODE_MIN_DIST,
+                fixed: simNodesRef.current,
+              })
+            : rawPos
+          const ghosts = ghostData.nodes.map((n, i) => {
+            const pos = positions[i]
             return {
               ...n,
               id: nextId++,
@@ -414,13 +434,24 @@ export default function ArxivGraph({
             ...searchGhosts.map((n) => n.id),
             ...retained.map((n) => n.id),
           ) + 1
-        const built = retained.slice()
+        const fresh: RelatedPaper[] = []
         for (const r of results) {
           if (r.rx == null || r.ry == null) continue
           if (r.aid === sel.aid) continue
           if (existingAids.has(r.aid) || seenAids.has(r.aid)) continue
           seenAids.add(r.aid)
-          const { x, y } = ghostCoord(r.rx, r.ry, coords)
+          fresh.push(r)
+        }
+        const rawPos = fresh.map((r) => ghostCoord(r.rx!, r.ry!, coords))
+        const positions = pin
+          ? separatePoints(rawPos, {
+              minDist: NODE_MIN_DIST,
+              fixed: [...sims, ...searchGhosts, ...retained],
+            })
+          : rawPos
+        const built = retained.slice()
+        fresh.forEach((r, i) => {
+          const { x, y } = positions[i]
           built.push({
             id: nextId++,
             aid: r.aid,
@@ -434,7 +465,7 @@ export default function ArxivGraph({
             y,
             ...(pin ? { fx: x, fy: y } : {}),
           } as SimNode)
-        }
+        })
         return built
       })
     },
@@ -597,7 +628,7 @@ export default function ArxivGraph({
     globalScale: number,
   ) => {
     const n = node as SimNode
-    const r = 4
+    const r = NODE_RADIUS
     ctx.save()
     let alpha = 1
     if (ghostIds.has(n.id)) {
