@@ -84,10 +84,7 @@ export default function MobilePaperDetails({
               </div>
             )}
           </div>
-          <div className='flex items-center justify-between mb-2'>
-            <div className='flex items-center gap-2 mb-0.5 text-[13px] text-neutral-400'>
-              <TagChips tags={paper.tags} />
-            </div>
+          <div className='flex items-center justify-end mb-2'>
             <button
               onClick={onClose}
               className='p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200'
@@ -100,6 +97,9 @@ export default function MobilePaperDetails({
           <h4 className='mt-1 mb-2 text-lg font-semibold leading-snug text-[#e5e5e5]'>
             {paper.t}
           </h4>
+          <div className='flex items-center gap-2 mb-2 text-[13px] text-neutral-400'>
+            <TagChips tags={paper.tags} />
+          </div>
           {(onAddToSubgraph || onRemoveFromSubgraph) && (
             <div className='mb-2'>
               <button
@@ -108,7 +108,7 @@ export default function MobilePaperDetails({
                     ? onRemoveFromSubgraph?.(paper.aid)
                     : onAddToSubgraph?.(paper.aid)
                 }
-                className='group flex items-center gap-1.5 max-w-full text-[13px] text-neutral-300 hover:text-white bg-transparent border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 cursor-pointer transition-colors'
+                className='group flex items-center gap-1.5 max-w-full text-[13px] text-neutral-300 hover:text-white bg-neutral-950 border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 cursor-pointer transition-colors'
               >
                 {isPaperInSubgraph ? (
                   <>

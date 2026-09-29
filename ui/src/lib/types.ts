@@ -6,7 +6,7 @@ export type NodeCompact = {
   pd: string
   dm: string
   ln: string
-  /** Taxonomy tags, ordered by score descending -- tags[0] is the primary tag. */
+  /** Taxonomy tags. Order carries no meaning -- no tag is more "primary" than another. */
   tags: string[]
   sm?: string
   x?: number

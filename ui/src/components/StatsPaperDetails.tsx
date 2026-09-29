@@ -82,44 +82,40 @@ export default function StatsPaperDetails({
               </div>
             )}
           </div>
-          <div className='flex items-center justify-between mb-2'>
-            <div className='flex items-center gap-2 mb-0.5 text-[13px] text-neutral-400'>
-              <TagChips tags={paper.tags} />
-            </div>
-
-            {(onAddToSubgraph || onRemoveFromSubgraph) && (
-              <button
-                onClick={() =>
-                  isPaperInSubgraph
-                    ? onRemoveFromSubgraph?.(paper.aid)
-                    : onAddToSubgraph?.(paper.aid)
-                }
-                className='group flex items-center gap-1.5 text-[13px] text-neutral-300 hover:text-white bg-transparent border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 cursor-pointer transition-colors'
-              >
-                {isPaperInSubgraph ? (
-                  <>
-                    Remove from {subgraphLabel}
-                    <ShareMinusIcon
-                      size={14}
-                      className='text-red-800 group-hover:text-red-500 transition-colors'
-                    />
-                  </>
-                ) : (
-                  <>
-                    Add to {subgraphLabel}
-                    <SharePlusIcon
-                      size={14}
-                      className='text-green-800 group-hover:text-green-500 transition-colors'
-                    />
-                  </>
-                )}
-              </button>
-            )}
-          </div>
-
           <h4 className='mt-1 mb-2 text-lg font-semibold leading-snug text-[#e5e5e5]'>
             {paper.t}
           </h4>
+          <div className='flex items-center gap-2 mb-2 text-[13px] text-neutral-400'>
+            <TagChips tags={paper.tags} />
+          </div>
+          {(onAddToSubgraph || onRemoveFromSubgraph) && (
+            <button
+              onClick={() =>
+                isPaperInSubgraph
+                  ? onRemoveFromSubgraph?.(paper.aid)
+                  : onAddToSubgraph?.(paper.aid)
+              }
+              className='group flex items-center gap-1.5 text-[13px] text-neutral-300 hover:text-white bg-neutral-950 border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 mb-2 cursor-pointer transition-colors'
+            >
+              {isPaperInSubgraph ? (
+                <>
+                  Remove from {subgraphLabel}
+                  <ShareMinusIcon
+                    size={14}
+                    className='text-red-800 group-hover:text-red-500 transition-colors'
+                  />
+                </>
+              ) : (
+                <>
+                  Add to {subgraphLabel}
+                  <SharePlusIcon
+                    size={14}
+                    className='text-green-800 group-hover:text-green-500 transition-colors'
+                  />
+                </>
+              )}
+            </button>
+          )}
         </div>
         <div className='px-3 lg:px-6'>
           <div className='text-[13px] mb-1.5'>
@@ -184,18 +180,26 @@ export default function StatsPaperDetails({
                       key={n.aid}
                       className='py-1.5 border-b border-neutral-800'
                     >
-                      <div className='flex justify-between gap-2'>
-                        <a
-                          onClick={(e) => {
-                            e.preventDefault()
-                            onSelectPaper(n.aid)
-                          }}
-                          href='#'
-                          className='no-underline text-blue-400 hover:underline flex-1'
-                          title={n.t}
-                        >
-                          {n.t.length > 80 ? n.t.slice(0, 77) + '…' : n.t}
-                        </a>
+                      <div className='flex gap-2'>
+                        <div className='flex-1 min-w-0'>
+                          <a
+                            onClick={(e) => {
+                              e.preventDefault()
+                              onSelectPaper(n.aid)
+                            }}
+                            href='#'
+                            className='no-underline text-blue-400 hover:underline'
+                            title={n.t}
+                          >
+                            {n.t.length > 80 ? n.t.slice(0, 77) + '…' : n.t}
+                          </a>
+                          <div className='text-[12px] text-neutral-500'>
+                            <div>{n.au}</div>
+                            <div className='flex items-center gap-2 mb-0.5 text-neutral-400'>
+                              <TagChips tags={n.tags} />
+                            </div>
+                          </div>
+                        </div>
                         {(onAddToSubgraph || onRemoveFromSubgraph) && (
                           <button
                             onClick={(e) => {
@@ -208,7 +212,7 @@ export default function StatsPaperDetails({
                                 ? `Remove from ${subgraphLabel}`
                                 : `Add to ${subgraphLabel}`
                             }
-                            className='group shrink-0 p-1 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200 transition-colors'
+                            className='group shrink-0 self-start p-1 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200 transition-colors'
                           >
                             {inSubgraph ? (
                               <ShareMinusIcon
@@ -223,12 +227,6 @@ export default function StatsPaperDetails({
                             )}
                           </button>
                         )}
-                      </div>
-                      <div className='text-[12px] text-neutral-500'>
-                        <div>{n.au}</div>
-                        <div className='flex items-center gap-2 mb-0.5 text-neutral-400'>
-                          <TagChips tags={n.tags} />
-                        </div>
                       </div>
                     </li>
                   )

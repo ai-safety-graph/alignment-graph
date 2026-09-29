@@ -67,10 +67,13 @@ export default function PaperList({
         {slice.map(({ n }) => {
           const inSubgraph = subgraphPaperIds?.has(n.aid) ?? false
           return (
-          <li key={n.aid} className='relative group/row mb-1.5 last:mb-0'>
+          <li
+            key={n.aid}
+            className={`flex items-center mb-1.5 last:mb-0 rounded-md active:bg-[#2a2a2a]${n.aid === selectedId ? ' bg-neutral-800' : ''}${enableHover ? ' hover:bg-[#2a2a2a]' : ''}`}
+          >
             <button
               onClick={() => onSelectId(n.aid)}
-              className={`w-full text-left px-4 py-3 pr-10 rounded-md cursor-pointer active:bg-[#2a2a2a]${n.aid === selectedId ? ' bg-neutral-800' : ''}${enableHover ? ' group-hover/row:bg-[#2a2a2a]' : ''}`}
+              className='flex-1 min-w-0 text-left px-4 py-3 cursor-pointer'
             >
               <div className='text-[13px] text-neutral-400 truncate'>
                 {n.au}
@@ -94,7 +97,7 @@ export default function PaperList({
                     ? `Remove from ${subgraphName ?? 'subgraph'}`
                     : `Add to ${subgraphName ?? 'subgraph'}`
                 }
-                className='group absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200'
+                className='group shrink-0 mr-2 p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200'
               >
                 {inSubgraph ? <ShareMinusIcon size={14} className='text-red-800 group-hover:text-red-500 transition-colors' /> : <SharePlusIcon size={14} className='text-green-800 group-hover:text-green-500 transition-colors' />}
               </button>

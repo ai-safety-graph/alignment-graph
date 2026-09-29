@@ -14,12 +14,23 @@ import type {
   LinkObject,
   NodeObject,
 } from 'react-force-graph-2d'
-import { Trash, Search, Library, Sparkles } from 'lucide-react'
+import {
+  Trash,
+  Search,
+  Library,
+  Sparkles,
+  SlidersHorizontal,
+} from 'lucide-react'
 
 import { useForceConfig } from '../hooks/useForceConfig'
 import { useGraphShortcuts } from '../hooks/useGraphShortcuts'
-import { tagToColor } from '../lib/colors'
-import { buildAdjacency, clamp } from '../lib/graph'
+import { useServerFilters } from '../hooks/useServerFilters'
+import {
+  buildAdjacency,
+  clamp,
+  nodeMatchesFilters,
+  separatePoints,
+} from '../lib/graph'
 import type {
   TagsLegend,
   GraphDataCompact,
@@ -32,13 +43,25 @@ import type { SavedGraph } from '../lib/storage'
 
 import GraphPaperDetails from './GraphPaperDetails'
 import SearchResultsOverlay from './SearchResultsOverlay'
-import TagsLegendOverlay from './TagsLegendOverlay'
 import Dropdown from './Dropdown'
+import FilterBar from './FilterBar'
+import LoadingIndicator from './LoadingIndicator'
 import { useCapabilities } from '../hooks/useCapabilities'
 
 // Safety cap on the fallback graph's size; the from/to date window is what
 // actually bounds it under normal volume.
 const RECENT_PAPERS_LIMIT = 200
+
+// Node fills: papers in the loaded subgraph vs. ghost nodes surfaced as
+// related papers or by search.
+const SUBGRAPH_NODE_COLOR = '#6A93B0'
+const RELATED_GHOST_NODE_COLOR = '#F4A261'
+const SEARCH_GHOST_NODE_COLOR = '#8BD17C'
+
+// Node radius in graph units, and the minimum centre-to-centre spacing that
+// pinned nodes are separated to (2 × radius plus a small gap).
+const NODE_RADIUS = 4
+const NODE_MIN_DIST = 2 * NODE_RADIUS + 2
 
 // A node once it's in the force simulation: always has a live x/y position,
 // and fx/fy when pinned (dragged, hovered while locked, or coordinate-pinned).
@@ -113,7 +136,11 @@ export default function ArxivGraph({
 
   // Fallback graph when nothing is explicitly selected: papers published in
   // the last month, refetched periodically so the default view stays fresh.
-  const { data: recentPapers } = useQuery({
+  const {
+    data: recentPapers,
+    isLoading: isRecentLoading,
+    error: recentError,
+  } = useQuery({
     queryKey: ['recentPapers'],
     queryFn: async () => {
       const { fetchPapers } = await import('../lib/api')
@@ -189,19 +216,31 @@ export default function ArxivGraph({
     // empty ids list, so skip the request and show an empty-state instead.
     enabled: ids.length > 0,
   })
-  const error = queryError
-    ? `Failed to load graph: ${queryError.message}`
-    : null
+  const error = recentError
+    ? `Failed to load recent papers: ${recentError.message}`
+    : queryError
+      ? `Failed to load graph: ${queryError.message}`
+      : null
+  // The subgraph query stays disabled (and so not "loading") until recent
+  // papers arrive, so cover that first request too.
+  const showLoading = isRecentLoading || (isGraphLoading && ids.length > 0)
 
   // Prepare simulation nodes (mutable x/y)
+  // Stored coords are pinned, so the collide force never runs on them; resolve
+  // overlaps once up front instead.
   const simNodes = useMemo(() => {
     if (!data) return [] as SimNode[]
     const pin = data.meta.coords.included
-    return data.nodes.map((n) => ({
+    const pos = pin
+      ? separatePoints(
+          data.nodes.map((n) => ({ x: n.x ?? 0, y: n.y ?? 0 })),
+          { minDist: NODE_MIN_DIST },
+        )
+      : data.nodes.map((n) => ({ x: n.x ?? 0, y: n.y ?? 0 }))
+    return data.nodes.map((n, i) => ({
       ...n,
-      x: n.x ?? 0,
-      y: n.y ?? 0,
-      ...(pin ? { fx: n.x ?? 0, fy: n.y ?? 0 } : {}),
+      ...pos[i],
+      ...(pin ? { fx: pos[i].x, fy: pos[i].y } : {}),
     }))
   }, [data])
 
@@ -236,13 +275,14 @@ export default function ArxivGraph({
     return m
   }, [simNodes, ghostSimNodes, relatedGhostNodes])
 
+  const searchGhostIds = useMemo(
+    () => new Set(ghostSimNodes.map((n) => n.id)),
+    [ghostSimNodes],
+  )
   const ghostIds = useMemo(
     () =>
-      new Set([
-        ...ghostSimNodes.map((n) => n.id),
-        ...relatedGhostNodes.map((n) => n.id),
-      ]),
-    [ghostSimNodes, relatedGhostNodes],
+      new Set([...searchGhostIds, ...relatedGhostNodes.map((n) => n.id)]),
+    [searchGhostIds, relatedGhostNodes],
   )
 
   const { byId, adj, tags } = useMemo(() => {
@@ -258,6 +298,51 @@ export default function ArxivGraph({
     for (const n of relatedGhostNodes) byId.set(n.id, n)
     return { byId, adj, tags: data.tags }
   }, [data, ghostSimNodes, relatedGhostNodes])
+
+  // Filters (client-side, over the loaded subgraph). Excluded subgraph nodes
+  // and their links are dropped from graphData; ghosts are always shown since
+  // they're results the user explicitly asked for.
+  const {
+    fromDate,
+    datePreset,
+    setDatePreset,
+    activeTags,
+    activeDomains,
+    tagEntries,
+    hasActiveFilters,
+    clearAllFilters,
+    toggleTag,
+    toggleDomain,
+  } = useServerFilters(tags)
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const filtersRef = useRef<HTMLDivElement | null>(null)
+  const activeFilterCount =
+    activeTags.size + activeDomains.size + (datePreset !== 'all' ? 1 : 0)
+
+  // Capture phase: d3-zoom on the graph canvas stops mousedown propagation,
+  // so a bubbling listener would never see clicks on the graph itself.
+  useEffect(() => {
+    if (!filtersOpen) return
+    const h = (e: PointerEvent) => {
+      if (filtersRef.current && !filtersRef.current.contains(e.target as Node))
+        setFiltersOpen(false)
+    }
+    document.addEventListener('pointerdown', h, true)
+    return () => document.removeEventListener('pointerdown', h, true)
+  }, [filtersOpen])
+
+  const availableDomains = useMemo(
+    () => [...new Set(simNodes.map((n) => n.dm))].sort(),
+    [simNodes],
+  )
+
+  const visibleIds = useMemo(() => {
+    if (!hasActiveFilters) return null
+    const f = { tags: activeTags, domains: activeDomains, fromDate }
+    return new Set(
+      simNodes.filter((n) => nodeMatchesFilters(n, f)).map((n) => n.id),
+    )
+  }, [simNodes, hasActiveFilters, activeTags, activeDomains, fromDate])
 
   // Debounced backend search
   const searchTimerRef = useRef<number | null>(null)
@@ -296,11 +381,19 @@ export default function ArxivGraph({
           let nextId = maxId
           const coords = dataRef.current?.meta.coords
           const pin = !!coords?.included
-          const ghosts = ghostData.nodes.map((n) => {
-            const pos =
-              coords?.bounds && n.rx != null && n.ry != null
-                ? ghostCoord(n.rx, n.ry, coords)
-                : { x: n.x ?? 0, y: n.y ?? 0 }
+          const rawPos = ghostData.nodes.map((n) =>
+            coords?.bounds && n.rx != null && n.ry != null
+              ? ghostCoord(n.rx, n.ry, coords)
+              : { x: n.x ?? 0, y: n.y ?? 0 },
+          )
+          const positions = pin
+            ? separatePoints(rawPos, {
+                minDist: NODE_MIN_DIST,
+                fixed: simNodesRef.current,
+              })
+            : rawPos
+          const ghosts = ghostData.nodes.map((n, i) => {
+            const pos = positions[i]
             return {
               ...n,
               id: nextId++,
@@ -345,19 +438,30 @@ export default function ArxivGraph({
   }
 
   // Neighbor highlight
+  // Last subgraph (non-ghost) node that was locked. Ghosts have no edges, so
+  // while one is locked (e.g. a related paper clicked from a selection) the
+  // subgraph keeps the dimming of the node it was reached from.
+  const [dimAnchorId, setDimAnchorId] = useState<number | null>(null)
+  useEffect(() => {
+    if (lockedId == null) setDimAnchorId(null)
+    else if (!ghostIds.has(lockedId)) setDimAnchorId(lockedId)
+  }, [lockedId, ghostIds])
+
   const neighborSet = useMemo(() => {
     if (activeId == null) return null
-    if (ghostIds.has(activeId)) return null
-    const s = new Set<number>([activeId])
-    for (const { id } of adj.get(activeId) ?? []) s.add(id)
+    const rootId = ghostIds.has(activeId) ? dimAnchorId : activeId
+    if (rootId == null) return null
+    const s = new Set<number>([rootId])
+    for (const { id } of adj.get(rootId) ?? []) s.add(id)
     return s
-  }, [activeId, adj, ghostIds])
+  }, [activeId, dimAnchorId, adj, ghostIds])
 
   // Interaction gating
   const isInteractive = useCallback(
     (id: number) => {
       if (ghostIds.has(id)) return true
-      if (activeId != null && ghostIds.has(activeId)) return true
+      if (activeId != null && ghostIds.has(activeId))
+        return neighborSet ? neighborSet.has(id) : true
       if (lockedId != null || selectedId != null) return !!neighborSet?.has(id)
       return true
     },
@@ -397,13 +501,24 @@ export default function ArxivGraph({
             ...searchGhosts.map((n) => n.id),
             ...retained.map((n) => n.id),
           ) + 1
-        const built = retained.slice()
+        const fresh: RelatedPaper[] = []
         for (const r of results) {
           if (r.rx == null || r.ry == null) continue
           if (r.aid === sel.aid) continue
           if (existingAids.has(r.aid) || seenAids.has(r.aid)) continue
           seenAids.add(r.aid)
-          const { x, y } = ghostCoord(r.rx, r.ry, coords)
+          fresh.push(r)
+        }
+        const rawPos = fresh.map((r) => ghostCoord(r.rx!, r.ry!, coords))
+        const positions = pin
+          ? separatePoints(rawPos, {
+              minDist: NODE_MIN_DIST,
+              fixed: [...sims, ...searchGhosts, ...retained],
+            })
+          : rawPos
+        const built = retained.slice()
+        fresh.forEach((r, i) => {
+          const { x, y } = positions[i]
           built.push({
             id: nextId++,
             aid: r.aid,
@@ -417,7 +532,7 @@ export default function ArxivGraph({
             y,
             ...(pin ? { fx: x, fy: y } : {}),
           } as SimNode)
-        }
+        })
         return built
       })
     },
@@ -567,9 +682,35 @@ export default function ArxivGraph({
   useGraphShortcuts({ query, setQuery, onBackgroundClick, searchInputRef })
 
   const allSimNodes = useMemo(
-    () => [...simNodes, ...ghostSimNodes, ...relatedGhostNodes],
-    [simNodes, ghostSimNodes, relatedGhostNodes],
+    () => [
+      ...(visibleIds ? simNodes.filter((n) => visibleIds.has(n.id)) : simNodes),
+      ...ghostSimNodes,
+      ...relatedGhostNodes,
+    ],
+    [simNodes, visibleIds, ghostSimNodes, relatedGhostNodes],
   )
+
+  const graphData = useMemo(() => {
+    const links = data?.links ?? []
+    return {
+      nodes: allSimNodes,
+      links: visibleIds
+        ? links.filter((l) => visibleIds.has(l.s) && visibleIds.has(l.t))
+        : links,
+    }
+  }, [allSimNodes, data, visibleIds])
+
+  // Drop the selection/hover when a filter hides the node it points at.
+  useEffect(() => {
+    if (!visibleIds) return
+    const isHidden = (id: number | null) =>
+      id != null && !ghostIds.has(id) && !visibleIds.has(id)
+    if (isHidden(selectedId) || isHidden(lockedId) || isHidden(hoverId)) {
+      setLockedId(null)
+      setHoverId(null)
+      setSelectedId(null)
+    }
+  }, [visibleIds, ghostIds, selectedId, lockedId, hoverId])
 
   if (error) return <div className='text-red-600 p-4'>{error}</div>
 
@@ -580,41 +721,27 @@ export default function ArxivGraph({
     globalScale: number,
   ) => {
     const n = node as SimNode
-    const r = 4
+    const r = NODE_RADIUS
     ctx.save()
     let alpha = 1
     if (ghostIds.has(n.id)) {
       // ghosts (search + related) keep their own alpha, never dimmed by neighborSet
-      alpha = activeId === n.id ? 0.85 : 0.35
+      alpha = activeId === n.id ? 0.85 : 0.55
     } else if (neighborSet) {
       alpha = neighborSet.has(n.id) ? 1 : 0.08
     }
     ctx.globalAlpha = alpha
     ctx.beginPath()
-    const nodeTags = n.tags ?? []
-    ctx.fillStyle = nodeTags[0] ? tagToColor(nodeTags[0]) : '#666666'
+    ctx.fillStyle = searchGhostIds.has(n.id)
+      ? SEARCH_GHOST_NODE_COLOR
+      : ghostIds.has(n.id)
+        ? RELATED_GHOST_NODE_COLOR
+        : SUBGRAPH_NODE_COLOR
     ctx.arc(n.x, n.y, r, 0, 2 * Math.PI, false)
     ctx.fill()
     ctx.lineWidth = 0.5
     ctx.strokeStyle = 'rgba(255,255,255,0.7)'
     ctx.stroke()
-    // Secondary tags: a short colored ring segment per extra tag, dropped at
-    // small on-screen radius (same threshold as label text below) since
-    // full pie-wedge fills are illegible at the size these nodes render at.
-    const secondaryTags = nodeTags.slice(1, 4)
-    if (secondaryTags.length > 0 && globalScale > 0.8) {
-      const slice = (2 * Math.PI) / secondaryTags.length
-      secondaryTags.forEach((tag, i) => {
-        ctx.save()
-        ctx.globalAlpha = alpha
-        ctx.strokeStyle = tagToColor(tag)
-        ctx.lineWidth = 1.5
-        ctx.beginPath()
-        ctx.arc(n.x, n.y, r + 3, i * slice, i * slice + slice * 0.8)
-        ctx.stroke()
-        ctx.restore()
-      })
-    }
     if (relatedLoading && selectedId === n.id) {
       const angle = (Date.now() / 300) % (Math.PI * 2)
       ctx.save()
@@ -647,11 +774,8 @@ export default function ArxivGraph({
 
   return (
     <div className='fixed inset-0 bg-neutral-950 text-[#e5e5e5]'>
-      {isGraphLoading && ids.length > 0 && (
-        <div className='absolute inset-0 flex flex-col items-center justify-center gap-3'>
-          <span className='h-8 w-8 rounded-full border-2 border-neutral-700 border-t-neutral-300 animate-spin' />
-          <p className='text-sm text-neutral-500'>Loading graph…</p>
-        </div>
+      {showLoading && (
+        <LoadingIndicator label='Loading graph…' className='absolute inset-0' />
       )}
       {isEmptySavedGraph && (
         <div className='absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center'>
@@ -664,15 +788,26 @@ export default function ArxivGraph({
           </p>
         </div>
       )}
+      {data && visibleIds?.size === 0 && (
+        <div className='absolute inset-0 z-[1] flex flex-col items-center justify-center gap-3 px-4 text-center pointer-events-none'>
+          <p className='text-lg text-neutral-300'>
+            No papers match these filters
+          </p>
+          <button
+            type='button'
+            onClick={clearAllFilters}
+            className='pointer-events-auto px-3 py-1 rounded-md border bg-neutral-950 border-neutral-700 text-sm text-neutral-400 hover:text-neutral-200 hover:border-neutral-500 cursor-pointer'
+          >
+            Clear filters
+          </button>
+        </div>
+      )}
       {data && width > 0 && height > 0 && (
         <ForceGraph2D<NodeCompact, LinkCompact>
           ref={fgRef}
           width={width}
           height={height}
-          graphData={{
-            nodes: allSimNodes,
-            links: data.links,
-          }}
+          graphData={graphData}
           backgroundColor='#1a1a1a'
           nodeId='id'
           linkSource='s'
@@ -712,7 +847,7 @@ export default function ArxivGraph({
 
       {/* Search bar */}
       <div className='fixed top-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2'>
-        <div className='bg-[#2a2a2a] backdrop-blur-xs rounded-md w-[min(550px,80vw)] border border-[#333333]'>
+        <div className='bg-[#2a2a2a] backdrop-blur-xs rounded-md w-[min(550px,80vw)]'>
           <div className='flex items-center gap-2'>
             <div className='relative flex-1'>
               <Search
@@ -764,7 +899,7 @@ export default function ArxivGraph({
                   m === 'semantic' ? 'keyword' : 'semantic',
                 )
               }
-              className={`shrink-0 px-2 py-1 rounded-md bg-transparent border cursor-pointer transition-colors ${
+              className={`shrink-0 px-2 py-1 rounded-md bg-neutral-950 border cursor-pointer transition-colors ${
                 searchMode === 'semantic'
                   ? 'border-[#4ea8de] text-[#4ea8de]'
                   : 'border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white'
@@ -784,9 +919,7 @@ export default function ArxivGraph({
       </div>
 
       {/* Overlays */}
-      {/* Search results overlay flexes to fill the space above the tags
-          legend, so its bottom edge always meets the legend's top edge
-          regardless of the legend's (dynamic) height. */}
+      {/* Search results overlay flexes to fill the left column. */}
       <div className='fixed left-4 top-[72px] bottom-4 z-10 flex flex-col items-start justify-end gap-3 pointer-events-none'>
         {query && (searchResults.length > 0 || isSearching) && (
           <div className='flex-1 min-h-0 w-[360px] pointer-events-auto'>
@@ -807,9 +940,6 @@ export default function ArxivGraph({
             />
           </div>
         )}
-        <div className='shrink-0 pointer-events-auto'>
-          <TagsLegendOverlay tags={tags} />
-        </div>
       </div>
 
       {selected && (
@@ -841,7 +971,7 @@ export default function ArxivGraph({
         <Link
           to='/stats'
           aria-label='Show stats'
-          className='px-2 py-1 rounded-md cursor-pointer bg-transparent border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors'
+          className='px-2 py-1 rounded-md cursor-pointer bg-neutral-950 border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors'
         >
           <Library size={18} />
         </Link>
@@ -890,10 +1020,48 @@ export default function ArxivGraph({
           )}
         </Dropdown>
 
+        <div ref={filtersRef}>
+          <button
+            type='button'
+            onClick={() => setFiltersOpen((v) => !v)}
+            aria-label={filtersOpen ? 'Collapse filters' : 'Expand filters'}
+            aria-expanded={filtersOpen}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md cursor-pointer bg-neutral-950 border text-[13px] transition-colors ${
+              hasActiveFilters
+                ? 'border-[#4ea8de] text-[#4ea8de]'
+                : `hover:border-neutral-500 hover:text-white ${filtersOpen ? 'border-neutral-500 text-white' : 'border-neutral-700 text-neutral-300'}`
+            }`}
+          >
+            <SlidersHorizontal size={14} />
+            Filters
+            {activeFilterCount > 0 && (
+              <span className='min-w-4 px-1 rounded-full bg-[#4ea8de] text-[11px] leading-4 text-neutral-950'>
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+          {filtersOpen && (
+            <div className='fixed top-14 left-4 z-20 w-[min(900px,calc(100vw-2rem))] max-h-[80vh] overflow-auto shadow-lg rounded-lg'>
+              <FilterBar
+                tagEntries={tagEntries}
+                availableDomains={availableDomains}
+                activeTags={activeTags}
+                activeDomains={activeDomains}
+                datePreset={datePreset}
+                hasActiveFilters={hasActiveFilters}
+                onToggleTag={toggleTag}
+                onToggleDomain={toggleDomain}
+                onSetDatePreset={setDatePreset}
+                onClearAll={clearAllFilters}
+              />
+            </div>
+          )}
+        </div>
+
         {/* <Link
           to='/stats'
           aria-label='Show stats'
-          className='shrink-0 flex items-center gap-1.5 px-3 py-[7px] rounded-full bg-transparent border border-[#333333] text-sm text-neutral-400 hover:text-neutral-200 whitespace-nowrap cursor-pointer'
+          className='shrink-0 flex items-center gap-1.5 px-3 py-[7px] rounded-full bg-neutral-950 border border-[#333333] text-sm text-neutral-400 hover:text-neutral-200 whitespace-nowrap cursor-pointer'
         >
           New Graph
           <Plus size={13} />

@@ -63,7 +63,7 @@ Responsibilities:
 - Neighborhood-only edge visibility
 - Semantic search via `searchPapers` (debounced `POST /api/search`, 350ms)
 - On-demand related papers per selection via `fetchRelated`
-- Tags legend (`TagsLegendOverlay`)
+- Client-side tag / domain / date-preset filters (`FilterBar` + `useServerFilters`, predicate `nodeMatchesFilters` in `lib/graph.ts`); excluded subgraph nodes and their links are hidden, ghosts are never filtered
 - Side-panel paper details (`GraphPaperDetails`)
 
 ### Ghost nodes

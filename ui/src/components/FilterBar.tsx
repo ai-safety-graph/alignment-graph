@@ -1,5 +1,7 @@
+import { useState } from 'react'
+import * as Slider from '@radix-ui/react-slider'
 import { RotateCcw } from 'lucide-react'
-import { tagToColor } from '../lib/colors'
+import { tagIcon } from '../lib/tags'
 import { domainLabel } from '../lib/domain'
 import { DATE_PRESETS } from '../hooks/useServerFilters'
 import type { DatePreset } from '../hooks/useServerFilters'
@@ -22,6 +24,73 @@ interface FilterBarProps {
   datePreset?: DatePreset
   onSetDatePreset?: (preset: DatePreset) => void
   isExpanded?: boolean
+  showTagCounts?: boolean
+}
+
+const LAST_DATE_INDEX = DATE_PRESETS.length - 1
+
+function DateSlider({
+  value,
+  onCommit,
+}: {
+  value: DatePreset
+  onCommit: (preset: DatePreset) => void
+}) {
+  const committedIndex = DATE_PRESETS.findIndex((p) => p.value === value)
+  // Tracks the thumb while dragging; the filter itself only updates on commit
+  // so StatsView doesn't refetch at every notch.
+  const [pendingIndex, setPendingIndex] = useState(committedIndex)
+  const [prevCommitted, setPrevCommitted] = useState(committedIndex)
+  if (committedIndex !== prevCommitted) {
+    // Sync external changes (e.g. Clear Filters)
+    setPrevCommitted(committedIndex)
+    setPendingIndex(committedIndex)
+  }
+
+  return (
+    <div className='flex flex-col gap-1.5 md:flex-row md:items-center md:gap-2'>
+      <span
+        id='date-filter-label'
+        className='shrink-0 text-xs text-neutral-500 md:w-24'
+      >
+        Published
+      </span>
+      <div className='flex flex-1 items-center gap-2'>
+        <Slider.Root
+          min={0}
+          max={LAST_DATE_INDEX}
+          step={1}
+          value={[pendingIndex]}
+          onValueChange={([i]) => setPendingIndex(i)}
+          onValueCommit={([i]) => onCommit(DATE_PRESETS[i].value)}
+          className='relative flex flex-1 md:max-w-md lg:max-w-xl h-5 items-center touch-none select-none cursor-pointer'
+        >
+          <Slider.Track className='relative h-0.5 grow rounded-full bg-neutral-600'>
+            <Slider.Range className='absolute h-full rounded-full bg-neutral-400' />
+          </Slider.Track>
+          {/* Notches: inset by half the 12px thumb so they line up with its centre at each step */}
+          {DATE_PRESETS.map((p, i) => (
+            <span
+              key={p.value}
+              className='pointer-events-none absolute top-1/2 h-1.5 w-px -translate-x-1/2 -translate-y-1/2 bg-neutral-500'
+              style={{
+                left: `calc(6px + (100% - 12px) * ${i / LAST_DATE_INDEX})`,
+              }}
+              aria-hidden
+            />
+          ))}
+          <Slider.Thumb
+            aria-labelledby='date-filter-label'
+            aria-valuetext={DATE_PRESETS[pendingIndex]?.label}
+            className='block size-3 rounded-full bg-neutral-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400'
+          />
+        </Slider.Root>
+        <span className='shrink-0 w-20 md:w-24 text-right text-xs text-neutral-300'>
+          {DATE_PRESETS[pendingIndex]?.label}
+        </span>
+      </div>
+    </div>
+  )
 }
 
 export default function FilterBar({
@@ -40,47 +109,35 @@ export default function FilterBar({
   datePreset,
   onSetDatePreset,
   isExpanded = true,
+  showTagCounts = true,
 }: FilterBarProps) {
   if (!isExpanded) return null
 
-  const dateIndex =
-    datePreset !== undefined
-      ? DATE_PRESETS.findIndex((p) => p.value === datePreset)
-      : -1
-
   return (
-    <div className='w-full my-2 rounded-lg border border-neutral-700 bg-[#1f1f1f]'>
+    <div className='w-full my-2 rounded-lg border border-neutral-700 bg-neutral-950'>
       <div className='px-5 py-3 space-y-2'>
-        <div className='text-xs font-medium text-neutral-400'>Filter by</div>
+        <div className='flex items-center justify-between gap-2'>
+          <div className='text-xs font-medium text-neutral-400'>Filter by</div>
+          <button
+            onClick={onClearAll}
+            disabled={!hasActiveFilters}
+            className='flex items-center gap-1 px-3 py-1 rounded-md border bg-neutral-950 border-neutral-700 text-xs text-neutral-400 hover:text-neutral-200 hover:border-neutral-500 disabled:text-neutral-700 disabled:hover:text-neutral-700 disabled:hover:border-neutral-700 disabled:cursor-not-allowed'
+          >
+            Clear Filters
+            <RotateCcw size={13} />
+          </button>
+        </div>
 
         {datePreset !== undefined && onSetDatePreset && (
-          <div className='flex items-center gap-2'>
-            <span className='shrink-0 text-xs text-neutral-500 w-24'>
-              Date
-            </span>
-            <input
-              type='range'
-              min={0}
-              max={DATE_PRESETS.length - 1}
-              step={1}
-              value={dateIndex}
-              onChange={(e) =>
-                onSetDatePreset(DATE_PRESETS[+e.target.value].value)
-              }
-              className='date-slider flex-1 max-w-xs'
-            />
-            <span className='shrink-0 w-20 text-right text-xs text-neutral-300'>
-              {DATE_PRESETS[dateIndex]?.label}
-            </span>
-          </div>
+          <DateSlider value={datePreset} onCommit={onSetDatePreset} />
         )}
 
         {!datePreset &&
           availableYears &&
           availableYears.length > 0 &&
           onToggleYear && (
-            <div className='flex items-start gap-2'>
-              <span className='shrink-0 text-xs text-neutral-500 w-24 pt-1'>
+            <div className='flex flex-col gap-1.5 md:flex-row md:items-start md:gap-2'>
+              <span className='shrink-0 text-xs text-neutral-500 md:w-24 md:pt-1'>
                 Year
               </span>
               <div className='flex flex-wrap gap-2'>
@@ -91,7 +148,7 @@ export default function FilterBar({
                     className={`px-3 py-1 rounded-md border text-xs whitespace-nowrap ${
                       activeYear === year
                         ? 'bg-neutral-600 border-neutral-500 text-white'
-                        : 'bg-transparent border-neutral-700 hover:border-neutral-500'
+                        : 'bg-neutral-950 border-neutral-700 hover:border-neutral-500'
                     }`}
                   >
                     {year}
@@ -102,36 +159,38 @@ export default function FilterBar({
           )}
 
         {(isLoading || availableDomains.length > 0) && (
-          <div className='flex items-center gap-2 overflow-x-auto scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent'>
-            <span className='shrink-0 text-xs text-neutral-500 w-24'>
+          <div className='flex flex-col gap-1.5 md:flex-row md:items-center md:gap-2'>
+            <span className='shrink-0 text-xs text-neutral-500 md:w-24'>
               arXiv domain:
             </span>
-            {isLoading
-              ? Array.from({ length: 4 }).map((_, i) => (
-                  <span
-                    key={i}
-                    className='shrink-0 h-6 w-16 rounded-md bg-neutral-800 animate-pulse'
-                    aria-hidden
-                  />
-                ))
-              : availableDomains.map((dm) => (
-                  <button
-                    key={dm}
-                    onClick={() => onToggleDomain(dm)}
-                    className={`shrink-0 px-3 py-1 rounded-md border text-xs whitespace-nowrap ${
-                      activeDomains.has(dm)
-                        ? 'bg-neutral-600 border-neutral-500 text-white'
-                        : 'bg-transparent border-neutral-700 hover:border-neutral-500'
-                    }`}
-                  >
-                    {domainLabel(dm)}
-                  </button>
-                ))}
+            <div className='flex min-w-0 items-center gap-2 overflow-x-auto scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent'>
+              {isLoading
+                ? Array.from({ length: 4 }).map((_, i) => (
+                    <span
+                      key={i}
+                      className='shrink-0 h-6 w-16 rounded-md bg-neutral-800 animate-pulse'
+                      aria-hidden
+                    />
+                  ))
+                : availableDomains.map((dm) => (
+                    <button
+                      key={dm}
+                      onClick={() => onToggleDomain(dm)}
+                      className={`shrink-0 px-3 py-1 rounded-md border text-xs whitespace-nowrap ${
+                        activeDomains.has(dm)
+                          ? 'bg-neutral-600 border-neutral-500 text-white'
+                          : 'bg-neutral-950 border-neutral-700 hover:border-neutral-500'
+                      }`}
+                    >
+                      {domainLabel(dm)}
+                    </button>
+                  ))}
+            </div>
           </div>
         )}
 
-        <div className='flex items-start gap-2'>
-          <span className='shrink-0 text-xs text-neutral-500 w-24 pt-1'>
+        <div className='flex flex-col gap-1.5 md:flex-row md:items-start md:gap-2'>
+          <span className='shrink-0 text-xs text-neutral-500 md:w-24 md:pt-1'>
             Tags
           </span>
           <div className='flex flex-wrap gap-2'>
@@ -143,37 +202,29 @@ export default function FilterBar({
                     aria-hidden
                   />
                 ))
-              : tagEntries.map(([tag, meta]) => (
-                  <button
-                    key={tag}
-                    onClick={() => onToggleTag(tag)}
-                    className={`px-3 py-1 rounded-md border text-xs whitespace-nowrap ${
-                      activeTags.has(tag)
-                        ? 'bg-neutral-800 border-neutral-500'
-                        : 'bg-transparent border-neutral-700 hover:border-neutral-500'
-                    }`}
-                  >
-                    <span
-                      className='inline-block w-2 h-2 mr-2 rounded-full border border-[#333333]'
-                      style={{ backgroundColor: tagToColor(tag) }}
-                      aria-hidden
-                    />
-                    {tag + ' • ' + meta.size}
-                  </button>
-                ))}
+              : tagEntries.map(([tag, meta]) => {
+                  const Icon = tagIcon(tag)
+                  const active = activeTags.has(tag)
+                  return (
+                    <button
+                      key={tag}
+                      onClick={() => onToggleTag(tag)}
+                      className={`inline-flex items-center px-3 py-1 rounded-md border text-xs whitespace-nowrap ${
+                        active
+                          ? 'bg-neutral-800 border-neutral-500'
+                          : 'bg-neutral-950 border-neutral-700 hover:border-neutral-500'
+                      }`}
+                    >
+                      <Icon
+                        size={12}
+                        className={`shrink-0 mr-1.5 ${active ? 'text-[#4ea8de]' : ''}`}
+                        aria-hidden
+                      />
+                      {showTagCounts ? tag + ' • ' + meta.size : tag}
+                    </button>
+                  )
+                })}
           </div>
-        </div>
-
-        <div className='flex items-start gap-2'>
-          <span className='shrink-0 w-24' aria-hidden />
-          <button
-            onClick={onClearAll}
-            disabled={!hasActiveFilters}
-            className='flex items-center gap-1 px-3 py-1 rounded-md border bg-transparent border-neutral-700 text-xs text-neutral-400 hover:text-neutral-200 hover:border-neutral-500 disabled:text-neutral-700 disabled:hover:text-neutral-700 disabled:hover:border-neutral-700 disabled:cursor-not-allowed'
-          >
-            Clear Filters
-            <RotateCcw size={13} />
-          </button>
         </div>
       </div>
     </div>
