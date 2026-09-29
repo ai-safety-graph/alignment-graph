@@ -507,7 +507,7 @@ export default function StatsView() {
         <div className='flex flex-col flex-1 overflow-hidden min-w-0'>
           <div
             ref={listRef}
-            className='flex-1 overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent [scrollbar-gutter:stable] md:[direction:rtl]'
+            className='flex-1 overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent [scrollbar-gutter:stable_both-edges] md:[scrollbar-gutter:stable] md:[direction:rtl]'
           >
             <div className='md:[direction:ltr] md:px-4'>
               {(subgraphTitle || filterBar) && (

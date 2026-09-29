@@ -48,45 +48,47 @@ function DateSlider({
   }
 
   return (
-    <div className='flex items-center gap-2'>
+    <div className='flex flex-col gap-1.5 md:flex-row md:items-center md:gap-2'>
       <span
         id='date-filter-label'
-        className='shrink-0 text-xs text-neutral-500 w-24'
+        className='shrink-0 text-xs text-neutral-500 md:w-24'
       >
         Published
       </span>
-      <Slider.Root
-        min={0}
-        max={LAST_DATE_INDEX}
-        step={1}
-        value={[pendingIndex]}
-        onValueChange={([i]) => setPendingIndex(i)}
-        onValueCommit={([i]) => onCommit(DATE_PRESETS[i].value)}
-        className='relative flex flex-1 max-w-xs h-5 items-center touch-none select-none cursor-pointer'
-      >
-        <Slider.Track className='relative h-0.5 grow rounded-full bg-neutral-600'>
-          <Slider.Range className='absolute h-full rounded-full bg-neutral-400' />
-        </Slider.Track>
-        {/* Notches: inset by half the 12px thumb so they line up with its centre at each step */}
-        {DATE_PRESETS.map((p, i) => (
-          <span
-            key={p.value}
-            className='pointer-events-none absolute top-1/2 h-1.5 w-px -translate-x-1/2 -translate-y-1/2 bg-neutral-500'
-            style={{
-              left: `calc(6px + (100% - 12px) * ${i / LAST_DATE_INDEX})`,
-            }}
-            aria-hidden
+      <div className='flex flex-1 items-center gap-2'>
+        <Slider.Root
+          min={0}
+          max={LAST_DATE_INDEX}
+          step={1}
+          value={[pendingIndex]}
+          onValueChange={([i]) => setPendingIndex(i)}
+          onValueCommit={([i]) => onCommit(DATE_PRESETS[i].value)}
+          className='relative flex flex-1 md:max-w-xs h-5 items-center touch-none select-none cursor-pointer'
+        >
+          <Slider.Track className='relative h-0.5 grow rounded-full bg-neutral-600'>
+            <Slider.Range className='absolute h-full rounded-full bg-neutral-400' />
+          </Slider.Track>
+          {/* Notches: inset by half the 12px thumb so they line up with its centre at each step */}
+          {DATE_PRESETS.map((p, i) => (
+            <span
+              key={p.value}
+              className='pointer-events-none absolute top-1/2 h-1.5 w-px -translate-x-1/2 -translate-y-1/2 bg-neutral-500'
+              style={{
+                left: `calc(6px + (100% - 12px) * ${i / LAST_DATE_INDEX})`,
+              }}
+              aria-hidden
+            />
+          ))}
+          <Slider.Thumb
+            aria-labelledby='date-filter-label'
+            aria-valuetext={DATE_PRESETS[pendingIndex]?.label}
+            className='block size-3 rounded-full bg-neutral-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400'
           />
-        ))}
-        <Slider.Thumb
-          aria-labelledby='date-filter-label'
-          aria-valuetext={DATE_PRESETS[pendingIndex]?.label}
-          className='block size-3 rounded-full bg-neutral-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400'
-        />
-      </Slider.Root>
-      <span className='shrink-0 w-24 text-right text-xs text-neutral-300'>
-        {DATE_PRESETS[pendingIndex]?.label}
-      </span>
+        </Slider.Root>
+        <span className='shrink-0 w-20 md:w-24 text-right text-xs text-neutral-300'>
+          {DATE_PRESETS[pendingIndex]?.label}
+        </span>
+      </div>
     </div>
   )
 }
@@ -134,8 +136,8 @@ export default function FilterBar({
           availableYears &&
           availableYears.length > 0 &&
           onToggleYear && (
-            <div className='flex items-start gap-2'>
-              <span className='shrink-0 text-xs text-neutral-500 w-24 pt-1'>
+            <div className='flex flex-col gap-1.5 md:flex-row md:items-start md:gap-2'>
+              <span className='shrink-0 text-xs text-neutral-500 md:w-24 md:pt-1'>
                 Year
               </span>
               <div className='flex flex-wrap gap-2'>
@@ -157,36 +159,38 @@ export default function FilterBar({
           )}
 
         {(isLoading || availableDomains.length > 0) && (
-          <div className='flex items-center gap-2 overflow-x-auto scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent'>
-            <span className='shrink-0 text-xs text-neutral-500 w-24'>
+          <div className='flex flex-col gap-1.5 md:flex-row md:items-center md:gap-2'>
+            <span className='shrink-0 text-xs text-neutral-500 md:w-24'>
               arXiv domain:
             </span>
-            {isLoading
-              ? Array.from({ length: 4 }).map((_, i) => (
-                  <span
-                    key={i}
-                    className='shrink-0 h-6 w-16 rounded-md bg-neutral-800 animate-pulse'
-                    aria-hidden
-                  />
-                ))
-              : availableDomains.map((dm) => (
-                  <button
-                    key={dm}
-                    onClick={() => onToggleDomain(dm)}
-                    className={`shrink-0 px-3 py-1 rounded-md border text-xs whitespace-nowrap ${
-                      activeDomains.has(dm)
-                        ? 'bg-neutral-600 border-neutral-500 text-white'
-                        : 'bg-neutral-950 border-neutral-700 hover:border-neutral-500'
-                    }`}
-                  >
-                    {domainLabel(dm)}
-                  </button>
-                ))}
+            <div className='flex min-w-0 items-center gap-2 overflow-x-auto scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent'>
+              {isLoading
+                ? Array.from({ length: 4 }).map((_, i) => (
+                    <span
+                      key={i}
+                      className='shrink-0 h-6 w-16 rounded-md bg-neutral-800 animate-pulse'
+                      aria-hidden
+                    />
+                  ))
+                : availableDomains.map((dm) => (
+                    <button
+                      key={dm}
+                      onClick={() => onToggleDomain(dm)}
+                      className={`shrink-0 px-3 py-1 rounded-md border text-xs whitespace-nowrap ${
+                        activeDomains.has(dm)
+                          ? 'bg-neutral-600 border-neutral-500 text-white'
+                          : 'bg-neutral-950 border-neutral-700 hover:border-neutral-500'
+                      }`}
+                    >
+                      {domainLabel(dm)}
+                    </button>
+                  ))}
+            </div>
           </div>
         )}
 
-        <div className='flex items-start gap-2'>
-          <span className='shrink-0 text-xs text-neutral-500 w-24 pt-1'>
+        <div className='flex flex-col gap-1.5 md:flex-row md:items-start md:gap-2'>
+          <span className='shrink-0 text-xs text-neutral-500 md:w-24 md:pt-1'>
             Tags
           </span>
           <div className='flex flex-wrap gap-2'>
