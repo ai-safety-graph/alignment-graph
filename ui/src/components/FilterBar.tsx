@@ -63,7 +63,7 @@ function DateSlider({
           value={[pendingIndex]}
           onValueChange={([i]) => setPendingIndex(i)}
           onValueCommit={([i]) => onCommit(DATE_PRESETS[i].value)}
-          className='relative flex flex-1 md:max-w-xs h-5 items-center touch-none select-none cursor-pointer'
+          className='relative flex flex-1 md:max-w-md lg:max-w-xl h-5 items-center touch-none select-none cursor-pointer'
         >
           <Slider.Track className='relative h-0.5 grow rounded-full bg-neutral-600'>
             <Slider.Range className='absolute h-full rounded-full bg-neutral-400' />
