@@ -14,16 +14,17 @@ export type DatePreset =
   | 'all'
 
 export const DATE_PRESETS: { value: DatePreset; label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: '1w', label: '1 Week' },
-  { value: '2w', label: '2 Weeks' },
-  { value: '3w', label: '3 Weeks' },
-  { value: '1m', label: '1 Month' },
-  { value: '3m', label: '3 Months' },
-  { value: '6m', label: '6 Months' },
-  { value: '1y', label: '1 Year' },
-  { value: '2y', label: '2 Years' },
-  { value: '3y', label: '3 Years' },
+  { value: '1w', label: 'Past week' },
+  { value: '2w', label: 'Past 2 weeks' },
+  { value: '3w', label: 'Past 3 weeks' },
+  { value: '1m', label: 'Past month' },
+  { value: '3m', label: 'Past 3 months' },
+  { value: '6m', label: 'Past 6 months' },
+  { value: '1y', label: 'Past year' },
+  { value: '2y', label: 'Past 2 years' },
+  { value: '3y', label: 'Past 3 years' },
+  // Widest window last so the slider grows monotonically left → right
+  { value: 'all', label: 'Any time' },
 ]
 
 function presetToFromDate(preset: DatePreset): string | undefined {

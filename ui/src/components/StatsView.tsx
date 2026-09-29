@@ -381,6 +381,7 @@ export default function StatsView() {
         onSetDatePreset={setDatePreset}
         onClearAll={clearAllFilters}
         isExpanded={filterExpanded}
+        showTagCounts={false}
       />
     ) : !isBrowsing && subgraphNodes && subgraphNodes.length > 0 ? (
       <FilterBar
