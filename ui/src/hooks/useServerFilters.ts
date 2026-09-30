@@ -27,7 +27,7 @@ export const DATE_PRESETS: { value: DatePreset; label: string }[] = [
   { value: 'all', label: 'Any time' },
 ]
 
-function presetToFromDate(preset: DatePreset): string | undefined {
+export function presetToFromDate(preset: DatePreset): string | undefined {
   if (preset === 'all') return undefined
   const d = new Date()
   if (preset === '1w') d.setDate(d.getDate() - 7)
@@ -40,6 +40,17 @@ function presetToFromDate(preset: DatePreset): string | undefined {
   else if (preset === '2y') d.setFullYear(d.getFullYear() - 2)
   else if (preset === '3y') d.setFullYear(d.getFullYear() - 3)
   return d.toISOString().split('T')[0]
+}
+
+// Presets that actually narrow data whose oldest publish date is `oldestPd`
+// (ISO YYYY-MM-DD), plus 'all'. Windows reaching past the oldest paper are
+// indistinguishable from 'all', so they're dropped.
+export function availableDatePresets(oldestPd: string | undefined) {
+  return DATE_PRESETS.filter(
+    (p) =>
+      p.value === 'all' ||
+      (oldestPd !== undefined && presetToFromDate(p.value)! > oldestPd),
+  )
 }
 
 export function useServerFilters(tags: TagsLegend) {
