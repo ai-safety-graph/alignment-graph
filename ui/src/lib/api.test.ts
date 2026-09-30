@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fetchAllPapers, fetchPaper, fetchPapers, fetchTags } from './api'
+import { fetchGraphRange, fetchPaper, fetchPapers, fetchTags } from './api'
 
 function mockFetchOnce(body: unknown, init: { ok?: boolean; status?: number } = {}) {
   const { ok = true, status = 200 } = init
@@ -55,39 +55,33 @@ describe('fetchPapers', () => {
   })
 })
 
-describe('fetchAllPapers', () => {
+describe('fetchGraphRange', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
   })
 
-  it('fetches every page and concatenates items in page order', async () => {
-    const node = (aid: string) => ({ aid, t: '', au: '', pd: '', ln: '', dm: '', tags: [] })
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: string) => {
-        const page = Number(new URL(input, 'http://localhost').searchParams.get('page'))
-        const items = page < 3 ? [node(`p${page}a`), node(`p${page}b`)] : [node('p3a')]
-        return { ok: true, status: 200, json: async () => ({ total: 401, page, limit: 200, items }) } as Response
-      }),
-    )
+  it('requests /api/graph/range with the date params in one call', async () => {
+    mockFetchOnce({ meta: {}, tags: {}, nodes: [], links: [] })
 
-    const papers = await fetchAllPapers({ from: '2024-01-01' })
+    await fetchGraphRange({ from: '2024-01-01', to: '2024-01-31' })
 
-    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(3)
-    const urls = vi.mocked(fetch).mock.calls.map((c) => new URL(c[0] as string, 'http://localhost'))
-    expect(urls.map((u) => u.searchParams.get('page'))).toEqual(['1', '2', '3'])
-    expect(urls.every((u) => u.searchParams.get('limit') === '200')).toBe(true)
-    expect(urls.every((u) => u.searchParams.get('from') === '2024-01-01')).toBe(true)
-    expect(papers.map((p) => p.aid)).toEqual(['p1a', 'p1b', 'p2a', 'p2b', 'p3a'])
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1)
+    const url = new URL(vi.mocked(fetch).mock.calls[0][0] as string, 'http://localhost')
+    expect(url.pathname).toBe('/api/graph/range')
+    expect(url.searchParams.get('from')).toBe('2024-01-01')
+    expect(url.searchParams.get('to')).toBe('2024-01-31')
   })
 
-  it('makes a single request when everything fits on one page', async () => {
-    mockFetchOnce({ total: 0, page: 1, limit: 200, items: [] })
-    expect(await fetchAllPapers()).toEqual([])
-    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1)
+  it('omits `to` when unset and defaults missing node tags to []', async () => {
+    mockFetchOnce({ meta: {}, tags: {}, nodes: [{ id: 0, aid: 'a' }], links: [] })
+
+    const graph = await fetchGraphRange({ from: '2024-01-01' })
+
+    const url = new URL(vi.mocked(fetch).mock.calls[0][0] as string, 'http://localhost')
+    expect(url.searchParams.has('to')).toBe(false)
+    expect(graph.nodes[0].tags).toEqual([])
   })
 })
-
 describe('fetchPaper', () => {
   beforeEach(() => {
     mockFetchOnce({ aid: 'x', t: 't', au: '', pd: '', ln: '', dm: '', tags: [], sm: '' })

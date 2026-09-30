@@ -131,20 +131,20 @@ export default function ArxivGraph({
   const wantsRecentPapers = !paperIds?.length && !activeSavedGraph
 
   // Fallback graph when nothing is explicitly selected: papers published in
-  // the last month. Uses the app-wide infinite staleTime, so the list is
-  // fetched once per page load.
+  // the last month, fetched as a graph in one request. Uses the app-wide
+  // infinite staleTime, so it is fetched once per page load.
   const {
-    data: recentPapers,
+    data: recentGraph,
     isLoading: isRecentLoading,
     error: recentError,
   } = useQuery({
-    queryKey: ['recentPapers'],
+    queryKey: ['recentGraph'],
     queryFn: async () => {
-      const { fetchAllPapers } = await import('../lib/api')
+      const { fetchGraphRange } = await import('../lib/api')
       const to = new Date()
       const from = new Date(to)
       from.setMonth(from.getMonth() - 1)
-      return fetchAllPapers({
+      return fetchGraphRange({
         from: from.toISOString().slice(0, 10),
         to: to.toISOString().slice(0, 10),
       })
@@ -152,11 +152,7 @@ export default function ArxivGraph({
     enabled: wantsRecentPapers,
   })
 
-  const ids = paperIds?.length
-    ? paperIds
-    : (activeSavedGraph?.paperIds ??
-      recentPapers?.map((p) => p.aid) ??
-      [])
+  const ids = paperIds?.length ? paperIds : (activeSavedGraph?.paperIds ?? [])
 
   const isDemo = wantsRecentPapers
   const isEmptySavedGraph =
@@ -198,7 +194,7 @@ export default function ArxivGraph({
   // Data fetch. Cached by ids so revisiting the same graph (e.g. navigating
   // away to /stats and back) doesn't refire /api/graph/subset.
   const {
-    data,
+    data: subgraph,
     error: queryError,
     isLoading: isGraphLoading,
   } = useQuery({
@@ -211,13 +207,12 @@ export default function ArxivGraph({
     // empty ids list, so skip the request and show an empty-state instead.
     enabled: ids.length > 0,
   })
+  const data = wantsRecentPapers ? recentGraph : subgraph
   const error = recentError
     ? `Failed to load recent papers: ${recentError.message}`
     : queryError
       ? `Failed to load graph: ${queryError.message}`
       : null
-  // The subgraph query stays disabled (and so not "loading") until recent
-  // papers arrive, so cover that first request too.
   const showLoading = isRecentLoading || (isGraphLoading && ids.length > 0)
 
   // Prepare simulation nodes (mutable x/y)

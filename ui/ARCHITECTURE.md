@@ -20,11 +20,12 @@ All data comes from the FastAPI backend via `lib/api.ts`:
 - `fetchTags()` → `GET /api/tags` — tag labels and sizes
 - `fetchPapers(params)` → `GET /api/papers` — paginated, server-side filtered listing (used by `StatsView` via `usePaperBrowser`)
 - `fetchSubgraph(ids)` → `POST /api/graph/subset` — graph data for a specific set of paper IDs (desktop `GraphView`)
+- `fetchGraphRange({from, to})` → `GET /api/graph/range` — graph data for every relevant paper in a date range (desktop `GraphView`'s default recent-papers graph)
 - `fetchRelated(arxivId)` → `GET /api/papers/related` — on-demand nearest-neighbor lookup for paper detail panels and graph ghost nodes
 - `fetchPaper(url)` → `GET /api/papers/{id}` — single paper detail including summary
 - `searchPapers(query, opts)` → `POST /api/search` — semantic search (used by `GraphView`)
 
-There is **no** `fetchAllPapers` / full-graph load anymore — the desktop graph always works with a subset (`fetchSubgraph`), and the list views paginate (`fetchPapers`).
+There is **no** full-graph load — the desktop graph works with either an ID subset (`fetchSubgraph`) or a date range (`fetchGraphRange`), and the list views paginate (`fetchPapers`).
 
 ### Legacy static fallback (`VITE_API_URL` unset)
 
@@ -57,7 +58,7 @@ Both views are `lazy`-loaded. `useMediaQuery('(max-width: 768px)')` decides whic
 Uses `react-force-graph-2d`. (Exported as `ArxivGraph`; the file was renamed from `Graph.tsx`.)
 
 Responsibilities:
-- Fetch subset graph via `fetchSubgraph(paperIds)` — falls back to a built-in `DEMO_PAPER_IDS` set when no `paperIds` are provided (`isDemo` flag)
+- Fetch the graph: `fetchSubgraph(ids)` for explicit `paperIds` or the active saved graph; otherwise (no `paperIds`, no saved graphs) the last month of papers via a single `fetchGraphRange` call (`isDemo` flag, shown as "Recent papers")
 - Build adjacency from subset links for neighbor highlighting
 - Canvas rendering with hover/select/lock state
 - Neighborhood-only edge visibility
