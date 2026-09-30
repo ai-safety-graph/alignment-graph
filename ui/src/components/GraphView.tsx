@@ -135,7 +135,8 @@ export default function ArxivGraph({
   const wantsRecentPapers = !paperIds?.length && !activeSavedGraph
 
   // Fallback graph when nothing is explicitly selected: papers published in
-  // the last month, refetched periodically so the default view stays fresh.
+  // the last month. Uses the app-wide infinite staleTime, so the list is
+  // fetched once per page load.
   const {
     data: recentPapers,
     isLoading: isRecentLoading,
@@ -154,7 +155,6 @@ export default function ArxivGraph({
       })
     },
     enabled: wantsRecentPapers,
-    staleTime: 5 * 60 * 1000,
   })
 
   const ids = paperIds?.length
