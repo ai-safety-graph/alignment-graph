@@ -17,23 +17,24 @@ def compute_graph_layout(
     canvas_w: int = 1000, canvas_h: int = 700, canvas_pad: int = 24,
 ) -> int:
     """
-    Compute 2D layout coordinates for kept, topic-embedded papers and persist
-    them to `papers.graph_x` / `papers.graph_y`. Returns the number of papers
-    updated.
+    Compute 2D layout coordinates for llm_relevant, topic-embedded papers and
+    persist them to `papers.graph_x` / `papers.graph_y`. Returns the number of
+    papers updated.
     """
     from .db import connect
     from .filters import load_vectors
     conn = connect(db_path)
     try:
-        # 1) Load kept + topic-embedded papers
+        # 1) Load relevant + topic-embedded papers -- the same set the API
+        # serves (graph and search both filter on llm_relevant).
         rows = conn.execute("""
             SELECT id
             FROM papers
-            WHERE ai_stage2_keep AND embedding_topic IS NOT NULL
+            WHERE llm_relevant AND embedding_topic IS NOT NULL
             ORDER BY published DESC
         """).fetchall()
         if not rows:
-            raise RuntimeError("No kept/embedded papers. Run filter & embed-topic first.")
+            raise RuntimeError("No relevant/embedded papers. Run embed-topic & llm-classify first.")
 
         ids: list[str] = [r["id"] for r in rows]
 
