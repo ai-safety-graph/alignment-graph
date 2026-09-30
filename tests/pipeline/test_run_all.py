@@ -35,16 +35,16 @@ def test_run_all_runs_every_stage_in_documented_order(monkeypatch):
     utils._cmd_run_all(_make_args())
 
     assert calls == [
-        "harvest", "stage1", "embed", "filter", "embed-topic", "llm-classify", "compute-layout",
+        "harvest", "stage1", "embed", "filter", "llm-classify", "embed-topic", "compute-layout",
     ]
 
 
-def test_run_all_embed_topic_runs_after_filter():
-    """embed-topic only embeds ai_stage2_keep=TRUE rows (set by filter) --
-    running it before filter would embed nothing useful, and compute-layout
-    would then hard-fail on newly-kept papers with no topic vector."""
+def test_run_all_embed_topic_runs_after_llm_classify():
+    """embed-topic only embeds llm_relevant rows (set by llm-classify) --
+    running it before llm-classify would embed nothing new, and compute-layout
+    would then skip newly-relevant papers that have no topic vector yet."""
     names = [name for name, _ in utils._RUN_ALL_STAGES]
-    assert names.index("filter") < names.index("embed-topic") < names.index("compute-layout")
+    assert names.index("llm-classify") < names.index("embed-topic") < names.index("compute-layout")
 
 
 def test_run_all_skips_named_stages(monkeypatch):

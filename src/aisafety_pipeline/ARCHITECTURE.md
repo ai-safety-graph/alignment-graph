@@ -7,7 +7,7 @@
 Its core job is to manage a staged literature-processing pipeline:
 
 ```text
-harvest -> stage1 -> embed -> filter -> embed-topic -> llm-classify(-run) -> compute-layout -> serve
+harvest -> stage1 -> embed -> filter -> llm-classify(-run) -> embed-topic -> compute-layout -> serve
 ```
 
 The package is PostgreSQL + pgvector only — every pipeline command and the API require `DATABASE_URL` to be set.
@@ -54,7 +54,7 @@ Vector loading reads `papers.embedding` via `id = ANY(%s)`.
 
 ### `embeddings.py`
 
-Generates SPECTER2 embeddings (`papers.embedding`, CLI `embed`) for every stage-1 candidate, and BGE topic embeddings (`papers.embedding_topic`, CLI `embed-topic`) for kept papers only. `embed-topic` must run *after* `filter` — it only embeds rows where `ai_stage2_keep = TRUE`, and `compute_layout.py` requires every kept row to already have a topic embedding.
+Generates SPECTER2 embeddings (`papers.embedding`, CLI `embed`) for every stage-1 candidate, and BGE topic embeddings (`papers.embedding_topic`, CLI `embed-topic`) for `llm_relevant` papers only. `embed-topic` must run *after* `llm-classify` — it only embeds rows where `llm_relevant` is true, and `compute_layout.py` only lays out `llm_relevant` rows that already have a topic embedding.
 
 ### `llm_classify.py`
 
@@ -62,7 +62,7 @@ LLM-based combined relevance + taxonomy classification (post stage-2), via OpenA
 
 ### `compute_layout.py`
 
-Computes 2D layout coordinates (umap/pca) from embeddings of filtered papers, and persists `graph_x` / `graph_y` back to the `papers` table. No JSON output — purely a DB-persistence stage consumed live by `api/routes/graph.py`.
+Computes 2D layout coordinates (umap/pca) from topic embeddings of `llm_relevant` papers, and persists `graph_x` / `graph_y` back to the `papers` table. No JSON output — purely a DB-persistence stage consumed live by `api/routes/graph.py`.
 
 ### `api/`
 
@@ -83,8 +83,8 @@ aisafety-pipeline harvest           # OAI-PMH fetch
 aisafety-pipeline stage1            # regex filter
 aisafety-pipeline embed             # SPECTER2 vectors
 aisafety-pipeline filter            # semantic stage-2
-aisafety-pipeline embed-topic       # BGE topic vectors (kept rows only, after filter)
 aisafety-pipeline llm-classify-run  # LLM relevance + taxonomy tags (live source, into llm_relevant/llm_tags)
+aisafety-pipeline embed-topic       # BGE topic vectors (relevant rows only, after llm-classify)
 aisafety-pipeline compute-layout    # persists graph_x/y to DB
 aisafety-pipeline serve             # FastAPI (DATABASE_URL required)
 ```
@@ -123,8 +123,8 @@ Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `ai_regex_hit
 2. **Stage 1** → `papers` (regex filter, `ai_regex_hit`)
 3. **Embedding** → `papers.embedding`
 4. **Stage 2 filter** → `papers` (`ai_sem_sim`, `ai_stage2_keep`, `ai_stage2_reason`)
-5. **Topic embedding** → `papers.embedding_topic` (kept rows only)
-6. **LLM classification** → `papers` (`llm_relevant`, `llm_tags`, etc.) — the live tag source read by the API
+5. **LLM classification** → `papers` (`llm_relevant`, `llm_tags`, etc.) — the live tag source read by the API
+6. **Topic embedding** → `papers.embedding_topic` (`llm_relevant` rows only)
 7. **Compute layout** → `papers.graph_x/y`
 8. **Serve** → FastAPI reads from PostgreSQL live
 
@@ -134,9 +134,9 @@ Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `ai_regex_hit
 
 ### `compute_layout.py`
 
-Operates only on rows where `ai_stage2_keep = 1`.
+Operates only on rows where `llm_relevant` is true and `embedding_topic` is present — the same set the graph and search API routes serve.
 
-Computes a 2D projection (`umap` by default, `pca` fallback) of `papers.embedding`, then persists coords: `UPDATE papers SET graph_x=?, graph_y=? WHERE id=?`
+Computes a 2D projection (`umap` by default, `pca` fallback) of `papers.embedding_topic`, then persists coords: `UPDATE papers SET graph_x=?, graph_y=? WHERE id=?`
 
 No JSON output, no neighbor-edge computation — `api/routes/graph.py` reads `graph_x`/`graph_y` live and re-normalizes per-request; it does not recompute layout.
 
@@ -183,7 +183,7 @@ Be careful around:
 ## Known Architecture Weak Points
 
 1. **Schema migrations are implicit**: `db.py` does `CREATE TABLE IF NOT EXISTS` + `ALTER TABLE ADD COLUMN` for new columns, but has no formal migration framework.
-2. **Layout failures occur late when stages are run manually out of order**: `compute-layout` hard-fails if any kept paper is missing its *topic* embedding (`embedding_topic`, from `embed-topic` — not the SPECTER2 `embedding` from `embed`). `run-all` avoids this by always running `embed-topic` after `filter` and before `compute-layout`; running individual CLI commands by hand in the wrong order can still hit it.
+2. **Layout failures occur late when stages are run manually out of order**: `compute-layout` silently skips any relevant paper that is missing its *topic* embedding (`embedding_topic`, from `embed-topic` — not the SPECTER2 `embedding` from `embed`). `run-all` avoids this by always running `embed-topic` after `llm-classify` and before `compute-layout`; running individual CLI commands by hand in the wrong order can still hit it.
 
 ---
 

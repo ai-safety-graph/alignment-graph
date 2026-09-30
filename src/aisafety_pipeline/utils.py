@@ -136,7 +136,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     ra = sp.add_parser(
         "run-all",
-        help="Chain harvest -> stage1 -> embed -> filter -> embed-topic -> llm-classify-run -> "
+        help="Chain harvest -> stage1 -> embed -> filter -> llm-classify-run -> embed-topic -> "
              "compute-layout in order, for unattended/cron use",
     )
     ra.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
@@ -160,20 +160,19 @@ def _cmd_init_db(args):
     print(f"{GREEN}init-db:{RESET} schema ready.")
 
 
-# Fixed pipeline order for `run-all`. embed-topic runs *after* filter --
-# it only embeds ai_stage2_keep=TRUE rows (see embeddings.py's
-# ensure_topic_embeddings_for_candidates docstring), and compute-layout
-# requires topic embeddings on every kept row or it raises. Running these
-# out of order was the actual cause of "layout failures occur late"
-# (compute-layout hard-failing on newly-kept papers with no topic vector
-# yet) -- see ARCHITECTURE.md.
+# Fixed pipeline order for `run-all`. embed-topic runs *after* llm-classify --
+# it only embeds llm_relevant rows (see embeddings.py's
+# ensure_topic_embeddings_for_candidates docstring), and compute-layout only
+# lays out llm_relevant rows that already have a topic embedding, so it must
+# run after both. Running these out of order silently leaves newly-relevant
+# papers without graph coordinates -- see ARCHITECTURE.md.
 _RUN_ALL_STAGES = [
     ("harvest", oai.cmd_harvest),
     ("stage1", filters.cmd_stage1),
     ("embed", embeddings.cmd_embed),
     ("filter", filters.cmd_filter),
-    ("embed-topic", embeddings.cmd_embed_topic),
     ("llm-classify", llm_classify.cmd_llm_classify_run),
+    ("embed-topic", embeddings.cmd_embed_topic),
     ("compute-layout", compute_layout.cmd_compute_layout),
 ]
 _RUN_ALL_STAGE_NAMES = [name for name, _ in _RUN_ALL_STAGES]
@@ -183,7 +182,7 @@ def _cmd_run_all(args) -> None:
     """Chain every pipeline stage in the order above, for unattended/cron
     use. Stops immediately on the first stage failure (non-zero exit) --
     running a later stage after e.g. a failed embed-topic would just
-    reproduce the compute-layout crash this ordering already fixes."""
+    lay out a corpus missing its newest relevant papers."""
     ns = argparse.Namespace(
         db=args.db,
         # harvest

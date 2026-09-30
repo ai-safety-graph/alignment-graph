@@ -275,11 +275,13 @@ def cmd_embed(args) -> None:
 def ensure_topic_embeddings_for_candidates(conn, device: str = "auto", batch_size: int = 32) -> None:
     # Unlike SPECTER2 embeddings (needed for every stage-1 candidate so the
     # stage-2 filter has vectors to decide keep/reject), the topic embedding
-    # only feeds tag/search/compute-layout, which only ever look at kept
-    # papers -- so embedding rejected papers here would be pure waste.
-    ids = [row[0] for row in conn.execute("SELECT id FROM papers WHERE ai_stage2_keep").fetchall()]
+    # only feeds search/compute-layout (and the HNSW index over it), which only
+    # ever look at llm_relevant papers -- so embedding anything else here
+    # would be pure waste. That makes this stage depend on llm-classify, not
+    # on filter: it must run after it.
+    ids = [row[0] for row in conn.execute("SELECT id FROM papers WHERE llm_relevant").fetchall()]
     if not ids:
-        print(f"{YELLOW}embed-topic:{RESET} no kept rows in `papers`. Run stage1 & filter first.")
+        print(f"{YELLOW}embed-topic:{RESET} no relevant rows in `papers`. Run llm-classify first.")
         return
 
     have = fetch_existing_embeddings(conn, ids, "topic")

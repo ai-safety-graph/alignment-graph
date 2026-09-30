@@ -98,21 +98,21 @@ aisafety-pipeline embed --device auto
 aisafety-pipeline filter --method centroid --seeds seeds.txt --tau 0.92
 ```
 
-**5. Generate BGE topic embeddings for kept papers**
-
-```bash
-aisafety-pipeline embed-topic --device auto
-```
-
-Only embeds rows `filter` just kept (`ai_stage2_keep=TRUE`) — run this *after* `filter`, not alongside `embed`. These are what `compute-layout` and semantic search use; skipping this step is why newly-kept papers can be missing graph coordinates.
-
-**6. Classify papers (relevance + topic tags) via LLM**
+**5. Classify papers (relevance + topic tags) via LLM**
 
 ```bash
 aisafety-pipeline llm-classify-run
 ```
 
 This submits, waits for, and collects OpenAI Batch API jobs until every unclassified paper has `llm_relevant`/`llm_tags` set — this is what the API serves.
+
+**6. Generate BGE topic embeddings for relevant papers**
+
+```bash
+aisafety-pipeline embed-topic --device auto
+```
+
+Only embeds `llm_relevant` rows — run this *after* `llm-classify-run`, not alongside `embed`. These are what `compute-layout` and semantic search use; skipping this step is why relevant papers can be missing graph coordinates.
 
 **7a. Compute graph layout**
 
@@ -136,7 +136,7 @@ API docs available at `http://localhost:8000/docs`.
 aisafety-pipeline run-all
 ```
 
-Chains harvest → stage1 → embed → filter → embed-topic → llm-classify-run → compute-layout in that fixed order, stopping immediately on the first stage's failure. This is what the scheduled Railway cron job (`Dockerfile.pipeline`) runs daily — see that file and `railway.pipeline.json`. The harvest watermark and in-flight OpenAI batch tracking are stored in the `pipeline_state` table (not local files), so this is safe to run from a fresh container on every invocation. Pass `--skip <stage>` (repeatable) to omit a stage for manual recovery/debugging.
+Chains harvest → stage1 → embed → filter → llm-classify-run → embed-topic → compute-layout in that fixed order, stopping immediately on the first stage's failure. This is what the scheduled Railway cron job (`Dockerfile.pipeline`) runs daily — see that file and `railway.pipeline.json`. The harvest watermark and in-flight OpenAI batch tracking are stored in the `pipeline_state` table (not local files), so this is safe to run from a fresh container on every invocation. Pass `--skip <stage>` (repeatable) to omit a stage for manual recovery/debugging.
 
 ### Configure the frontend
 
