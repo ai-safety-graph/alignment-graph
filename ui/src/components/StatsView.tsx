@@ -9,7 +9,6 @@ import {
   X,
   Globe,
   List,
-  ExternalLink,
   Trash2,
   Sparkles,
   SlidersHorizontal,
@@ -411,19 +410,6 @@ export default function StatsView() {
     </button>
   )
 
-  const exportSubgraphLink = (
-    <Link
-      to={`/subgraph/${selectedSubgraphId}`}
-      target='_blank'
-      rel='noopener noreferrer'
-      title='Export subgraph'
-      aria-label='Open shareable subgraph page'
-      className='shrink-0 px-1.5 py-1 rounded-md cursor-pointer bg-neutral-950 border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors'
-    >
-      <ExternalLink size={15} />
-    </Link>
-  )
-
   const deleteSubgraphButton = (
     <button
       type='button'
@@ -463,7 +449,6 @@ export default function StatsView() {
       <div className='flex-1 flex justify-end items-center gap-2'>
         {isBrowsing && newGraphControl}
         {filterBar && filterToggleButton}
-        {viewMode === 'subgraph' && exportSubgraphLink}
         {viewMode === 'subgraph' && deleteSubgraphButton}
         {viewModeToggleButton}
       </div>
@@ -558,12 +543,9 @@ export default function StatsView() {
                     <div className='ml-auto flex items-center gap-2'>
                       {selectedSubgraph && isBrowsing && newGraphControl}
                       {filterBar && filterToggleButton}
-                      {selectedSubgraph && viewMode === 'subgraph' && (
-                        <>
-                          {exportSubgraphLink}
-                          {deleteSubgraphButton}
-                        </>
-                      )}
+                      {selectedSubgraph &&
+                        viewMode === 'subgraph' &&
+                        deleteSubgraphButton}
                       {selectedSubgraph && viewModeToggleButton}
                     </div>
                   </div>

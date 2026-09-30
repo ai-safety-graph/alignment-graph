@@ -5,7 +5,6 @@ import LoadingIndicator from './components/LoadingIndicator'
 
 const ArxivGraph = lazy(() => import('./components/GraphView'))
 const StatsPage = lazy(() => import('./components/StatsView'))
-const SubgraphPage = lazy(() => import('./components/SubgraphView'))
 
 export default function App() {
   const isSmall = useMediaQuery('(max-width: 768px)')
@@ -24,7 +23,6 @@ export default function App() {
       <Routes>
         <Route path='/' element={isSmall ? <StatsPage /> : <ArxivGraph />} />
         <Route path='/stats' element={<StatsPage />} />
-        <Route path='/subgraph/:id' element={<SubgraphPage />} />
       </Routes>
     </Suspense>
   )

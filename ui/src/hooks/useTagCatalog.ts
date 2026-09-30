@@ -9,8 +9,7 @@ import type { TagsLegend } from '../lib/types'
 const DOMAINS = ['tech', 'gov', 'both']
 
 /**
- * Fetches the tag legend. Shared by the list-based views (StatsView,
- * SubgraphView). Cached for the session by the QueryClient, so navigating
+ * Fetches the tag legend for the list-based StatsView. Cached for the session by the QueryClient, so navigating
  * back to a view that already loaded the catalog renders instantly with
  * isLoading: false.
  */
