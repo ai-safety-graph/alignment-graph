@@ -24,7 +24,10 @@ import {
 
 import { useForceConfig } from '../hooks/useForceConfig'
 import { useGraphShortcuts } from '../hooks/useGraphShortcuts'
-import { useServerFilters } from '../hooks/useServerFilters'
+import {
+  availableDatePresets,
+  useServerFilters,
+} from '../hooks/useServerFilters'
 import {
   buildAdjacency,
   clamp,
@@ -325,6 +328,40 @@ export default function ArxivGraph({
     () => [...new Set(simNodes.map((n) => n.dm))].sort(),
     [simNodes],
   )
+
+  // Only offer date windows that narrow the loaded graph
+  const datePresets = useMemo(() => {
+    let oldest: string | undefined
+    for (const n of simNodes) {
+      const pd = n.pd?.slice(0, 10)
+      if (pd && (oldest === undefined || pd < oldest)) oldest = pd
+    }
+    return availableDatePresets(oldest)
+  }, [simNodes])
+
+  // Tag counts over the papers matching the date and domain filters (tag
+  // filters are left out so selecting a tag doesn't zero the others)
+  const filteredTagEntries = useMemo(() => {
+    if (!fromDate && activeDomains.size === 0) return tagEntries
+    const f = { tags: new Set<string>(), domains: activeDomains, fromDate }
+    const counts = new Map<string, number>()
+    for (const n of simNodes) {
+      if (!nodeMatchesFilters(n, f)) continue
+      for (const t of n.tags) counts.set(t, (counts.get(t) ?? 0) + 1)
+    }
+    return tagEntries.map(
+      ([tag, meta]) =>
+        [tag, { ...meta, size: counts.get(tag) ?? 0 }] as [
+          string,
+          { size: number },
+        ],
+    )
+  }, [tagEntries, simNodes, fromDate, activeDomains])
+
+  // Reset a preset the reloaded graph no longer supports
+  useEffect(() => {
+    if (!datePresets.some((p) => p.value === datePreset)) setDatePreset('all')
+  }, [datePresets, datePreset, setDatePreset])
 
   const visibleIds = useMemo(() => {
     if (!hasActiveFilters) return null
@@ -1033,11 +1070,12 @@ export default function ArxivGraph({
           {filtersOpen && (
             <div className='fixed top-14 left-4 z-20 w-[min(900px,calc(100vw-2rem))] max-h-[80vh] overflow-auto shadow-lg rounded-lg'>
               <FilterBar
-                tagEntries={tagEntries}
+                tagEntries={filteredTagEntries}
                 availableDomains={availableDomains}
                 activeTags={activeTags}
                 activeDomains={activeDomains}
                 datePreset={datePreset}
+                datePresets={datePresets}
                 hasActiveFilters={hasActiveFilters}
                 onToggleTag={toggleTag}
                 onToggleDomain={toggleDomain}

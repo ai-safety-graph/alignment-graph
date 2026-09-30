@@ -23,20 +23,25 @@ interface FilterBarProps {
   // Date preset chips (StatsView)
   datePreset?: DatePreset
   onSetDatePreset?: (preset: DatePreset) => void
+  // Slider notches; defaults to every preset
+  datePresets?: typeof DATE_PRESETS
   isExpanded?: boolean
   showTagCounts?: boolean
 }
 
-const LAST_DATE_INDEX = DATE_PRESETS.length - 1
-
 function DateSlider({
   value,
+  presets,
   onCommit,
 }: {
   value: DatePreset
+  presets: typeof DATE_PRESETS
   onCommit: (preset: DatePreset) => void
 }) {
-  const committedIndex = DATE_PRESETS.findIndex((p) => p.value === value)
+  const lastIndex = presets.length - 1
+  const foundIndex = presets.findIndex((p) => p.value === value)
+  // A preset missing from the list is wider than the data, i.e. "Any time"
+  const committedIndex = foundIndex === -1 ? lastIndex : foundIndex
   // Tracks the thumb while dragging; the filter itself only updates on commit
   // so StatsView doesn't refetch at every notch.
   const [pendingIndex, setPendingIndex] = useState(committedIndex)
@@ -58,35 +63,35 @@ function DateSlider({
       <div className='flex flex-1 items-center gap-2'>
         <Slider.Root
           min={0}
-          max={LAST_DATE_INDEX}
+          max={lastIndex}
           step={1}
           value={[pendingIndex]}
           onValueChange={([i]) => setPendingIndex(i)}
-          onValueCommit={([i]) => onCommit(DATE_PRESETS[i].value)}
+          onValueCommit={([i]) => onCommit(presets[i].value)}
           className='relative flex flex-1 md:max-w-md lg:max-w-xl h-5 items-center touch-none select-none cursor-pointer'
         >
           <Slider.Track className='relative h-0.5 grow rounded-full bg-neutral-600'>
             <Slider.Range className='absolute h-full rounded-full bg-neutral-400' />
           </Slider.Track>
           {/* Notches: inset by half the 12px thumb so they line up with its centre at each step */}
-          {DATE_PRESETS.map((p, i) => (
+          {presets.map((p, i) => (
             <span
               key={p.value}
               className='pointer-events-none absolute top-1/2 h-1.5 w-px -translate-x-1/2 -translate-y-1/2 bg-neutral-500'
               style={{
-                left: `calc(6px + (100% - 12px) * ${i / LAST_DATE_INDEX})`,
+                left: `calc(6px + (100% - 12px) * ${i / lastIndex})`,
               }}
               aria-hidden
             />
           ))}
           <Slider.Thumb
             aria-labelledby='date-filter-label'
-            aria-valuetext={DATE_PRESETS[pendingIndex]?.label}
+            aria-valuetext={presets[pendingIndex]?.label}
             className='block size-3 rounded-full bg-neutral-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400'
           />
         </Slider.Root>
         <span className='shrink-0 w-20 md:w-24 text-right text-xs text-neutral-300'>
-          {DATE_PRESETS[pendingIndex]?.label}
+          {presets[pendingIndex]?.label}
         </span>
       </div>
     </div>
@@ -108,6 +113,7 @@ export default function FilterBar({
   onToggleYear,
   datePreset,
   onSetDatePreset,
+  datePresets = DATE_PRESETS,
   isExpanded = true,
   showTagCounts = true,
 }: FilterBarProps) {
@@ -128,9 +134,15 @@ export default function FilterBar({
           </button>
         </div>
 
-        {datePreset !== undefined && onSetDatePreset && (
-          <DateSlider value={datePreset} onCommit={onSetDatePreset} />
-        )}
+        {datePreset !== undefined &&
+          onSetDatePreset &&
+          datePresets.length > 1 && (
+            <DateSlider
+              value={datePreset}
+              presets={datePresets}
+              onCommit={onSetDatePreset}
+            />
+          )}
 
         {!datePreset &&
           availableYears &&
