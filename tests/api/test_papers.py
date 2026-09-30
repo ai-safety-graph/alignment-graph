@@ -16,6 +16,20 @@ def test_list_papers_pagination(client, make_paper):
     assert len(body["items"]) == 2
 
 
+def test_list_papers_pages_are_stable_across_same_date_papers(client, make_paper):
+    # Inserted in reverse id order so heap order disagrees with the id
+    # tie-breaker; without it, pages over same-date papers can overlap.
+    for i in reversed(range(6)):
+        make_paper(f"2401.0010{i}", published="2024-01-01")
+
+    aids = []
+    for page in (1, 2, 3):
+        res = client.get("/api/papers", params={"page": page, "limit": 2})
+        aids += [item["aid"] for item in res.json()["items"]]
+
+    assert aids == [f"https://arxiv.org/abs/2401.0010{i}" for i in range(6)]
+
+
 def test_list_papers_excludes_unkept(client, make_paper):
     make_paper("2401.00010", ai_stage2_keep=True)
     make_paper("2401.00011", ai_stage2_keep=False)

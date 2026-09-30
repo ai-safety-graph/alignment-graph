@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from aisafety_pipeline.api.routes.graph import _MAX_SUBSET
+
 
 def test_subset_rejects_empty_ids(client):
     res = client.post("/api/graph/subset", json={"ids": []})
@@ -7,7 +9,7 @@ def test_subset_rejects_empty_ids(client):
 
 
 def test_subset_rejects_too_many_ids(client):
-    res = client.post("/api/graph/subset", json={"ids": [f"id-{i}" for i in range(501)]})
+    res = client.post("/api/graph/subset", json={"ids": [f"id-{i}" for i in range(_MAX_SUBSET + 1)]})
     assert res.status_code == 422
 
 

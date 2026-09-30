@@ -11,7 +11,8 @@ from ..deps import get_conn
 
 router = APIRouter(prefix="/api/graph", tags=["graph"])
 
-_MAX_SUBSET = 500
+# Large enough for a month of relevant papers (the UI's default graph).
+_MAX_SUBSET = 5000
 
 
 class SubsetRequest(BaseModel):

@@ -90,6 +90,24 @@ export async function fetchPapers(
   return { ...data, items: data.items.map(withTags) }
 }
 
+// The largest page size /api/papers accepts.
+const MAX_PAGE_SIZE = 200
+
+// Every paper matching the filters, fetched page by page: the first request
+// reveals the total, then the remaining pages are fetched in parallel.
+export async function fetchAllPapers(
+  params: Omit<Parameters<typeof fetchPapers>[0], 'page' | 'limit'> = {},
+): Promise<NodeCompact[]> {
+  const first = await fetchPapers({ ...params, page: 1, limit: MAX_PAGE_SIZE })
+  const pageCount = Math.ceil(first.total / MAX_PAGE_SIZE)
+  const rest = await Promise.all(
+    Array.from({ length: pageCount - 1 }, (_, i) =>
+      fetchPapers({ ...params, page: i + 2, limit: MAX_PAGE_SIZE }),
+    ),
+  )
+  return [first, ...rest].flatMap((p) => p.items)
+}
+
 export async function fetchTags(): Promise<TagsLegend> {
   return apiFetch<TagsLegend>('/api/tags')
 }

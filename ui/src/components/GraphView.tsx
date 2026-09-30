@@ -48,10 +48,6 @@ import FilterBar from './FilterBar'
 import LoadingIndicator from './LoadingIndicator'
 import { useCapabilities } from '../hooks/useCapabilities'
 
-// Safety cap on the fallback graph's size; the from/to date window is what
-// actually bounds it under normal volume.
-const RECENT_PAPERS_LIMIT = 200
-
 // Node fills: papers in the loaded subgraph vs. ghost nodes surfaced as
 // related papers or by search.
 const SUBGRAPH_NODE_COLOR = '#6A93B0'
@@ -144,12 +140,11 @@ export default function ArxivGraph({
   } = useQuery({
     queryKey: ['recentPapers'],
     queryFn: async () => {
-      const { fetchPapers } = await import('../lib/api')
+      const { fetchAllPapers } = await import('../lib/api')
       const to = new Date()
       const from = new Date(to)
       from.setMonth(from.getMonth() - 1)
-      return fetchPapers({
-        limit: RECENT_PAPERS_LIMIT,
+      return fetchAllPapers({
         from: from.toISOString().slice(0, 10),
         to: to.toISOString().slice(0, 10),
       })
@@ -160,7 +155,7 @@ export default function ArxivGraph({
   const ids = paperIds?.length
     ? paperIds
     : (activeSavedGraph?.paperIds ??
-      recentPapers?.items.map((p) => p.aid) ??
+      recentPapers?.map((p) => p.aid) ??
       [])
 
   const isDemo = wantsRecentPapers
