@@ -48,3 +48,45 @@ def test_subset_unknown_ids_returns_empty_graph(client):
     body = res.json()
     assert body["nodes"] == []
     assert body["links"] == []
+
+
+def test_range_returns_only_papers_in_range(client, make_paper):
+    before = make_paper("2401.00090", published="2023-12-31")
+    first = make_paper("2401.00091", published="2024-01-01", tags=[("rlhf", 0.9)])
+    last = make_paper("2401.00092", published="2024-01-31")
+    after = make_paper("2401.00093", published="2024-02-01")
+
+    res = client.get("/api/graph/range", params={"from": "2024-01-01", "to": "2024-01-31"})
+    assert res.status_code == 200
+    body = res.json()
+
+    aids = [node["aid"] for node in body["nodes"]]
+    assert first in aids and last in aids
+    assert before not in aids and after not in aids
+    # Newest first, matching /api/papers ordering.
+    assert aids.index(last) < aids.index(first)
+    for node in body["nodes"]:
+        assert 0 <= node["x"] <= 1000
+        assert 0 <= node["y"] <= 700
+    assert body["tags"]["rlhf"]["size"] >= 1
+
+
+def test_range_without_to_is_open_ended(client, make_paper):
+    later = make_paper("2401.00094", published="2099-01-01")
+
+    res = client.get("/api/graph/range", params={"from": "2098-12-31"})
+    assert res.status_code == 200
+    assert [node["aid"] for node in res.json()["nodes"]] == [later]
+
+
+def test_range_excludes_irrelevant_papers(client, make_paper):
+    make_paper("2401.00095", published="2099-02-01", llm_relevant=False)
+
+    res = client.get("/api/graph/range", params={"from": "2099-02-01", "to": "2099-02-01"})
+    assert res.status_code == 200
+    assert res.json()["nodes"] == []
+
+
+def test_range_requires_valid_from(client):
+    assert client.get("/api/graph/range").status_code == 422
+    assert client.get("/api/graph/range", params={"from": "not-a-date"}).status_code == 422

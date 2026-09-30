@@ -25,7 +25,7 @@ See the ARCHITECTURE.md files for full detail. Short version:
 ## Key Invariants
 
 - All tag data served to the API/UI comes from the LLM classification stage (`src/aisafety_pipeline/llm_classify.py`, columns `llm_relevant`/`llm_tags` on `papers`). The older zero-shot `tagging.py` module and its `paper_tags` table have been removed from the codebase; a `paper_tags` table may still exist in some deployed databases as an untouched leftover, but nothing reads it. See `src/aisafety_pipeline/api/ARCHITECTURE.md` for the authoritative statement.
-- Paper identity key is the canonical arXiv abs URL (`aid`), not the numeric `id` (which is session-assigned by index — `fetchAllPapers` for the graph, or inline in `fetchPapers` results for MobileView/StatsView)
+- Paper identity key is the canonical arXiv abs URL (`aid`), not the numeric `id` (which is session-assigned by index — by the graph response from `/api/graph/subset` or `/api/graph/range` for the graph, or inline in `fetchPapers` results for MobileView/StatsView)
 - Compact node fields are: `id`, `aid`, `t`, `au`, `pd`, `dm`, `ln`, `tags` — do not rename without coordinating across API routes and the UI
 - `GET /api/papers/related` must stay registered before `GET /api/papers/{arxiv_id:path}` in `papers.py`
 

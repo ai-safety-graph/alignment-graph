@@ -16,7 +16,7 @@ src/aisafety_pipeline/api/
   main.py          # FastAPI app, CORS, lifespan
   deps.py          # get_conn() dependency (yields PgConnection per request)
   routes/
-    graph.py       # POST /api/graph/subset
+    graph.py       # POST /api/graph/subset, GET /api/graph/range
     papers.py      # GET /api/papers, GET /api/papers/related, GET /api/papers/{arxiv_id:path}
     search.py      # POST /api/search
     tags.py        # GET /api/tags
@@ -49,9 +49,9 @@ All endpoints gate on the LLM classification stage (`llm_classify.py`): a paper 
 
 ### `POST /api/graph/subset`
 
-Returns a compact graph for a specific list of paper IDs. This is the only graph endpoint — there is no full-graph endpoint.
+Returns a compact graph for a specific list of paper IDs. See also `GET /api/graph/range` below; there is no full-graph endpoint.
 
-Request body: `{ ids: string[] }` (max 500 IDs)
+Request body: `{ ids: string[] }` (1 to `_MAX_SUBSET` = 5000 IDs, sized for a month of relevant papers; otherwise 422)
 
 Response shape: `{ meta, tags, nodes: NodeCompact[], links: LinkCompact[] }`
 
@@ -59,11 +59,23 @@ Implementation:
 - Fetches only the requested papers (must be `llm_relevant = TRUE`)
 - Builds a `tags` legend (`{tag: {size}}`) from each node's `llm_tags`
 - Re-normalises stored `graph_x/y` coordinates to fit the canvas bounds for the subset
-- Builds neighbor links using pgvector `<=>` cosine similarity (batch queries, threshold 0.85, top-5 per paper)
+- Returns no links (`links: []`); related papers are fetched on demand via `GET /api/papers/related`
 
 Coordinate fields (used by the UI to align ghost nodes — see `ui/ARCHITECTURE.md`):
 - Each node carries both the canvas-normalised `x`/`y` **and** the raw stored `rx`/`ry` (= `graph_x`/`graph_y`, nullable)
 - `meta.coords.bounds` carries the subset's raw min/max (`x_min`, `x_max`, `y_min`, `y_max`) when coords are present, else `null`. This lets the frontend re-apply *this* subset's normalisation to papers fetched in later calls (search / related), so they land in the same coordinate space rather than each call's own normalisation
+
+### `GET /api/graph/range`
+
+Returns a compact graph (same shape and coordinate semantics as `/subset`) for every relevant paper published in a date range. Used by the desktop UI's default "recent papers" graph so it loads in one request instead of paginating `/api/papers` and re-posting the IDs to `/subset`.
+
+Query params:
+- `from` (required, `YYYY-MM-DD`), `to` (optional, inclusive; open-ended if omitted). Malformed dates return 422.
+
+Implementation:
+- `published` is TEXT (`YYYY-MM-DD`), so bounds are compared as ISO strings
+- Newest first (`ORDER BY published DESC, id`), capped at `_MAX_SUBSET` papers
+- Node/legend/coordinate building is shared with `/subset` (`_graph_from_rows`)
 
 ### `GET /api/papers`
 

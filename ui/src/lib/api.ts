@@ -41,6 +41,18 @@ export async function fetchSubgraph(
   return { ...data, nodes: data.nodes.map(withTags) }
 }
 
+// Graph of every relevant paper published in [from, to] (dates as
+// YYYY-MM-DD; `to` defaults to open-ended), in one request.
+export async function fetchGraphRange(params: {
+  from: string
+  to?: string
+}): Promise<GraphDataCompact> {
+  const qs = new URLSearchParams({ from: params.from })
+  if (params.to) qs.set('to', params.to)
+  const data = await apiFetch<GraphDataCompact>(`/api/graph/range?${qs}`)
+  return { ...data, nodes: data.nodes.map(withTags) }
+}
+
 export async function fetchPaper(
   arxivUrl: string,
 ): Promise<PaperDetail | null> {
@@ -88,24 +100,6 @@ export async function fetchPapers(
   if (params.q) qs.set('q', params.q)
   const data = await apiFetch<PaginatedPapers>(`/api/papers?${qs}`)
   return { ...data, items: data.items.map(withTags) }
-}
-
-// The largest page size /api/papers accepts.
-const MAX_PAGE_SIZE = 200
-
-// Every paper matching the filters, fetched page by page: the first request
-// reveals the total, then the remaining pages are fetched in parallel.
-export async function fetchAllPapers(
-  params: Omit<Parameters<typeof fetchPapers>[0], 'page' | 'limit'> = {},
-): Promise<NodeCompact[]> {
-  const first = await fetchPapers({ ...params, page: 1, limit: MAX_PAGE_SIZE })
-  const pageCount = Math.ceil(first.total / MAX_PAGE_SIZE)
-  const rest = await Promise.all(
-    Array.from({ length: pageCount - 1 }, (_, i) =>
-      fetchPapers({ ...params, page: i + 2, limit: MAX_PAGE_SIZE }),
-    ),
-  )
-  return [first, ...rest].flatMap((p) => p.items)
 }
 
 export async function fetchTags(): Promise<TagsLegend> {

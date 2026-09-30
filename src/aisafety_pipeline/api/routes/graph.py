@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime as dt
 from collections import defaultdict
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, field_validator
 
 from ...config import TOPIC_EMB_DIMS, TOPIC_EMB_MODEL
@@ -28,16 +28,43 @@ class SubsetRequest(BaseModel):
         return v
 
 
+_GRAPH_COLUMNS = """
+    id, title, authors, published, link, domain_tag,
+    graph_x, graph_y,
+    llm_tags AS tags
+"""
+
+
 def _build_subgraph(conn, paper_ids: list[str]) -> dict:
-    rows = conn.execute("""
-        SELECT id, title, authors, published, link, domain_tag,
-               graph_x, graph_y,
-               llm_tags AS tags
+    rows = conn.execute(f"""
+        SELECT {_GRAPH_COLUMNS}
         FROM papers
         WHERE id = ANY(%s) AND llm_relevant = TRUE
         ORDER BY published DESC
     """, (paper_ids,)).fetchall()
+    return _graph_from_rows(rows)
 
+
+def _build_range_graph(
+    conn, from_date: dt.date, to_date: dt.date | None
+) -> dict:
+    # `published` is TEXT (YYYY-MM-DD), so compare as ISO strings.
+    where = ["llm_relevant = TRUE", "published >= %s"]
+    params: list = [from_date.isoformat()]
+    if to_date:
+        where.append("published <= %s")
+        params.append(to_date.isoformat())
+    rows = conn.execute(f"""
+        SELECT {_GRAPH_COLUMNS}
+        FROM papers
+        WHERE {" AND ".join(where)}
+        ORDER BY published DESC, id
+        LIMIT %s
+    """, (*params, _MAX_SUBSET)).fetchall()
+    return _graph_from_rows(rows)
+
+
+def _graph_from_rows(rows) -> dict:
     if not rows:
         return {
             "meta": {
@@ -138,3 +165,14 @@ def get_subgraph(body: SubsetRequest, conn=Depends(get_conn)):
         return _build_subgraph(conn, body.ids)
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.get("/range")
+def get_range_graph(
+    from_date: dt.date = Query(..., alias="from"),
+    to_date: dt.date | None = Query(None, alias="to"),
+    conn=Depends(get_conn),
+):
+    """Graph of relevant papers published in [from, to], newest first,
+    capped at the same size as a subset request."""
+    return _build_range_graph(conn, from_date, to_date)
