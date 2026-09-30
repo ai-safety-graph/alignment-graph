@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fetchPaper, fetchPapers, fetchTags } from './api'
+import { fetchAllPapers, fetchPaper, fetchPapers, fetchTags } from './api'
 
 function mockFetchOnce(body: unknown, init: { ok?: boolean; status?: number } = {}) {
   const { ok = true, status = 200 } = init
@@ -52,6 +52,39 @@ describe('fetchPapers', () => {
   it('throws on a non-OK response', async () => {
     mockFetchOnce({}, { ok: false, status: 500 })
     await expect(fetchPapers()).rejects.toThrow('API 500')
+  })
+})
+
+describe('fetchAllPapers', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('fetches every page and concatenates items in page order', async () => {
+    const node = (aid: string) => ({ aid, t: '', au: '', pd: '', ln: '', dm: '', tags: [] })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string) => {
+        const page = Number(new URL(input, 'http://localhost').searchParams.get('page'))
+        const items = page < 3 ? [node(`p${page}a`), node(`p${page}b`)] : [node('p3a')]
+        return { ok: true, status: 200, json: async () => ({ total: 401, page, limit: 200, items }) } as Response
+      }),
+    )
+
+    const papers = await fetchAllPapers({ from: '2024-01-01' })
+
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(3)
+    const urls = vi.mocked(fetch).mock.calls.map((c) => new URL(c[0] as string, 'http://localhost'))
+    expect(urls.map((u) => u.searchParams.get('page'))).toEqual(['1', '2', '3'])
+    expect(urls.every((u) => u.searchParams.get('limit') === '200')).toBe(true)
+    expect(urls.every((u) => u.searchParams.get('from') === '2024-01-01')).toBe(true)
+    expect(papers.map((p) => p.aid)).toEqual(['p1a', 'p1b', 'p2a', 'p2b', 'p3a'])
+  })
+
+  it('makes a single request when everything fits on one page', async () => {
+    mockFetchOnce({ total: 0, page: 1, limit: 200, items: [] })
+    expect(await fetchAllPapers()).toEqual([])
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1)
   })
 })
 

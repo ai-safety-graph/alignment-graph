@@ -52,7 +52,7 @@ def list_papers(
         SELECT id, title, authors, published, link, domain_tag,
                llm_tags AS tags
         FROM papers {where_sql}
-        ORDER BY published DESC
+        ORDER BY published DESC, id
         LIMIT %s OFFSET %s
         """,
         params + [limit, offset],
