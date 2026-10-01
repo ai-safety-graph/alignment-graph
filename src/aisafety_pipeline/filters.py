@@ -14,6 +14,7 @@ from .embeddings import _MODEL_COLUMNS
 
 _STAGE1_READ_CHUNK = 2000
 _STAGE1_WRITE_BATCH = 500
+_STAGE1_STATE_KEY = "stage1_watermark"
 
 _UPSERT_PAPERS = """
     INSERT INTO papers (id, title, authors, published, summary, link, ai_regex_hit, domain_tag)
@@ -103,12 +104,34 @@ _SELECT_EXISTING_PAPERS = """
 
 
 def cmd_stage1(args):
-    from .db import connect
+    """Regex/keyword gate from `papers_raw` into `papers`.
+
+    Incremental by default: only scans rows whose `harvested_at` is newer
+    than the `stage1_watermark` recorded by the previous successful run.
+    Falls back to a full scan when there is no watermark yet (first run, or
+    rows predating the `harvested_at` column), or when `--full` is passed --
+    needed after changing the stage-1 regexes, since those don't touch
+    `harvested_at` but can change which old rows match.
+    """
+    from .db import connect, get_state, set_state
     conn = connect(args.db)
     try:
         write_cur = conn.raw_cursor()
         scanned = copied = unchanged = 0
         write_batch: list[tuple] = []
+
+        watermark = None if args.full else get_state(conn, _STAGE1_STATE_KEY)
+        # Upper bound fixed up front, so a watermark saved at the end never
+        # skips past rows that weren't part of this scan.
+        cutoff = conn.execute("SELECT max(harvested_at) AS m FROM papers_raw").fetchone()["m"]
+        if watermark is None:
+            print(f"{BLUE}stage1:{RESET} full scan of `papers_raw`")
+            where, bounds = "", ()
+        else:
+            since = watermark["harvested_at"]
+            print(f"{BLUE}stage1:{RESET} scanning rows harvested after {since}")
+            where = "harvested_at > %s::timestamptz AND harvested_at <= %s AND "
+            bounds = (since, cutoff)
 
         def flush_writes():
             nonlocal write_batch, copied
@@ -125,8 +148,8 @@ def cmd_stage1(args):
             while True:
                 page = conn.execute(
                     "SELECT id, title, summary, authors, published, link, categories "
-                    "FROM papers_raw WHERE id > %s ORDER BY id LIMIT %s",
-                    (last_id, _STAGE1_READ_CHUNK),
+                    f"FROM papers_raw WHERE {where}id > %s ORDER BY id LIMIT %s",
+                    (*bounds, last_id, _STAGE1_READ_CHUNK),
                 ).fetchall()
                 if not page:
                     break
@@ -181,6 +204,12 @@ def cmd_stage1(args):
         except Exception:
             conn.rollback()
             raise
+
+        # Only advance after a complete scan; a crashed run is simply redone
+        # next time (re-upserting is idempotent). No cutoff means no row has
+        # a harvested_at yet, so there is nothing to advance to.
+        if cutoff is not None:
+            set_state(conn, _STAGE1_STATE_KEY, {"harvested_at": cutoff.isoformat()})
 
         print(
             f"{GREEN}stage1:{RESET} scanned {scanned} rows, copied/updated {copied} candidates into "
@@ -405,9 +434,21 @@ def cmd_filter(args):
         if not args.seeds:
             raise SystemExit("--seeds is required for centroid method")
 
-        ids = [r[0] for r in conn.execute("SELECT id FROM papers").fetchall()]
+        # Incremental by default: a paper's score only depends on its own
+        # vector and the seed centroid, so already-scored papers can't change
+        # unless seeds.txt (or --tau) does. Pulling every vector back over
+        # the wire to recompute identical scores was the most expensive part
+        # of a daily run. Pass --full after changing the seeds or tau.
+        id_sql = "SELECT id FROM papers"
+        if not args.full:
+            id_sql += " WHERE ai_sem_sim IS NULL"
+        ids = [r[0] for r in conn.execute(id_sql).fetchall()]
         if not ids:
-            print(f"{YELLOW}filter:{RESET} nothing in `papers`. Run stage1 & embed first."); return
+            if args.full:
+                print(f"{YELLOW}filter:{RESET} nothing in `papers`. Run stage1 & embed first.")
+            else:
+                print(f"{GREEN}filter:{RESET} no unscored papers.")
+            return
         V = load_vectors(conn, ids)
         C = build_centroid(conn, args.seeds)
 

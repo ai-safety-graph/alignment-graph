@@ -30,7 +30,8 @@ _UPSERT_PAPERS_RAW = """
     ON CONFLICT (id) DO UPDATE SET
       title=EXCLUDED.title, authors=EXCLUDED.authors, published=EXCLUDED.published,
       summary=EXCLUDED.summary, link=EXCLUDED.link,
-      categories=EXCLUDED.categories, updated=EXCLUDED.updated, pdf_url=EXCLUDED.pdf_url
+      categories=EXCLUDED.categories, updated=EXCLUDED.updated, pdf_url=EXCLUDED.pdf_url,
+      harvested_at=now()
 """
 
 # ---- Session with retries & polite UA ----

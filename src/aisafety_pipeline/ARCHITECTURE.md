@@ -47,8 +47,8 @@ Harvests metadata from arXiv via OAI-PMH into `papers_raw`. Uses `:name` paramst
 
 Implements filtering stages:
 
-- **stage 1**: regex/keyword gating into `papers`
-- **stage 2**: semantic filtering using centroid or logistic regression
+- **stage 1**: regex/keyword gating into `papers`. Incremental: only scans `papers_raw` rows whose `harvested_at` (stamped by every harvest upsert) is newer than the `stage1_watermark` key in `pipeline_state`. It does a full scan when that key is missing, or with `--full` (needed after changing the stage-1 regexes).
+- **stage 2**: semantic filtering using centroid or logistic regression. `centroid` only scores papers with `ai_sem_sim IS NULL` unless `--full` is passed (needed after changing the seeds or tau); `centroid-multi` always rescores everything, since its z-scores depend on the whole population.
 
 Vector loading reads `papers.embedding` via `id = ANY(%s)`.
 
@@ -62,7 +62,7 @@ LLM-based combined relevance + taxonomy classification (post stage-2), via OpenA
 
 ### `compute_layout.py`
 
-Computes 2D layout coordinates (umap/pca) from topic embeddings of `llm_relevant` papers, and persists `graph_x` / `graph_y` back to the `papers` table. No JSON output — purely a DB-persistence stage consumed live by `api/routes/graph.py`.
+Places `llm_relevant` papers in 2D from their topic embeddings — incrementally (new papers at the mean of their nearest placed neighbours) by default, or a full umap/pca refit with `--full` — and persists `graph_x` / `graph_y` back to the `papers` table. No JSON output — purely a DB-persistence stage consumed live by `api/routes/graph.py`.
 
 ### `api/`
 
@@ -136,7 +136,11 @@ Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `ai_regex_hit
 
 Operates only on rows where `llm_relevant` is true and `embedding_topic` is present — the same set the graph and search API routes serve.
 
-Computes a 2D projection (`umap` by default, `pca` fallback) of `papers.embedding_topic`, then persists coords: `UPDATE papers SET graph_x=?, graph_y=? WHERE id=?`
+Default (incremental): for each such row with `graph_x IS NULL`, finds its `--knn-k` nearest already-placed neighbours by `embedding_topic <=>` (served by the `idx_papers_embedding_topic_llm` HNSW index) and stores their mean position. Existing coords are never touched.
+
+`--full` (or no existing layout): computes a 2D projection (`umap` by default, `pca` fallback) of `papers.embedding_topic` for every row, scaled to the 1000×700 canvas.
+
+Both paths write coords with batched `UPDATE ... FROM (VALUES ...)` statements; the full path skips rows whose coords didn't change.
 
 No JSON output, no neighbor-edge computation — `api/routes/graph.py` reads `graph_x`/`graph_y` live and re-normalizes per-request; it does not recompute layout.
 
