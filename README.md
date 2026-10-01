@@ -142,7 +142,7 @@ API docs available at `http://localhost:8000/docs`.
 aisafety-pipeline run-all
 ```
 
-Chains harvest → stage1 → embed → filter → llm-classify-run → embed-topic → compute-layout in that fixed order, stopping immediately on the first stage's failure. This is what the scheduled Railway cron job (`Dockerfile.pipeline`) runs daily — see that file and `railway.pipeline.json`. The harvest watermark and in-flight OpenAI batch tracking are stored in the `pipeline_state` table (not local files), so this is safe to run from a fresh container on every invocation. Pass `--skip <stage>` (repeatable) to omit a stage for manual recovery/debugging.
+Chains harvest → stage1 → embed → filter → llm-classify-run → embed-topic → compute-layout in that fixed order, stopping immediately on the first stage's failure. This is what the scheduled Railway cron job (`Dockerfile.pipeline`) runs daily — see that file; the Railway service itself (Dockerfile path, cron schedule, restart policy) is configured in the Railway dashboard, not a config file. The harvest watermark and in-flight OpenAI batch tracking are stored in the `pipeline_state` table (not local files), so this is safe to run from a fresh container on every invocation. Pass `--skip <stage>` (repeatable) to omit a stage for manual recovery/debugging.
 
 ### Configure the frontend
 

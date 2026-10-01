@@ -70,7 +70,7 @@ FastAPI backend module. See `src/aisafety_pipeline/api/ARCHITECTURE.md`.
 
 ### `utils.py`
 
-CLI parser and public command surface. Registers all subcommands including `serve` (starts uvicorn with the FastAPI app) and `run-all` (chains every stage in order for unattended/cron use — see `Dockerfile.pipeline`/`railway.pipeline.json` at the repo root for the scheduled Railway job that runs it daily).
+CLI parser and public command surface. Registers all subcommands including `serve` (starts uvicorn with the FastAPI app) and `run-all` (chains every stage in order for unattended/cron use — see `Dockerfile.pipeline` at the repo root for the scheduled Railway job that runs it daily; both Railway services are configured in the dashboard via `RAILWAY_DOCKERFILE_PATH`, with no Railway config file in the repo).
 
 ---
 
