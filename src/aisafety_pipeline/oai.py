@@ -207,7 +207,9 @@ def harvest_arxiv_oai_to_papers_raw(conn, from_date: str | None = None, until_da
 
     scanned = saved = 0
     cur = conn.raw_cursor()
-    batch: list[dict] = []
+    # Keyed by id: cross-listed papers come back from more than one OAI set,
+    # and a duplicate id within one multi-row upsert raises CardinalityViolation.
+    batch: dict[str, dict] = {}
 
     def flush():
         nonlocal batch, saved
@@ -216,12 +218,12 @@ def harvest_arxiv_oai_to_papers_raw(conn, from_date: str | None = None, until_da
         rows = [
             (r["id"], r["title"], r["authors"], r["published"], r["summary"],
              r["link"], r["categories"], r["updated"], r["pdf_url"])
-            for r in batch
+            for r in batch.values()
         ]
         execute_values(cur, _UPSERT_PAPERS_RAW, rows)
         conn.commit()
         saved += len(batch)
-        batch = []
+        batch = {}
         print(f"{BLUE}OAI progress:{RESET} scanned={scanned} saved={saved}")
 
     try:
@@ -231,7 +233,7 @@ def harvest_arxiv_oai_to_papers_raw(conn, from_date: str | None = None, until_da
                 rec = _oai_parse_record(rec_xml)
                 if not rec:
                     continue
-                batch.append(rec)
+                batch[rec["id"]] = rec
                 if len(batch) >= _HARVEST_BATCH_SIZE:
                     flush()
         flush()

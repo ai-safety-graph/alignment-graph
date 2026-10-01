@@ -58,3 +58,31 @@ def test_harvest_uses_db_watermark_over_local_file_when_no_explicit_range(conn, 
     )
 
     assert captured["from_date"] == "2026-09-10"
+
+
+def test_harvest_dedupes_paper_cross_listed_in_multiple_sets(conn, tmp_path, monkeypatch):
+    """A paper cross-listed in e.g. cs and stat is returned by both OAI sets;
+    both copies must not land in the same multi-row upsert, or Postgres
+    raises CardinalityViolation ("cannot affect row a second time")."""
+    paper_id = "https://arxiv.org/abs/test.dedupe.0001"
+    record = {
+        "id": paper_id, "title": "Cross-listed", "authors": "A. Author",
+        "published": "2026-10-01", "summary": "s", "link": paper_id,
+        "pdf_url": "https://arxiv.org/pdf/test.dedupe.0001.pdf",
+        "categories": "cs.LG stat.ML", "updated": "",
+    }
+    monkeypatch.setattr("aisafety_pipeline.oai.OAI_SETS", ["cs", "stat"])
+    monkeypatch.setattr("aisafety_pipeline.oai._oai_iter_records", lambda f, u, s: iter([object()]))
+    monkeypatch.setattr("aisafety_pipeline.oai._oai_parse_record", lambda rec: dict(record))
+
+    try:
+        scanned, saved = harvest_arxiv_oai_to_papers_raw(
+            conn, from_date="2026-10-01", until_date="2026-10-01",
+            state_file=str(tmp_path / "last_run.txt"),
+        )
+        assert (scanned, saved) == (2, 1)
+        count = conn.execute("SELECT count(*) FROM papers_raw WHERE id = %s", (paper_id,)).fetchone()[0]
+        assert count == 1
+    finally:
+        conn.execute("DELETE FROM papers_raw WHERE id = %s", (paper_id,))
+        conn.commit()
