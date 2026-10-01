@@ -10,7 +10,6 @@ import pytest
 
 from aisafety_pipeline.compute_layout import compute_graph_layout
 from aisafety_pipeline.filters import cmd_filter
-from tests.conftest import insert_paper
 
 
 def _unit(*weights: float) -> np.ndarray:
@@ -20,11 +19,11 @@ def _unit(*weights: float) -> np.ndarray:
 
 
 @pytest.fixture
-def committed_papers(conn):
+def committed_papers(conn, make_paper):
     created: list[str] = []
 
     def _make(arxiv_id: str, **overrides) -> str:
-        aid = insert_paper(conn, arxiv_id, **overrides)
+        aid = make_paper(arxiv_id, **overrides)
         conn.commit()
         created.append(aid)
         return aid
