@@ -86,6 +86,8 @@ aisafety-pipeline harvest --from 2024-01-01 --until 2024-12-31
 aisafety-pipeline stage1
 ```
 
+Only scans papers harvested since the last successful `stage1` run (tracked in `pipeline_state`). Pass `--full` to rescan everything, e.g. after changing the stage-1 regexes.
+
 **3. Generate SPECTER2 embeddings**
 
 ```bash
@@ -97,6 +99,8 @@ aisafety-pipeline embed --device auto
 ```bash
 aisafety-pipeline filter --method centroid --seeds seeds.txt --tau 0.92
 ```
+
+Only scores papers that have no score yet (`ai_sem_sim IS NULL`). Pass `--full` to rescore everything after changing `seeds.txt` or `--tau`.
 
 **5. Classify papers (relevance + topic tags) via LLM**
 
@@ -119,6 +123,8 @@ Only embeds `llm_relevant` rows — run this *after* `llm-classify-run`, not alo
 ```bash
 aisafety-pipeline compute-layout --coords umap
 ```
+
+By default this only places relevant papers that have no coordinates yet, each at the mean position of its nearest already-placed neighbours (`--knn-k`, default 10), so existing points don't move. Pass `--full` to refit the whole UMAP layout, e.g. monthly or after a large backfill, so new topics form their own clusters. With no layout at all yet it does a full fit automatically.
 
 **7b. Start the API**
 

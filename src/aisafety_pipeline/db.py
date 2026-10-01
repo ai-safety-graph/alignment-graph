@@ -353,6 +353,36 @@ def init_db(db_arg: str | None = None) -> PgConnection:
     except Exception:
         pass
     conn.commit()
+    # "Work queue" indexes for the incremental stages: each only holds rows
+    # still waiting for that stage, so it stays near-empty, and finding them
+    # no longer means reading the whole `papers` heap (~2-4s each on prod).
+    for stmt in (
+        # embed
+        "CREATE INDEX IF NOT EXISTS idx_papers_missing_embedding ON papers (id) "
+        "WHERE embedding IS NULL",
+        # filter (centroid, incremental)
+        "CREATE INDEX IF NOT EXISTS idx_papers_unscored ON papers (id) "
+        "WHERE ai_sem_sim IS NULL",
+        # embed-topic
+        "CREATE INDEX IF NOT EXISTS idx_papers_missing_topic ON papers (id) "
+        "WHERE llm_relevant AND embedding_topic IS NULL",
+        # compute-layout (incremental)
+        "CREATE INDEX IF NOT EXISTS idx_papers_unplaced ON papers (id) "
+        "WHERE llm_relevant AND graph_x IS NULL",
+    ):
+        cur.execute(stmt)
+    conn.commit()
+    # Backs stage1's incremental scan (`WHERE harvested_at > watermark`).
+    # Rows harvested before this column existed stay NULL; stage1 covers
+    # them with a full scan whenever it has no watermark yet. Partial, so
+    # those ~1M legacy NULL rows don't bloat the index -- the incremental
+    # scan's `harvested_at > ...` predicate never matches NULLs anyway.
+    cur.execute("ALTER TABLE papers_raw ALTER COLUMN harvested_at SET DEFAULT now()")
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_papers_raw_harvested_at ON papers_raw (harvested_at) "
+        "WHERE harvested_at IS NOT NULL"
+    )
+    conn.commit()
     return conn
 
 
@@ -374,6 +404,12 @@ def _ensure_columns(conn: PgConnection) -> None:
         # OpenAI Batch API job (llm_classify.py's submit_batch/collect_batch)
         # so it isn't also picked up by the synchronous path meanwhile.
         ("papers", "llm_batch_id", "TEXT"),
+        # When harvest last inserted/updated the row -- lets stage1 scan only
+        # rows harvested since its last run (see filters.cmd_stage1). Added
+        # without a default on purpose: ADD COLUMN ... DEFAULT now() is
+        # volatile and would rewrite the whole ~1M-row table; init_db sets
+        # the default separately, which only affects future inserts.
+        ("papers_raw", "harvested_at", "TIMESTAMPTZ"),
     ]
     for table, col, dtype in _ENSURE:
         try:

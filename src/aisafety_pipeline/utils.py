@@ -33,6 +33,9 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
     b.add_argument("--keep-all-and-filter", action="store_true",
                    help="Copy all raw papers into `papers` (mark ai_regex_hit accordingly)")
+    b.add_argument("--full", action="store_true",
+                   help="Rescan all of papers_raw instead of only rows harvested since the last "
+                        "run (use after changing the stage-1 regexes)")
     b.set_defaults(func=filters.cmd_stage1)
 
     c = sp.add_parser("embed", help="Ensure Specter2 embeddings for candidates (used for /api/papers/related)")
@@ -62,6 +65,9 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_argument("--tau", type=float, default=0.38,
                     help="Threshold on sim/proba (centroid: raw cosine; centroid-multi: z-score, "
                          "not directly comparable to the centroid method's tau)")
+    d.add_argument("--full", action="store_true",
+                   help="centroid: rescore every paper instead of only unscored ones (use after "
+                        "changing the seeds or --tau). centroid-multi always rescores everything.")
     d.set_defaults(func=filters.cmd_filter)
 
     cl = sp.add_parser("compute-layout", help="Compute 2D layout coordinates and persist graph_x/y to Postgres")
@@ -74,6 +80,11 @@ def build_parser() -> argparse.ArgumentParser:
     cl.add_argument("--canvas-w", type=int, default=1000)
     cl.add_argument("--canvas-h", type=int, default=700)
     cl.add_argument("--canvas-pad", type=int, default=24)
+    cl.add_argument("--full", action="store_true",
+                    help="Refit the whole layout (moves every point) instead of only placing "
+                         "papers without coordinates next to their nearest neighbours")
+    cl.add_argument("--knn-k", type=int, default=10,
+                    help="Neighbours averaged to place each new paper (incremental mode)")
     cl.set_defaults(func=compute_layout.cmd_compute_layout)
 
     lc = sp.add_parser("llm-classify", help="LLM-based combined relevance + taxonomy classification (post stage-2)")
@@ -185,6 +196,8 @@ def _cmd_run_all(args) -> None:
     lay out a corpus missing its newest relevant papers."""
     ns = argparse.Namespace(
         db=args.db,
+        # stage1 / filter / compute-layout: always incremental in run-all
+        full=False,
         # harvest
         from_date=None, until_date=None, state_file=config.STATE_FILE,
         # stage1
@@ -197,7 +210,7 @@ def _cmd_run_all(args) -> None:
         model=config.LLM_MODEL, force=False, poll_interval=60,
         # compute-layout
         coords=args.coords, umap_n_neighbors=15, umap_min_dist=0.10, umap_rand=42, pca_rand=42,
-        canvas_w=1000, canvas_h=700, canvas_pad=24,
+        canvas_w=1000, canvas_h=700, canvas_pad=24, knn_k=10,
     )
 
     for name, fn in _RUN_ALL_STAGES:

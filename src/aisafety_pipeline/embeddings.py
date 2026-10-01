@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 from psycopg2.extras import execute_values
 
-from .config import BLUE, EMB_MODEL, GREEN, RESET, TOPIC_EMB_MODEL, YELLOW
+from .config import BLUE, GREEN, RESET, TOPIC_EMB_MODEL
 
 _EMBED_WRITE_BATCH = 500
 
@@ -35,23 +35,6 @@ def upsert_embedding(conn, paper_id: str, model: str, vec: np.ndarray) -> None:
         f"UPDATE papers SET {col} = %s WHERE id = %s",
         (vec.tolist(), paper_id),
     )
-
-
-def fetch_existing_embeddings(conn, paper_ids: list[str], model: str) -> dict[str, np.ndarray]:
-    """Return {paper_id: None} for IDs that already have an embedding.
-
-    Callers only check presence (`pid in existing`) — the embedding vectors
-    themselves are never read back out, so we avoid pulling them over the
-    wire (which is enough data to trip a remote DB's statement timeout).
-    """
-    if not paper_ids:
-        return {}
-    col = _MODEL_COLUMNS[model]
-    rows = conn.execute(
-        f"SELECT id FROM papers WHERE {col} IS NOT NULL AND id = ANY(%s)",
-        (paper_ids,),
-    ).fetchall()
-    return {row[0]: None for row in rows}
 
 
 # -------- Embedding model --------
@@ -215,32 +198,19 @@ class TopicEmbeddingGenerator:
 # -------- Pipeline entry points --------
 
 def ensure_embeddings_for_candidates(conn, device: str = "auto", batch_size: int = 32) -> None:
-    ids = [row[0] for row in conn.execute("SELECT id FROM papers").fetchall()]
-    if not ids:
-        print(f"{YELLOW}embed:{RESET} no rows in `papers`. Run stage1 first.")
-        return
-
-    have = fetch_existing_embeddings(conn, ids, EMB_MODEL)
-    missing = [pid for pid in ids if pid not in have]
-    if not missing:
+    # Select the missing rows directly -- this used to pull every id in
+    # `papers` and send them all back as an `id = ANY(...)` array just to
+    # learn which ones lacked a vector.
+    rows = conn.execute(
+        "SELECT id, title, summary FROM papers WHERE embedding IS NULL ORDER BY id"
+    ).fetchall()
+    if not rows:
         print(f"{GREEN}embed:{RESET} all embeddings present.")
         return
 
-    # Fetch titles/summaries for missing
-    rows = conn.execute(
-        "SELECT id, title, summary FROM papers WHERE id = ANY(%s)",
-        (missing,),
-    ).fetchall()
-    meta: dict[str, tuple[str | None, str | None]] = {
-        row[0]: (row[1], row[2]) for row in rows
-    }
-
-    titles: list[str] = []
-    sums: list[str] = []
-    for pid in missing:
-        t, s = meta.get(pid, ("", ""))
-        titles.append(t or "")
-        sums.append(s or "")
+    missing = [row[0] for row in rows]
+    titles = [row[1] or "" for row in rows]
+    sums = [row[2] or "" for row in rows]
 
     print(f"{BLUE}embed:{RESET} computing embeddings for {len(missing)} papers…")
     embs = EmbeddingGenerator(batch_size=batch_size, device=device).encode(titles, sums)
@@ -279,29 +249,16 @@ def ensure_topic_embeddings_for_candidates(conn, device: str = "auto", batch_siz
     # ever look at llm_relevant papers -- so embedding anything else here
     # would be pure waste. That makes this stage depend on llm-classify, not
     # on filter: it must run after it.
-    ids = [row[0] for row in conn.execute("SELECT id FROM papers WHERE llm_relevant").fetchall()]
-    if not ids:
-        print(f"{YELLOW}embed-topic:{RESET} no relevant rows in `papers`. Run llm-classify first.")
-        return
-
-    have = fetch_existing_embeddings(conn, ids, "topic")
-    missing = [pid for pid in ids if pid not in have]
-    if not missing:
+    rows = conn.execute(
+        "SELECT id, title, summary FROM papers "
+        "WHERE llm_relevant AND embedding_topic IS NULL ORDER BY id"
+    ).fetchall()
+    if not rows:
         print(f"{GREEN}embed-topic:{RESET} all embeddings present.")
         return
 
-    rows = conn.execute(
-        "SELECT id, title, summary FROM papers WHERE id = ANY(%s)",
-        (missing,),
-    ).fetchall()
-    meta: dict[str, tuple[str | None, str | None]] = {
-        row[0]: (row[1], row[2]) for row in rows
-    }
-
-    texts: list[str] = []
-    for pid in missing:
-        t, s = meta.get(pid, ("", ""))
-        texts.append(f"{t or ''}\n{s or ''}")
+    missing = [row[0] for row in rows]
+    texts = [f"{row[1] or ''}\n{row[2] or ''}" for row in rows]
 
     print(f"{BLUE}embed-topic:{RESET} computing embeddings for {len(missing)} papers…")
     embs = TopicEmbeddingGenerator(batch_size=batch_size, device=device).encode_passages(texts)
