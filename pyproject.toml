@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "aisafety-pipeline"
 version = "0.1.0"
-description = "Staged arXiv → PostgreSQL → Embeddings → Filter → Clustering → Labeling → Layout → FastAPI"
+description = "Staged arXiv → PostgreSQL → Embeddings → Filter → Layout → FastAPI"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { text = "MIT" }
@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Harvesting, embeddings, filtering, clustering, and self-hosted semantic
+# Harvesting, embeddings, filtering, and self-hosted semantic
 # search (ENABLE_SEMANTIC_SEARCH=true) all need this. Not required to just
 # run `aisafety-pipeline serve` against an already-populated database.
 pipeline = [
