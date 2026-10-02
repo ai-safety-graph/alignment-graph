@@ -213,9 +213,8 @@ class PgConnection:
 # ---------------------------------------------------------------------------
 
 # NOTE: the legacy `paper_tags` table (zero-shot tagging, superseded by
-# llm_relevant/llm_tags on `papers`) is no longer created here. Existing
-# databases that already have it are left untouched -- dropping it against
-# the live database is a separate, deliberately later step.
+# llm_relevant/llm_tags on `papers`) has been dropped; see
+# migrations/drop_paper_tags.sql.
 
 _PG_SCHEMA = [
     "CREATE EXTENSION IF NOT EXISTS vector",

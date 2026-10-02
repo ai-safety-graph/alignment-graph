@@ -27,7 +27,7 @@ export type GraphDataCompact = {
     model: string
     embedding_dim: number
     generated_at: string
-    neighbors: { top_k: number; min_sim: number; same_cluster_only: boolean }
+    neighbors: { top_k: number; min_sim: number }
     coords: {
       included: boolean
       method: 'fa2' | 'fr' | 'umap' | 'pca' | 'stored' | 'stored-subset' | 'none'
