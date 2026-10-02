@@ -45,7 +45,7 @@ Route handlers declare `conn=Depends(get_conn)`.
 
 ## Endpoints
 
-All endpoints gate on the LLM classification stage (`llm_classify.py`): a paper is served only if `papers.llm_relevant = TRUE`, and its tags come from `papers.llm_tags` (taxonomy names, LLM order, no scores). `ai_stage2_keep` is not read by the API; the legacy zero-shot tagger and its `paper_tags` table have been removed from the codebase entirely. Unclassified papers (`llm_relevant IS NULL`) are hidden until classified.
+All endpoints gate on the LLM classification stage (`llm_classify.py`): a paper is served only if `papers.llm_relevant = TRUE`, and its tags come from `papers.llm_tags` (taxonomy names, LLM order, no scores). `ai_stage2_keep` is not read by the API; the legacy zero-shot tagger and its `paper_tags` table have been removed from the codebase and dropped from the database. Unclassified papers (`llm_relevant IS NULL`) are hidden until classified.
 
 ### `POST /api/graph/subset`
 
