@@ -717,7 +717,7 @@ export default function StatsView() {
           </div>
         </div>
 
-        <div className='hidden md:block w-1/2 border-l border-neutral-800 overflow-y-auto'>
+        <div className='hidden md:block w-3/5 border-l border-neutral-800 overflow-y-auto'>
           <div className='h-full'>
             {selected ? (
               <StatsPaperDetails

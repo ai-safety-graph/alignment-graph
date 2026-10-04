@@ -53,10 +53,10 @@ function DateSlider({
   }
 
   return (
-    <div className='flex flex-col gap-1.5 md:flex-row md:items-center md:gap-2'>
+    <div className='flex flex-col gap-1.5'>
       <span
         id='date-filter-label'
-        className='shrink-0 text-xs text-neutral-500 md:w-24'
+        className='shrink-0 text-xs text-neutral-500'
       >
         Published
       </span>
@@ -68,7 +68,7 @@ function DateSlider({
           value={[pendingIndex]}
           onValueChange={([i]) => setPendingIndex(i)}
           onValueCommit={([i]) => onCommit(presets[i].value)}
-          className='relative flex flex-1 md:max-w-md lg:max-w-xl h-5 items-center touch-none select-none cursor-pointer'
+          className='relative flex flex-1 h-5 items-center touch-none select-none cursor-pointer'
         >
           <Slider.Track className='relative h-0.5 grow rounded-full bg-neutral-600'>
             <Slider.Range className='absolute h-full rounded-full bg-neutral-400' />
@@ -90,7 +90,7 @@ function DateSlider({
             className='block size-3 rounded-full bg-neutral-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400'
           />
         </Slider.Root>
-        <span className='shrink-0 w-20 md:w-24 text-right text-xs text-neutral-300'>
+        <span className='shrink-0 w-20 text-xs text-neutral-300'>
           {presets[pendingIndex]?.label}
         </span>
       </div>
@@ -148,10 +148,8 @@ export default function FilterBar({
           availableYears &&
           availableYears.length > 0 &&
           onToggleYear && (
-            <div className='flex flex-col gap-1.5 md:flex-row md:items-start md:gap-2'>
-              <span className='shrink-0 text-xs text-neutral-500 md:w-24 md:pt-1'>
-                Year
-              </span>
+            <div className='flex flex-col gap-1.5'>
+              <span className='shrink-0 text-xs text-neutral-500'>Year</span>
               <div className='flex flex-wrap gap-2'>
                 {availableYears.map((year) => (
                   <button
@@ -171,8 +169,8 @@ export default function FilterBar({
           )}
 
         {(isLoading || availableDomains.length > 0) && (
-          <div className='flex flex-col gap-1.5 md:flex-row md:items-center md:gap-2'>
-            <span className='shrink-0 text-xs text-neutral-500 md:w-24'>
+          <div className='flex flex-col gap-1.5'>
+            <span className='shrink-0 text-xs text-neutral-500'>
               arXiv domain:
             </span>
             <div className='flex min-w-0 items-center gap-2 overflow-x-auto scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent'>
@@ -201,10 +199,8 @@ export default function FilterBar({
           </div>
         )}
 
-        <div className='flex flex-col gap-1.5 md:flex-row md:items-start md:gap-2'>
-          <span className='shrink-0 text-xs text-neutral-500 md:w-24 md:pt-1'>
-            Tags
-          </span>
+        <div className='flex flex-col gap-1.5'>
+          <span className='shrink-0 text-xs text-neutral-500'>Tags</span>
           <div className='flex flex-wrap gap-2'>
             {isLoading
               ? Array.from({ length: 6 }).map((_, i) => (
