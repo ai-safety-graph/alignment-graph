@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fetchGraphRange, fetchPaper, fetchPapers, fetchTags } from './api'
+import {
+  fetchGraphRange,
+  fetchLatestBatch,
+  fetchPaper,
+  fetchPapers,
+  fetchTags,
+} from './api'
 
 function mockFetchOnce(body: unknown, init: { ok?: boolean; status?: number } = {}) {
   const { ok = true, status = 200 } = init
@@ -114,5 +120,24 @@ describe('fetchTags', () => {
     const calledUrl = vi.mocked(fetch).mock.calls[0][0] as string
     expect(calledUrl).toContain('/api/tags')
     expect(result).toEqual({ 'reward hacking': { size: 3, primary_size: 2 } })
+  })
+})
+
+describe('fetchLatestBatch', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('returns the latest batch', async () => {
+    mockFetchOnce({ date: '2026-10-07', added: 42 })
+    const result = await fetchLatestBatch()
+    const calledUrl = vi.mocked(fetch).mock.calls[0][0] as string
+    expect(calledUrl).toContain('/api/batch/latest')
+    expect(result).toEqual({ date: '2026-10-07', added: 42 })
+  })
+
+  it('returns null before any batch is recorded', async () => {
+    mockFetchOnce(null)
+    expect(await fetchLatestBatch()).toBeNull()
   })
 })

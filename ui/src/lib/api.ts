@@ -127,3 +127,10 @@ export type HealthResponse = { status: string; semantic_search: boolean }
 export async function fetchHealth(): Promise<HealthResponse> {
   return apiFetch<HealthResponse>('/health')
 }
+
+// Most recent pipeline run that added papers; null before the first one.
+export type LatestBatch = { date: string; added: number }
+
+export async function fetchLatestBatch(): Promise<LatestBatch | null> {
+  return apiFetch<LatestBatch | null>('/api/batch/latest')
+}

@@ -19,6 +19,7 @@ import PaperList from './PaperList'
 import FilterBar from './FilterBar'
 import Dropdown from './Dropdown'
 import LoadingIndicator from './LoadingIndicator'
+import LatestBatchBadge from './LatestBatchBadge'
 import type { NodeCompact } from '../lib/types'
 import { useServerFilters } from '../hooks/useServerFilters'
 import { useMediaQuery } from '../hooks/useMediaQuery'
@@ -474,7 +475,8 @@ export default function StatsView() {
             {isBrowsing ? searchControls : subgraphSearchControls}
           </div>
         </div>
-        <div className='shrink-0 w-[190px] flex justify-end'>
+        <div className='shrink-0 min-w-[190px] flex justify-end items-center gap-10'>
+          <LatestBatchBadge />
           <a
             target='_blank'
             href='https://github.com/ai-safety-graph/alignment-graph'
@@ -482,7 +484,7 @@ export default function StatsView() {
             <img
               src='/ag-logo.svg'
               alt='Alignment Graph Logo'
-              className='h-10 w-auto opacity-50 saturate-70'
+              className='h-[34px] w-auto opacity-50 saturate-70'
             />
           </a>
         </div>
@@ -502,7 +504,7 @@ export default function StatsView() {
                 </div>
               )}
 
-              <div className='md:hidden px-4 pt-4 pb-2'>
+              <div className='md:hidden px-4 pt-4 pb-2 flex flex-col items-center gap-1'>
                 <a
                   target='_blank'
                   href='https://github.com/ai-safety-graph/alignment-graph'
@@ -511,9 +513,10 @@ export default function StatsView() {
                   <img
                     src='/ag-logo.svg'
                     alt='Alignment Graph Logo'
-                    className='h-10 w-auto opacity-50 saturate-70'
+                    className='h-[34px] w-auto opacity-50 saturate-70'
                   />
                 </a>
+                <LatestBatchBadge />
               </div>
 
               <div

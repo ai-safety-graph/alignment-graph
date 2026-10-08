@@ -28,6 +28,15 @@ def _recording_stages(calls: list[str], *, failing_stage: str | None = None):
     return stages
 
 
+@pytest.fixture(autouse=True)
+def _record_calls(monkeypatch):
+    """Keep run-all tests DB-free: stub the end-of-run batch bookkeeping and
+    record when it's called."""
+    calls: list[str | None] = []
+    monkeypatch.setattr(utils, "_record_latest_batch_safely", lambda db, started_at: calls.append(db))
+    return calls
+
+
 def test_run_all_runs_every_stage_in_documented_order(monkeypatch):
     calls: list[str] = []
     monkeypatch.setattr(utils, "_RUN_ALL_STAGES", _recording_stages(calls))
@@ -64,3 +73,22 @@ def test_run_all_stops_at_first_failing_stage_without_running_later_ones(monkeyp
         utils._cmd_run_all(_make_args())
 
     assert calls == ["harvest", "stage1", "embed", "filter"]
+
+
+def test_run_all_records_latest_batch_once_after_all_stages(monkeypatch, _record_calls):
+    calls: list[str] = []
+    monkeypatch.setattr(utils, "_RUN_ALL_STAGES", _recording_stages(calls))
+
+    utils._cmd_run_all(_make_args(db="postgresql://example"))
+
+    assert _record_calls == ["postgresql://example"]
+
+
+def test_run_all_does_not_record_latest_batch_when_a_stage_fails(monkeypatch, _record_calls):
+    calls: list[str] = []
+    monkeypatch.setattr(utils, "_RUN_ALL_STAGES", _recording_stages(calls, failing_stage="embed"))
+
+    with pytest.raises(RuntimeError):
+        utils._cmd_run_all(_make_args())
+
+    assert _record_calls == []
