@@ -2,6 +2,7 @@ const KEY_PREFIX = 'ais_graph_'
 const INDEX_KEY = 'ais_graphs'
 const MAX_GRAPHS = 50
 const MAX_PAPERS = 500
+export const MAX_GRAPH_NAME_LENGTH = 40
 
 export type SavedGraph = {
   id: string

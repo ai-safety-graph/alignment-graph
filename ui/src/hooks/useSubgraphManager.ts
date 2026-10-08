@@ -3,6 +3,7 @@ import {
   createSavedGraph,
   deleteSavedGraph,
   listSavedGraphs,
+  MAX_GRAPH_NAME_LENGTH,
   updateSavedGraph,
   type SavedGraph,
 } from '../lib/storage'
@@ -74,7 +75,7 @@ export function useSubgraphManager() {
   }
 
   const confirmCreateSubgraph = () => {
-    const name = newSubgraphName.trim()
+    const name = newSubgraphName.trim().slice(0, MAX_GRAPH_NAME_LENGTH)
     if (!name) return
     createSubgraph(name)
     setIsCreatingSubgraph(false)

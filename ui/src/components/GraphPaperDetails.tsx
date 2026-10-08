@@ -80,22 +80,22 @@ export default function GraphPaperDetails({
                   ? onRemoveFromSubgraph?.(paper.aid)
                   : onAddToSubgraph?.(paper.aid)
               }
-              className='group flex items-center gap-1.5 text-[13px] text-neutral-300 hover:text-white bg-neutral-950 border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 mb-2 cursor-pointer transition-colors'
+              className='group flex items-center gap-1.5 max-w-full text-[13px] text-neutral-300 hover:text-white bg-neutral-950 border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 mb-2 cursor-pointer transition-colors'
             >
               {isPaperInSubgraph ? (
                 <>
-                  Remove from {subgraphLabel}
+                  <span className='truncate'>Remove from {subgraphLabel}</span>
                   <ShareMinusIcon
                     size={14}
-                    className='text-red-800 group-hover:text-red-500 transition-colors'
+                    className='shrink-0 text-red-800 group-hover:text-red-500 transition-colors'
                   />
                 </>
               ) : (
                 <>
-                  Add to {subgraphLabel}
+                  <span className='truncate'>Add to {subgraphLabel}</span>
                   <SharePlusIcon
                     size={14}
-                    className='text-green-800 group-hover:text-green-500 transition-colors'
+                    className='shrink-0 text-green-800 group-hover:text-green-500 transition-colors'
                   />
                 </>
               )}

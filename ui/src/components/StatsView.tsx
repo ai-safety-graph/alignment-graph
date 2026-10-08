@@ -31,6 +31,7 @@ import { usePaperDetail } from '../hooks/usePaperDetail'
 import { useNavHistory } from '../hooks/useNavHistory'
 import { useCapabilities } from '../hooks/useCapabilities'
 import { useSubgraphManager } from '../hooks/useSubgraphManager'
+import { MAX_GRAPH_NAME_LENGTH } from '../lib/storage'
 
 export default function StatsView() {
   const { tags, availableDomains, isLoading: tagsLoading } = useTagCatalog()
@@ -241,6 +242,7 @@ export default function StatsView() {
           if (e.key === 'Enter') confirmCreateSubgraph()
           if (e.key === 'Escape') cancelCreatingSubgraph()
         }}
+        maxLength={MAX_GRAPH_NAME_LENGTH}
         placeholder='Graph name'
         className='w-32 px-1.5 py-0.5 bg-transparent text-sm text-[#e5e5e5] placeholder-[#666666] outline-none'
       />
@@ -275,7 +277,8 @@ export default function StatsView() {
               key={subgraph.id}
               type='button'
               onClick={() => setSelectedSubgraphId(subgraph.id)}
-              className='block w-full text-left px-3 py-2 text-sm text-neutral-300 hover:bg-[#333333] hover:text-neutral-100'
+              title={subgraph.name}
+              className='block w-full truncate text-left px-3 py-2 text-sm text-neutral-300 hover:bg-[#333333] hover:text-neutral-100'
             >
               {subgraph.name}
             </button>

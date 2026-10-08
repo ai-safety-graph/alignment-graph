@@ -1021,7 +1021,8 @@ export default function ArxivGraph({
                 setLockedId(null)
                 setHoverId(null)
               }}
-              className={`w-full text-left px-4 py-2 text-sm hover:bg-[#333333] cursor-pointer transition-colors ${
+              title={g.name}
+              className={`w-full truncate text-left px-4 py-2 text-sm hover:bg-[#333333] cursor-pointer transition-colors ${
                 activeSavedGraph?.id === g.id
                   ? 'text-[#4ea8de]'
                   : 'text-neutral-300'
