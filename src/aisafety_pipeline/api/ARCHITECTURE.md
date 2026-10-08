@@ -20,6 +20,7 @@ src/aisafety_pipeline/api/
     papers.py      # GET /api/papers, GET /api/papers/related, GET /api/papers/{arxiv_id:path}
     search.py      # POST /api/search
     tags.py        # GET /api/tags
+    meta.py        # GET /api/batch/latest
 ```
 
 ---
@@ -127,6 +128,12 @@ Returns: `{ query: str, results: SearchResult[] }` where each result includes `s
 All tag metadata, computed live from `papers.llm_tags` of `llm_relevant` papers (not precomputed/cached). `size` counts every paper holding the tag at any rank; `primary_size` counts only papers where it's the first-listed, i.e. `llm_tags[1]`) tag — used so pie-chart percentages sum to 100% instead of being inflated by multi-tag overlap.
 
 Returns: `{ [tag]: { size, primary_size } }`.
+
+### `GET /api/batch/latest`
+
+The most recent `run-all` that added papers, read from the `latest_batch` key in `pipeline_state` (written by `utils.record_latest_batch`). `added` counts papers newly classified `llm_relevant` during that run; runs that add nothing don't overwrite it. Drives the "+N papers · date" badge in the UI headers.
+
+Returns: `{ date: "YYYY-MM-DD", added: int }`, or `null` before the first such run.
 
 ### `GET /health`
 

@@ -49,6 +49,7 @@ import SearchResultsOverlay from './SearchResultsOverlay'
 import Dropdown from './Dropdown'
 import FilterBar from './FilterBar'
 import LoadingIndicator from './LoadingIndicator'
+import LatestBatchBadge from './LatestBatchBadge'
 import { useCapabilities } from '../hooks/useCapabilities'
 
 // Node fills: papers in the loaded subgraph vs. ghost nodes surfaced as
@@ -1096,7 +1097,8 @@ export default function ArxivGraph({
         </Link> */}
       </div>
 
-      <div className='fixed right-4 top-4 z-10'>
+      <div className='fixed right-4 top-4 z-10 flex items-center gap-10'>
+        <LatestBatchBadge />
         <a
           target='_blank'
           href='https://github.com/ai-safety-graph/alignment-graph'
@@ -1104,7 +1106,7 @@ export default function ArxivGraph({
           <img
             src='/ag-logo.svg'
             alt='Alignment Graph Logo'
-            className='h-10 w-auto opacity-50 saturate-70'
+            className='h-[34px] w-auto opacity-50 saturate-70'
           />
         </a>
       </div>

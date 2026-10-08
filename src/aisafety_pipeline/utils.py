@@ -213,6 +213,7 @@ def _cmd_run_all(args) -> None:
         canvas_w=1000, canvas_h=700, canvas_pad=24, knn_k=10,
     )
 
+    started_at = dt.datetime.now(dt.UTC)
     for name, fn in _RUN_ALL_STAGES:
         if name in args.skip:
             print(f"{YELLOW}run-all:{RESET} skipping {name} (--skip)")
@@ -224,7 +225,46 @@ def _cmd_run_all(args) -> None:
             print(f"{RED}run-all: FAILED at stage {name}:{RESET} {exc}")
             raise
 
+    _record_latest_batch_safely(args.db, started_at)
     print(f"{GREEN}run-all: complete{RESET}")
+
+
+# `pipeline_state` key holding the most recent run-all that added papers, as
+# {"date": "YYYY-MM-DD", "added": N}. Served by GET /api/batch/latest for the
+# UI's "+N papers" header badge.
+LATEST_BATCH_STATE_KEY = "latest_batch"
+
+
+def record_latest_batch(conn, started_at: dt.datetime) -> int:
+    """Count papers that became llm_relevant since `started_at` and, if any,
+    record them as the latest batch. A run that adds nothing leaves the
+    previous batch in place, so the UI keeps showing the last real update.
+    Returns the count."""
+    from .db import set_state
+    row = conn.execute(
+        "SELECT count(*) AS n FROM papers WHERE llm_relevant AND llm_classified_at >= %s",
+        (started_at,),
+    ).fetchone()
+    added = int(row["n"])
+    if added > 0:
+        set_state(conn, LATEST_BATCH_STATE_KEY,
+                  {"date": started_at.date().isoformat(), "added": added})
+    return added
+
+
+def _record_latest_batch_safely(db: str | None, started_at: dt.datetime) -> None:
+    """Bookkeeping only -- a failure here warns instead of failing a run
+    whose stages all succeeded."""
+    from .db import connect
+    try:
+        conn = connect(db)
+        try:
+            added = record_latest_batch(conn, started_at)
+        finally:
+            conn.close()
+        print(f"{BLUE}run-all:{RESET} latest batch +{added} papers")
+    except Exception as exc:
+        print(f"{YELLOW}run-all: could not record latest batch:{RESET} {exc}")
 
 
 def _cmd_serve(args):

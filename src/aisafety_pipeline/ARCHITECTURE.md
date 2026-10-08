@@ -33,7 +33,7 @@ Key exports:
 - `connect(db_arg)` — returns a `PgConnection`; raises `RuntimeError` if neither `db_arg` (a `postgresql://`/`postgres://` DSN) nor `DATABASE_URL` is set
 - `init_db(db_arg)` — creates the schema (tables, `vector` extension, HNSW index)
 - `PgConnection` — thin wrapper around psycopg2
-- `get_state(conn, key, default)` / `set_state(conn, key, value)` — read/write one `pipeline_state` key/value row (JSONB). Used for cross-run bookkeeping that used to live in local files under `data/` (the harvest watermark in `oai.py`, in-flight OpenAI batch tracking in `llm_classify.py`) — those files aren't safe for a cron-triggered container that gets a fresh filesystem per run, so this is the durable, DB-backed replacement.
+- `get_state(conn, key, default)` / `set_state(conn, key, value)` — read/write one `pipeline_state` key/value row (JSONB). Used for cross-run bookkeeping that used to live in local files under `data/` (the harvest watermark in `oai.py`, in-flight OpenAI batch tracking in `llm_classify.py`) — those files aren't safe for a cron-triggered container that gets a fresh filesystem per run, so this is the durable, DB-backed replacement. Also holds `latest_batch`, which `run-all` writes after a successful run (`{date, added}`: papers newly classified relevant during the run; skipped when 0) and `GET /api/batch/latest` serves to the UI header.
 
 `PgConnection` uses psycopg2 with `DictCursor` and intercepts `BEGIN`/`COMMIT`/`ROLLBACK` strings to map them to connection-level calls. Parameter placeholders (`?`, `:name`) are translated to psycopg2 format (`%s`, `%(name)s`) automatically via `_to_pg_sql()`.
 
