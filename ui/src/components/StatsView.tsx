@@ -32,11 +32,7 @@ import { useCapabilities } from '../hooks/useCapabilities'
 import { useSubgraphManager } from '../hooks/useSubgraphManager'
 
 export default function StatsView() {
-  const {
-    tags,
-    availableDomains,
-    isLoading: tagsLoading,
-  } = useTagCatalog()
+  const { tags, availableDomains, isLoading: tagsLoading } = useTagCatalog()
   const { semanticSearch: semanticSearchEnabled } = useCapabilities()
   const [searchMode, setSearchMode] = useState<'keyword' | 'semantic'>(
     'keyword',
@@ -235,7 +231,7 @@ export default function StatsView() {
   )
 
   const newGraphInput = (
-    <div className='shrink-0 flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#2a2a2a] border border-[#333333]'>
+    <div className='shrink-0 flex items-center gap-1.5 px-2 py-1 rounded-md bg-neutral-950 border border-[#333333]'>
       <input
         autoFocus
         value={newSubgraphName}
@@ -439,15 +435,19 @@ export default function StatsView() {
   const subgraphTitle = selectedSubgraph ? (
     <div className='shrink-0 px-4 py-2.5 flex items-center text-sm text-neutral-400'>
       <div className='flex-1 flex items-center gap-2'>
-        <span>
-          {isBrowsing ? 'Adding papers to' : 'Viewing papers in'}{' '}
-          <span className='text-lg font-medium text-neutral-200'>
-            {selectedSubgraph.name}
+        {isBrowsing && isCreatingSubgraph ? (
+          newGraphInput
+        ) : (
+          <span>
+            {isBrowsing ? 'Adding papers to' : 'Viewing papers in'}{' '}
+            <span className='text-lg font-medium text-neutral-200'>
+              {selectedSubgraph.name}
+            </span>
           </span>
-        </span>
+        )}
       </div>
       <div className='flex-1 flex justify-end items-center gap-2'>
-        {isBrowsing && newGraphControl}
+        {isBrowsing && newGraphButton}
         {filterBar && filterToggleButton}
         {viewMode === 'subgraph' && deleteSubgraphButton}
         {viewModeToggleButton}
@@ -494,7 +494,7 @@ export default function StatsView() {
             ref={listRef}
             className='flex-1 overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent [scrollbar-gutter:stable_both-edges] md:[scrollbar-gutter:stable] md:[direction:rtl]'
           >
-            <div className='md:[direction:ltr] md:px-4'>
+            <div className='md:[direction:ltr] md:px-8'>
               {(subgraphTitle || filterBar) && (
                 <div className='hidden md:block sticky top-0 z-10 bg-neutral-950'>
                   {subgraphTitle}
@@ -532,16 +532,20 @@ export default function StatsView() {
                 {(selectedSubgraph || filterBar || isBrowsing) && (
                   <div className='px-3 pb-2 flex items-center gap-2 text-sm text-neutral-400'>
                     {!selectedSubgraph && isBrowsing && newGraphControl}
-                    {selectedSubgraph && (
-                      <span className='flex-1 min-w-0 truncate'>
-                        {isBrowsing ? 'Adding papers to' : 'Viewing papers in'}{' '}
-                        <span className='font-medium text-neutral-200'>
-                          {selectedSubgraph.name}
-                        </span>
-                      </span>
-                    )}
+                    {selectedSubgraph && isBrowsing && isCreatingSubgraph
+                      ? newGraphInput
+                      : selectedSubgraph && (
+                          <span className='flex-1 min-w-0 truncate'>
+                            {isBrowsing
+                              ? 'Adding papers to'
+                              : 'Viewing papers in'}{' '}
+                            <span className='font-medium text-neutral-200'>
+                              {selectedSubgraph.name}
+                            </span>
+                          </span>
+                        )}
                     <div className='ml-auto flex items-center gap-2'>
-                      {selectedSubgraph && isBrowsing && newGraphControl}
+                      {selectedSubgraph && isBrowsing && newGraphButton}
                       {filterBar && filterToggleButton}
                       {selectedSubgraph &&
                         viewMode === 'subgraph' &&
@@ -717,7 +721,7 @@ export default function StatsView() {
           </div>
         </div>
 
-        <div className='hidden md:block w-3/5 border-l border-neutral-800 overflow-y-auto'>
+        <div className='hidden md:block w-[55%] border-l border-neutral-800 overflow-y-auto'>
           <div className='h-full'>
             {selected ? (
               <StatsPaperDetails

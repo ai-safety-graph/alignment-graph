@@ -48,7 +48,7 @@ export default function StatsPaperDetails({
   return (
     <aside
       ref={scrollerRef}
-      className='relative w-full h-full bg-neutral-950 backdrop-blur-md pb-3 overflow-auto text-[#e5e5e5] scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent md:px-4'
+      className='relative w-full h-full bg-neutral-950 backdrop-blur-md pb-3 overflow-auto text-[#e5e5e5] scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent md:px-8'
     >
       <div>
         <div className='py-3 sticky top-0 bg-neutral-950 px-3 lg:px-6'>
