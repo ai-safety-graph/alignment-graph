@@ -63,6 +63,7 @@ const SEARCH_GHOST_NODE_COLOR = '#8BD17C'
 // pinned nodes are separated to (2 × radius plus a small gap).
 const NODE_RADIUS = 4
 const NODE_MIN_DIST = 2 * NODE_RADIUS + 2
+const SINGLE_NODE_ZOOM = 3
 
 // A node once it's in the force simulation: always has a live x/y position,
 // and fx/fy when pinned (dragged, hovered while locked, or coordinate-pinned).
@@ -71,6 +72,9 @@ type SimNode = NodeCompact & { x: number; y: number; fx?: number; fy?: number }
 // Map a paper's raw global coords (rx, ry) into the main graph's canvas space,
 // mirroring the backend normalization in graph.py so ghost nodes land at the
 // correct position relative to the already-loaded nodes.
+// When the subset has no spread on an axis (e.g. a single node), the backend's
+// 1e-9 range floor would fling ghosts ~1e9 units away; raw coords are already
+// in canvas units (compute_layout), so fall back to a 1:1 scale instead.
 function ghostCoord(
   rx: number,
   ry: number,
@@ -78,11 +82,11 @@ function ghostCoord(
 ): { x: number; y: number } {
   const b = coords.bounds!
   const c = coords.canvas
-  const xr = Math.max(b.x_max - b.x_min, 1e-9)
-  const yr = Math.max(b.y_max - b.y_min, 1e-9)
+  const scale = (range: number, span: number) =>
+    range > 1e-6 ? span / range : 1
   return {
-    x: c.pad + ((rx - b.x_min) / xr) * (c.w - 2 * c.pad),
-    y: c.pad + ((ry - b.y_min) / yr) * (c.h - 2 * c.pad),
+    x: c.pad + (rx - b.x_min) * scale(b.x_max - b.x_min, c.w - 2 * c.pad),
+    y: c.pad + (ry - b.y_min) * scale(b.y_max - b.y_min, c.h - 2 * c.pad),
   }
 }
 
@@ -622,14 +626,37 @@ export default function ArxivGraph({
         setLockedId(null)
         setHoverId(null)
         setSelectedId(null)
-        fgRef.current?.zoomToFit(400, fitPadding())
+        fitView(400)
       }
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
   }, [hoverId, lockedId, simById])
 
-  const fitPadding = () => (simNodes.length === 1 ? 400 : 150)
+  // Fit the camera to the rendered nodes. Read through a ref so the ESC
+  // handler's closure never fits against stale nodes or viewport size.
+  // A lone node gets a fixed zoom: zoomToFit sizes the view to its tiny bbox,
+  // which zooms in absurdly far, or (with padding > half the viewport) goes
+  // negative and clamps to ~0, leaving nothing visible.
+  const fitStateRef = useRef<{ nodes: SimNode[]; width: number; height: number }>(
+    { nodes: [], width: 0, height: 0 },
+  )
+  function fitView(duration: number) {
+    const fg = fgRef.current
+    const { nodes, width: w, height: h } = fitStateRef.current
+    if (!fg || nodes.length === 0) return
+    if (nodes.length === 1) {
+      fg.centerAt(nodes[0].x ?? 0, nodes[0].y ?? 0, duration)
+      fg.zoom(SINGLE_NODE_ZOOM, duration)
+      return
+    }
+    // zoomToFit measures force-graph's own node list, so filter it down to
+    // ours or it would still frame the outgoing related ghosts.
+    const ids = new Set(nodes.map((n) => n.id))
+    fg.zoomToFit(duration, Math.min(150, Math.min(w, h) / 4), (n) =>
+      ids.has(n.id),
+    )
+  }
 
   // Focus helpers
   function focusNode(
@@ -701,7 +728,7 @@ export default function ArxivGraph({
       setPinned(simById.get(hoverId), false)
     if (lockedId != null && !ghostIds.has(lockedId))
       setPinned(simById.get(lockedId), false)
-    fgRef.current?.zoomToFit(400, fitPadding())
+    fitView(400)
     setLockedId(null)
     setHoverId(null)
     setSelectedId(null)
@@ -728,6 +755,14 @@ export default function ArxivGraph({
         : links,
     }
   }, [allSimNodes, data, visibleIds])
+  // Related ghosts are excluded: every fit (ESC / background click) also
+  // deselects, which clears them right after, so fitting to them would frame
+  // nodes that are about to vanish.
+  fitStateRef.current = {
+    nodes: allSimNodes.slice(0, allSimNodes.length - relatedGhostNodes.length),
+    width,
+    height,
+  }
 
   // Drop the selection/hover when a filter hides the node it points at.
   useEffect(() => {
@@ -864,7 +899,7 @@ export default function ArxivGraph({
           }}
           onEngineStop={() => {
             if (!didAutoFit.current) {
-              fgRef.current?.zoomToFit(500, fitPadding())
+              fitView(500)
               didAutoFit.current = true
             }
           }}
