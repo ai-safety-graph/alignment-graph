@@ -7,6 +7,7 @@ import {
   Plus,
   Check,
   X,
+  CircleX,
   Globe,
   List,
   Trash2,
@@ -158,8 +159,6 @@ export default function StatsView() {
 
   const listRef = useRef<HTMLDivElement | null>(null)
   const autoSelectedRef = useRef(false)
-  const searchBarRef = useRef<HTMLDivElement | null>(null)
-  const [searchHeight, setSearchHeight] = useState(0)
   const isSmall = useMediaQuery('(max-width: 768px)')
 
   useEffect(() => {
@@ -197,16 +196,6 @@ export default function StatsView() {
       selected ? { aid: selected.aid, title: selected.t } : null,
       aid,
     )
-
-  useLayoutEffect(() => {
-    const el = searchBarRef.current
-    if (!el) return
-    const measure = () => setSearchHeight(el.getBoundingClientRect().height)
-    measure()
-    const ro = new ResizeObserver(measure)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
 
   const onHome = useLocation().pathname === '/'
   const backLink =
@@ -401,6 +390,7 @@ export default function StatsView() {
         onClearAll={clearAllFilters}
         isExpanded={filterExpanded}
         showTagCounts={false}
+        bordered={!isSmall}
       />
     ) : !isBrowsing && subgraphNodes && subgraphNodes.length > 0 ? (
       <FilterBar
@@ -414,8 +404,16 @@ export default function StatsView() {
         onToggleDomain={toggleSubgraphDomain}
         onClearAll={clearSubgraphFilters}
         isExpanded={filterExpanded}
+        bordered={!isSmall}
       />
     ) : null
+
+  // Filters apply live, so the mobile sheet shows the result count while open
+  const filterCountLabel = isBrowsing
+    ? papers
+      ? `${total.toLocaleString()} papers`
+      : ''
+    : `${subgraphItems.length} of ${subgraphNodes?.length ?? 0} papers`
 
   const filterToggleButton = (
     <button
@@ -548,10 +546,7 @@ export default function StatsView() {
                 </a>
               </div>
 
-              <div
-                ref={searchBarRef}
-                className='md:hidden sticky top-0 z-20 bg-neutral-950/90 backdrop-blur'
-              >
+              <div className='md:hidden sticky top-0 z-20 bg-neutral-950/90 backdrop-blur'>
                 <div className='p-3 flex flex-col gap-2'>
                   <div className='flex items-center gap-3'>
                     {backLink}
@@ -587,15 +582,6 @@ export default function StatsView() {
                   </div>
                 )}
               </div>
-
-              {filterBar && (
-                <div
-                  className='md:hidden sticky z-10 bg-neutral-950/90 backdrop-blur'
-                  style={{ top: searchHeight }}
-                >
-                  {filterBar}
-                </div>
-              )}
 
               {isBrowsing &&
                 searchMode === 'keyword' &&
@@ -803,6 +789,38 @@ export default function StatsView() {
           </div>
         </div>
       </div>
+
+      {filterBar && filterExpanded && isSmall && (
+        <div className='md:hidden fixed inset-0 z-30 bg-black/70 flex items-center justify-center p-3'>
+          <button
+            aria-label='Close filters'
+            onClick={() => setFilterExpanded(false)}
+            className='absolute inset-0'
+          />
+          <div
+            role='dialog'
+            aria-label='Filters'
+            className='relative z-10 w-full max-w-[720px] max-h-[92dvh] flex flex-col rounded-2xl border border-[#333333] bg-neutral-950 shadow-2xl overflow-hidden'
+          >
+            <div className='shrink-0 pl-5 pr-3 pt-3 flex items-center justify-between gap-2'>
+              <span className='text-xs text-neutral-500'>
+                {filterCountLabel}
+              </span>
+              <button
+                type='button'
+                aria-label='Close filters'
+                onClick={() => setFilterExpanded(false)}
+                className='p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200'
+              >
+                <CircleX size={20} />
+              </button>
+            </div>
+            <div className='overflow-y-auto overscroll-contain pb-2 scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent'>
+              {filterBar}
+            </div>
+          </div>
+        </div>
+      )}
 
       {selectedId && (
         <div className='md:hidden fixed inset-0 z-20 bg-black/70 flex items-center justify-center p-3'>

@@ -27,6 +27,8 @@ interface FilterBarProps {
   datePresets?: typeof DATE_PRESETS
   isExpanded?: boolean
   showTagCounts?: boolean
+  // Off when the bar sits inside a container that already frames it (mobile overlay)
+  bordered?: boolean
 }
 
 function DateSlider({
@@ -116,11 +118,14 @@ export default function FilterBar({
   datePresets = DATE_PRESETS,
   isExpanded = true,
   showTagCounts = true,
+  bordered = true,
 }: FilterBarProps) {
   if (!isExpanded) return null
 
   return (
-    <div className='w-full my-2 rounded-lg border border-neutral-700 bg-neutral-950'>
+    <div
+      className={`w-full bg-neutral-950 ${bordered ? 'my-2 rounded-lg border border-neutral-700' : ''}`}
+    >
       <div className='px-5 py-3 space-y-2'>
         <div className='flex items-center justify-between gap-2'>
           <div className='text-xs font-medium text-neutral-400'>Filter by</div>
