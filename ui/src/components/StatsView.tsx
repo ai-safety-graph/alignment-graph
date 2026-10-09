@@ -778,7 +778,7 @@ export default function StatsView() {
         </div>
       </div>
 
-      {selected && (
+      {selectedId && (
         <div className='md:hidden fixed inset-0 z-20 bg-black/70 flex items-center justify-center p-3'>
           <button
             aria-label='Close overlay'
@@ -786,31 +786,37 @@ export default function StatsView() {
             className='absolute inset-0'
           />
           <div className='relative z-10 w-full max-w-[720px] h-[92dvh] rounded-2xl shadow-2xl overflow-hidden'>
-            <MobilePaperDetails
-              paper={selected}
-              neighbors={neighbors}
-              neighborsLoading={neighborsLoading}
-              navHistory={navHistory}
-              onClose={close}
-              onSelectPaper={handleSelectRelated}
-              onNavigateTo={navigateTo}
-              onAddToSubgraph={
-                isBrowsing && selectedSubgraphId
-                  ? addToSelectedSubgraph
-                  : undefined
-              }
-              onRemoveFromSubgraph={
-                isBrowsing
-                  ? selectedSubgraphId
-                    ? removeFromSelectedSubgraph
+            {selected ? (
+              <MobilePaperDetails
+                paper={selected}
+                neighbors={neighbors}
+                neighborsLoading={neighborsLoading}
+                navHistory={navHistory}
+                onClose={close}
+                onSelectPaper={handleSelectRelated}
+                onNavigateTo={navigateTo}
+                onAddToSubgraph={
+                  isBrowsing && selectedSubgraphId
+                    ? addToSelectedSubgraph
                     : undefined
-                  : removeFromSubgraphView
-              }
-              subgraphPaperIds={
-                isBrowsing ? selectedSubgraphPaperIds : subgraphNodeIds
-              }
-              subgraphName={selectedSubgraph?.name}
-            />
+                }
+                onRemoveFromSubgraph={
+                  isBrowsing
+                    ? selectedSubgraphId
+                      ? removeFromSelectedSubgraph
+                      : undefined
+                    : removeFromSubgraphView
+                }
+                subgraphPaperIds={
+                  isBrowsing ? selectedSubgraphPaperIds : subgraphNodeIds
+                }
+                subgraphName={selectedSubgraph?.name}
+              />
+            ) : (
+              <div className='w-full h-full bg-neutral-950 border border-[#333333] rounded-2xl'>
+                <LoadingIndicator label='Loading paper…' className='h-full' />
+              </div>
+            )}
           </div>
         </div>
       )}

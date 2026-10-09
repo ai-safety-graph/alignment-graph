@@ -50,10 +50,19 @@ export default function MobilePaperDetails({
   return (
     <aside
       ref={scrollerRef}
-      className='relative w-full h-full bg-[#262626] backdrop-blur-md border border-[#333333] rounded-2xl pb-3 px-3 overflow-auto text-[#e5e5e5] scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent'
+      className='relative w-full h-full bg-neutral-950 backdrop-blur-md border border-[#333333] rounded-2xl pb-3 px-3 overflow-auto text-[#e5e5e5] scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent'
     >
       <div>
-        <div className='py-3 sticky top-0 bg-[#262626]'>
+        <div className='py-3 sticky top-0 bg-neutral-950'>
+          <div className='flex items-center justify-end mb-1'>
+            <button
+              onClick={onClose}
+              className='p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200'
+              aria-label='Close details'
+            >
+              <CircleX size={20} />
+            </button>
+          </div>
           <div className='min-h-[1.25rem] pb-2'>
             {navHistory.length > 0 && (
               <div className='flex items-center gap-1 text-xs text-zinc-500 flex-wrap'>
@@ -83,15 +92,6 @@ export default function MobilePaperDetails({
                 </span>
               </div>
             )}
-          </div>
-          <div className='flex items-center justify-end mb-2'>
-            <button
-              onClick={onClose}
-              className='p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200'
-              aria-label='Close details'
-            >
-              <CircleX size={20} />
-            </button>
           </div>
 
           <h4 className='mt-1 mb-2 text-lg font-semibold leading-snug text-[#e5e5e5]'>
