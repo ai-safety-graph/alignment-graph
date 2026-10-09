@@ -519,7 +519,13 @@ export default function StatsView() {
                 </div>
               )}
 
-              <div className='md:hidden px-4 pt-4 pb-2 flex flex-col items-center gap-1'>
+              <div className='md:hidden relative px-4 pt-4 pb-2 flex flex-col items-center gap-1'>
+                <div className='absolute top-4 left-4 flex items-center h-[34px]'>
+                  <LatestBatchBadge />
+                </div>
+                <div className='absolute top-4 right-4 flex items-center h-[34px]'>
+                  {aboutLink}
+                </div>
                 <a
                   target='_blank'
                   href='https://github.com/ai-safety-graph/alignment-graph'
@@ -531,10 +537,6 @@ export default function StatsView() {
                     className='h-[34px] w-auto opacity-50 saturate-70'
                   />
                 </a>
-                <div className='flex items-center gap-3'>
-                  {aboutLink}
-                  <LatestBatchBadge />
-                </div>
               </div>
 
               <div
