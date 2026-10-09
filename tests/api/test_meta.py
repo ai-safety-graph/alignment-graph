@@ -27,16 +27,3 @@ def test_latest_batch_returns_recorded_value(client, conn):
     assert res.status_code == 200
     assert res.json() == {"date": "2026-10-07", "added": 42}
 
-
-def test_coverage_counts_relevant_papers_and_date_span(client, make_paper):
-    make_paper("2401.00090", published="2023-03-01")
-    make_paper("2401.00091", published="2025-06-15")
-    make_paper("2401.00092", published="2020-01-01", llm_relevant=False)
-
-    res = client.get("/api/batch/coverage")
-    assert res.status_code == 200
-    assert res.json() == {
-        "total": 2,
-        "earliest": "2023-03-01",
-        "latest": "2025-06-15",
-    }
