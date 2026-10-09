@@ -20,6 +20,7 @@ import {
   Library,
   Sparkles,
   SlidersHorizontal,
+  Info,
 } from 'lucide-react'
 
 import { useForceConfig } from '../hooks/useForceConfig'
@@ -1099,6 +1100,13 @@ export default function ArxivGraph({
       </div>
 
       <div className='fixed right-4 top-4 z-10 flex items-center gap-10'>
+        <Link
+          to='/about'
+          className='flex items-center gap-1.5 cursor-pointer text-[13px] text-neutral-300 hover:text-white underline underline-offset-2 transition-colors'
+        >
+          <Info size={14} />
+          About
+        </Link>
         <LatestBatchBadge />
         <a
           target='_blank'

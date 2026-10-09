@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
+from ...taxonomy import TAXONOMY_DESCRIPTIONS
 from ..deps import get_conn
 
 router = APIRouter(prefix="/api/tags", tags=["tags"])
@@ -11,7 +12,9 @@ router = APIRouter(prefix="/api/tags", tags=["tags"])
 # counts only papers where this tag is their top-scored (rank-0) tag -- used
 # by the pie chart so percentages sum to 100% instead of being inflated by
 # multi-tag overlap. The LLM lists tags in its own order; the first is
-# treated as primary. Only LLM-relevant papers are counted.
+# treated as primary. Only LLM-relevant papers are counted. `description` is
+# the taxonomy text the LLM classifier is given for the tag (None for a tag
+# no longer in the taxonomy); the About page shows it as a glossary.
 _TAGS_SQL = """
     WITH relevant AS (
         SELECT llm_tags FROM papers
@@ -34,6 +37,10 @@ _TAGS_SQL = """
 def list_tags(conn=Depends(get_conn)):
     rows = conn.execute(_TAGS_SQL).fetchall()
     return {
-        r[0]: {"size": int(r[1]), "primary_size": int(r[2])}
+        r[0]: {
+            "size": int(r[1]),
+            "primary_size": int(r[2]),
+            "description": TAXONOMY_DESCRIPTIONS.get(r[0]),
+        }
         for r in rows
     }

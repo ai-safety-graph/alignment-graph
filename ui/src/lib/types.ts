@@ -19,7 +19,7 @@ export type LinkCompact = { s: number; t: number; w: number }
 
 export type TagsLegend = Record<
   string,
-  { size: number; primary_size?: number }
+  { size: number; primary_size?: number; description?: string | null }
 >
 
 export type GraphDataCompact = {

@@ -12,6 +12,7 @@ import {
   Trash2,
   Sparkles,
   SlidersHorizontal,
+  Info,
 } from 'lucide-react'
 import StatsPaperDetails from './StatsPaperDetails'
 import MobilePaperDetails from './MobilePaperDetails'
@@ -218,6 +219,16 @@ export default function StatsView() {
         <Share2 size={18} />
       </Link>
     )
+
+  const aboutLink = (
+    <Link
+      to='/about'
+      className='shrink-0 flex items-center gap-1.5 cursor-pointer text-[13px] text-neutral-300 hover:text-white underline underline-offset-2 transition-colors'
+    >
+      <Info size={14} />
+      About
+    </Link>
+  )
 
   const newGraphButton = (
     <button
@@ -479,6 +490,7 @@ export default function StatsView() {
           </div>
         </div>
         <div className='shrink-0 min-w-[190px] flex justify-end items-center gap-10'>
+          {aboutLink}
           <LatestBatchBadge />
           <a
             target='_blank'
@@ -507,7 +519,13 @@ export default function StatsView() {
                 </div>
               )}
 
-              <div className='md:hidden px-4 pt-4 pb-2 flex flex-col items-center gap-1'>
+              <div className='md:hidden relative px-4 pt-4 pb-2 flex flex-col items-center gap-1'>
+                <div className='absolute top-4 left-4 flex items-center h-[34px]'>
+                  <LatestBatchBadge />
+                </div>
+                <div className='absolute top-4 right-4 flex items-center h-[34px]'>
+                  {aboutLink}
+                </div>
                 <a
                   target='_blank'
                   href='https://github.com/ai-safety-graph/alignment-graph'
@@ -519,7 +537,6 @@ export default function StatsView() {
                     className='h-[34px] w-auto opacity-50 saturate-70'
                   />
                 </a>
-                <LatestBatchBadge />
               </div>
 
               <div

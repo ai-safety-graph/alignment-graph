@@ -26,3 +26,4 @@ def test_latest_batch_returns_recorded_value(client, conn):
     res = client.get("/api/batch/latest")
     assert res.status_code == 200
     assert res.json() == {"date": "2026-10-07", "added": 42}
+
