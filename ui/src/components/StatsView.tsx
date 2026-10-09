@@ -282,7 +282,10 @@ export default function StatsView() {
   const subgraphControl =
     subgraphs.length === 0 ? null : (
       <div className='shrink-0 flex items-center gap-2'>
-        <Dropdown label={selectedSubgraph?.name ?? 'Select graph'}>
+        <Dropdown
+          className='max-w-[240px] md:max-w-[140px] lg:max-w-[240px]'
+          label={selectedSubgraph?.name ?? 'Select graph'}
+        >
           {subgraphs.map((subgraph) => (
             <button
               key={subgraph.id}
@@ -300,7 +303,7 @@ export default function StatsView() {
 
   const searchControls = (
     <>
-      <div className='relative flex-1'>
+      <div className='relative flex-1 min-w-0'>
         <Search
           className='absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400'
           size={16}
@@ -325,6 +328,12 @@ export default function StatsView() {
         <>
           <button
             type='button'
+            aria-pressed={searchMode === 'semantic'}
+            title={
+              searchMode === 'semantic'
+                ? 'Semantic search on'
+                : 'Semantic search off'
+            }
             onClick={() =>
               setSearchMode((m) => (m === 'semantic' ? 'keyword' : 'semantic'))
             }
@@ -337,7 +346,7 @@ export default function StatsView() {
             <Sparkles size={15} />
           </button>
           <span
-            className={`hidden md:inline shrink-0 text-[13px] whitespace-nowrap transition-colors ${searchMode === 'semantic' ? 'text-[#4ea8de]' : 'text-neutral-500'}`}
+            className={`hidden xl:inline shrink-0 text-[13px] whitespace-nowrap transition-colors ${searchMode === 'semantic' ? 'text-[#4ea8de]' : 'text-neutral-500'}`}
           >
             {searchMode === 'semantic'
               ? 'semantic search on'
@@ -350,7 +359,7 @@ export default function StatsView() {
 
   const subgraphSearchControls = (
     <>
-      <div className='relative flex-1'>
+      <div className='relative flex-1 min-w-0'>
         <Search
           className='absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400'
           size={16}
@@ -484,14 +493,14 @@ export default function StatsView() {
       <div className='hidden md:flex relative z-20 shrink-0 bg-neutral-950/90 backdrop-blur px-4 py-3 items-center gap-3 border-b border-neutral-800'>
         {backLink}
         {subgraphControl}
-        <div className='flex-1 flex justify-center'>
-          <div className='relative w-full max-w-xl flex items-center gap-2'>
+        <div className='flex-1 min-w-0 flex justify-center'>
+          <div className='relative w-full min-w-0 max-w-xl flex items-center gap-2'>
             {isBrowsing ? searchControls : subgraphSearchControls}
           </div>
         </div>
-        <div className='shrink-0 min-w-[190px] flex justify-end items-center gap-10'>
+        <div className='shrink-0 min-w-[190px] flex justify-end items-center gap-4 xl:gap-10'>
           {aboutLink}
-          <LatestBatchBadge />
+          <LatestBatchBadge className='hidden lg:inline' />
           <a
             target='_blank'
             href='https://github.com/ai-safety-graph/alignment-graph'
