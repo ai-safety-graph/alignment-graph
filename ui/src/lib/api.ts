@@ -134,3 +134,14 @@ export type LatestBatch = { date: string; added: number }
 export async function fetchLatestBatch(): Promise<LatestBatch | null> {
   return apiFetch<LatestBatch | null>('/api/batch/latest')
 }
+
+// Size and publication-date span of the collection (relevant papers only).
+export type Coverage = {
+  total: number
+  earliest: string | null
+  latest: string | null
+}
+
+export async function fetchCoverage(): Promise<Coverage> {
+  return apiFetch<Coverage>('/api/batch/coverage')
+}

@@ -24,3 +24,17 @@ def test_list_tags_empty_when_no_tags(client, make_paper):
     res = client.get("/api/tags")
     assert res.status_code == 200
     assert res.json() == {}
+
+
+def test_list_tags_includes_taxonomy_description(client, make_paper):
+    from aisafety_pipeline.taxonomy import TAXONOMY_DESCRIPTIONS
+
+    make_paper("2401.00084", tags=[("AI governance and policy", 0.9)])
+    make_paper("2401.00085", tags=[("not a taxonomy tag", 0.9)])
+
+    body = client.get("/api/tags").json()
+    assert (
+        body["AI governance and policy"]["description"]
+        == TAXONOMY_DESCRIPTIONS["AI governance and policy"]
+    )
+    assert body["not a taxonomy tag"]["description"] is None

@@ -17,7 +17,9 @@ All data comes from the **FastAPI backend** via `lib/api.ts`. This is **API mode
 
 All data comes from the FastAPI backend via `lib/api.ts`:
 
-- `fetchTags()` → `GET /api/tags` — tag labels and sizes
+- `fetchTags()` → `GET /api/tags` — tag labels, sizes and taxonomy descriptions
+- `fetchLatestBatch()` → `GET /api/batch/latest` — latest pipeline batch for the header badge
+- `fetchCoverage()` → `GET /api/batch/coverage` — collection size and date span for the About page
 - `fetchPapers(params)` → `GET /api/papers` — paginated, server-side filtered listing (used by `StatsView` via `usePaperBrowser`)
 - `fetchSubgraph(ids)` → `POST /api/graph/subset` — graph data for a specific set of paper IDs (desktop `GraphView`)
 - `fetchGraphRange({from, to})` → `GET /api/graph/range` — graph data for every relevant paper in a date range (desktop `GraphView`'s default recent-papers graph)
