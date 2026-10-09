@@ -5,9 +5,12 @@ import { ChevronDown } from 'lucide-react'
 export default function Dropdown({
   label,
   children,
+  className = 'max-w-[240px]',
 }: {
   label: ReactNode
   children?: ReactNode
+  /** Button classes; defaults to the max width cap. */
+  className?: string
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const ref = useRef<HTMLDivElement | null>(null)
@@ -28,7 +31,7 @@ export default function Dropdown({
       <button
         onClick={() => canOpen && setIsOpen((o) => !o)}
         title={typeof label === 'string' ? label : undefined}
-        className={`flex items-center gap-1.5 max-w-[240px] px-2.5 py-1 rounded-md bg-neutral-950 border border-neutral-700 text-[13px] text-neutral-300 whitespace-nowrap transition-colors${canOpen ? ' hover:text-white hover:border-neutral-500 cursor-pointer' : ' cursor-default'}`}
+        className={`flex items-center gap-1.5 ${className} px-2.5 py-1 rounded-md bg-neutral-950 border border-neutral-700 text-[13px] text-neutral-300 whitespace-nowrap transition-colors${canOpen ? ' hover:text-white hover:border-neutral-500 cursor-pointer' : ' cursor-default'}`}
       >
         <span className='truncate'>{label}</span>
         {canOpen && (

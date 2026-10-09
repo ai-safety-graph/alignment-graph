@@ -86,11 +86,7 @@ function ghostCoord(
   }
 }
 
-export default function ArxivGraph({
-  paperIds,
-}: {
-  paperIds?: string[]
-}) {
+export default function ArxivGraph({ paperIds }: { paperIds?: string[] }) {
   const fgRef = useRef<ForceGraphMethods<NodeCompact, LinkCompact> | undefined>(
     undefined,
   )
@@ -161,7 +157,9 @@ export default function ArxivGraph({
 
   const isDemo = wantsRecentPapers
   const isEmptySavedGraph =
-    !paperIds?.length && !!activeSavedGraph && activeSavedGraph.paperIds.length === 0
+    !paperIds?.length &&
+    !!activeSavedGraph &&
+    activeSavedGraph.paperIds.length === 0
 
   const [hoverId, setHoverId] = useState<number | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -275,8 +273,7 @@ export default function ArxivGraph({
     [ghostSimNodes],
   )
   const ghostIds = useMemo(
-    () =>
-      new Set([...searchGhostIds, ...relatedGhostNodes.map((n) => n.id)]),
+    () => new Set([...searchGhostIds, ...relatedGhostNodes.map((n) => n.id)]),
     [searchGhostIds, relatedGhostNodes],
   )
 
@@ -652,7 +649,10 @@ export default function ArxivGraph({
   }
 
   // Node pinning
-  function setPinned(n: NodeObject<NodeCompact> | null | undefined, pinned: boolean) {
+  function setPinned(
+    n: NodeObject<NodeCompact> | null | undefined,
+    pinned: boolean,
+  ) {
     if (!n) return
     if (pinned) {
       n.fx = n.x
@@ -874,79 +874,6 @@ export default function ArxivGraph({
         />
       )}
 
-      {/* Search bar */}
-      <div className='fixed top-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2'>
-        <div className='bg-[#2a2a2a] backdrop-blur-xs rounded-md w-[min(550px,80vw)]'>
-          <div className='flex items-center gap-2'>
-            <div className='relative flex-1'>
-              <Search
-                className='absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none'
-                size={16}
-              />
-              <input
-                ref={searchInputRef}
-                placeholder='Search papers on AI safety & alignment'
-                value={query}
-                onChange={(e) => {
-                  if (selectedId != null) onBackgroundClick()
-                  setQuery(e.target.value)
-                }}
-                className='w-full pl-9 pr-20 py-1 rounded-md bg-neutral-900 border border-[#333333] text-[#e5e5e5] placeholder-[#666666] outline-none focus:ring-2 focus:ring-[#4ea8de]'
-              />
-              <div className='absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[11px] text-neutral-400 pointer-events-none select-none'>
-                <kbd className='px-1.5 py-0.5 rounded bg-transparent border border-neutral-600 text-[11px] font-mono'>
-                  Ctrl
-                </kbd>
-                <kbd className='px-1.5 py-0.5 rounded bg-transparent border border-neutral-600 text-[11px] font-mono'>
-                  K
-                </kbd>
-              </div>
-            </div>
-            {query && (
-              <button
-                aria-label='Clear search query'
-                onClick={() => setQuery('')}
-                className='px-2 py-1 rounded-md cursor-pointer text-neutral-300 hover:text-white flex items-center gap-2'
-              >
-                <Trash size={15} />
-                <kbd className='px-1.5 py-0.5 rounded bg-transparent border border-neutral-600 text-[11px] font-mono'>
-                  Ctrl
-                </kbd>
-                <kbd className='px-1.5 py-0.5 rounded bg-transparent border border-neutral-600 text-[11px] font-mono'>
-                  Del
-                </kbd>
-              </button>
-            )}
-          </div>
-        </div>
-        {semanticSearchEnabled && (
-          <>
-            <button
-              type='button'
-              onClick={() =>
-                setSearchMode((m) =>
-                  m === 'semantic' ? 'keyword' : 'semantic',
-                )
-              }
-              className={`shrink-0 px-2 py-1 rounded-md bg-neutral-950 border cursor-pointer transition-colors ${
-                searchMode === 'semantic'
-                  ? 'border-[#4ea8de] text-[#4ea8de]'
-                  : 'border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white'
-              }`}
-            >
-              <Sparkles size={15} />
-            </button>
-            <span
-              className={`shrink-0 text-[13px] whitespace-nowrap transition-colors ${searchMode === 'semantic' ? 'text-[#4ea8de]' : 'text-neutral-500'}`}
-            >
-              {searchMode === 'semantic'
-                ? 'semantic search on'
-                : 'semantic search off'}
-            </span>
-          </>
-        )}
-      </div>
-
       {/* Overlays */}
       {/* Search results overlay flexes to fill the left column. */}
       <div className='fixed left-4 top-[72px] bottom-4 z-10 flex flex-col items-start justify-end gap-3 pointer-events-none'>
@@ -963,7 +890,9 @@ export default function ArxivGraph({
                 activeSavedGraph ? removeFromActiveSavedGraph : undefined
               }
               subgraphPaperIds={
-                activeSavedGraph ? new Set(activeSavedGraph.paperIds) : undefined
+                activeSavedGraph
+                  ? new Set(activeSavedGraph.paperIds)
+                  : undefined
               }
               subgraphName={activeSavedGraph?.name}
             />
@@ -995,129 +924,219 @@ export default function ArxivGraph({
         />
       )}
 
-      {/* Stats toggle + subgraph dropdown */}
-      <div className='fixed top-4 left-4 z-10 flex items-center gap-2'>
-        <Link
-          to='/stats'
-          aria-label='Show stats'
-          className='px-2 py-1 rounded-md cursor-pointer bg-neutral-950 border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors'
-        >
-          <Library size={18} />
-        </Link>
-
-        <Dropdown
-          label={
-            isDemo
-              ? 'Recent papers'
-              : (activeSavedGraph?.name ?? 'Custom subgraph')
-          }
-        >
-          {savedGraphs.map((g) => (
-            <button
-              key={g.id}
-              type='button'
-              onClick={() => {
-                setActiveSavedGraph(g)
-                setSelectedId(null)
-                setLockedId(null)
-                setHoverId(null)
-              }}
-              title={g.name}
-              className={`w-full truncate text-left px-4 py-2 text-sm hover:bg-[#333333] cursor-pointer transition-colors ${
-                activeSavedGraph?.id === g.id
-                  ? 'text-[#4ea8de]'
-                  : 'text-neutral-300'
-              }`}
-            >
-              {g.name}
-            </button>
-          ))}
-          {savedGraphs.length > 0 && (
-            <button
-              type='button'
-              onClick={() => {
-                setActiveSavedGraph(null)
-                setSelectedId(null)
-                setLockedId(null)
-                setHoverId(null)
-              }}
-              className={`w-full text-left px-4 py-2 text-sm hover:bg-[#333333] cursor-pointer border-t border-[#333333] transition-colors ${
-                isDemo ? 'text-[#4ea8de]' : 'text-neutral-400'
-              }`}
-            >
-              Recent papers
-            </button>
-          )}
-        </Dropdown>
-
-        <div ref={filtersRef}>
-          <button
-            type='button'
-            onClick={() => setFiltersOpen((v) => !v)}
-            aria-label={filtersOpen ? 'Collapse filters' : 'Expand filters'}
-            aria-expanded={filtersOpen}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md cursor-pointer bg-neutral-950 border text-[13px] transition-colors ${
-              hasActiveFilters
-                ? 'border-[#4ea8de] text-[#4ea8de]'
-                : `hover:border-neutral-500 hover:text-white ${filtersOpen ? 'border-neutral-500 text-white' : 'border-neutral-700 text-neutral-300'}`
-            }`}
+      {/* Header: a single flex row so the groups shrink instead of overlapping.
+          The search box absorbs the shrinking and secondary labels drop out
+          at narrower breakpoints. It stays one row tall, which the overlays'
+          top offsets rely on. */}
+      <div className='fixed top-3 inset-x-4 z-10 flex items-center gap-3 pointer-events-none'>
+        {/* Stats toggle + subgraph dropdown + filters */}
+        <div className='shrink-0 flex items-center gap-2 pointer-events-auto'>
+          <Link
+            to='/stats'
+            aria-label='Show stats'
+            className='px-2 py-1 rounded-md cursor-pointer bg-neutral-950 border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors'
           >
-            <SlidersHorizontal size={14} />
-            Filters
-            {activeFilterCount > 0 && (
-              <span className='min-w-4 px-1 rounded-full bg-[#4ea8de] text-[11px] leading-4 text-neutral-950'>
-                {activeFilterCount}
-              </span>
+            <Library size={18} />
+          </Link>
+
+          <Dropdown
+            className='max-w-[140px] lg:max-w-[240px]'
+            label={
+              isDemo
+                ? 'Recent papers'
+                : (activeSavedGraph?.name ?? 'Custom subgraph')
+            }
+          >
+            {savedGraphs.map((g) => (
+              <button
+                key={g.id}
+                type='button'
+                onClick={() => {
+                  setActiveSavedGraph(g)
+                  setSelectedId(null)
+                  setLockedId(null)
+                  setHoverId(null)
+                }}
+                title={g.name}
+                className={`w-full truncate text-left px-4 py-2 text-sm hover:bg-[#333333] cursor-pointer transition-colors ${
+                  activeSavedGraph?.id === g.id
+                    ? 'text-[#4ea8de]'
+                    : 'text-neutral-300'
+                }`}
+              >
+                {g.name}
+              </button>
+            ))}
+            {savedGraphs.length > 0 && (
+              <button
+                type='button'
+                onClick={() => {
+                  setActiveSavedGraph(null)
+                  setSelectedId(null)
+                  setLockedId(null)
+                  setHoverId(null)
+                }}
+                className={`w-full text-left px-4 py-2 text-sm hover:bg-[#333333] cursor-pointer border-t border-[#333333] transition-colors ${
+                  isDemo ? 'text-[#4ea8de]' : 'text-neutral-400'
+                }`}
+              >
+                Recent papers
+              </button>
             )}
-          </button>
-          {filtersOpen && (
-            <div className='fixed top-14 left-4 z-20 w-[min(900px,calc(100vw-2rem))] max-h-[80vh] overflow-auto shadow-lg rounded-lg'>
-              <FilterBar
-                tagEntries={filteredTagEntries}
-                availableDomains={availableDomains}
-                activeTags={activeTags}
-                activeDomains={activeDomains}
-                datePreset={datePreset}
-                datePresets={datePresets}
-                hasActiveFilters={hasActiveFilters}
-                onToggleTag={toggleTag}
-                onToggleDomain={toggleDomain}
-                onSetDatePreset={setDatePreset}
-                onClearAll={clearAllFilters}
-              />
-            </div>
-          )}
+          </Dropdown>
+
+          <div ref={filtersRef}>
+            <button
+              type='button'
+              onClick={() => setFiltersOpen((v) => !v)}
+              aria-label={filtersOpen ? 'Collapse filters' : 'Expand filters'}
+              aria-expanded={filtersOpen}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md cursor-pointer bg-neutral-950 border text-[13px] transition-colors ${
+                hasActiveFilters
+                  ? 'border-[#4ea8de] text-[#4ea8de]'
+                  : `hover:border-neutral-500 hover:text-white ${filtersOpen ? 'border-neutral-500 text-white' : 'border-neutral-700 text-neutral-300'}`
+              }`}
+            >
+              <SlidersHorizontal size={14} />
+              <span className='hidden lg:inline'>Filters</span>
+              {activeFilterCount > 0 && (
+                <span className='min-w-4 px-1 rounded-full bg-[#4ea8de] text-[11px] leading-4 text-neutral-950'>
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+            {filtersOpen && (
+              <div className='fixed top-14 left-4 z-20 w-[min(900px,calc(100vw-2rem))] max-h-[80vh] overflow-auto shadow-lg rounded-lg'>
+                <FilterBar
+                  tagEntries={filteredTagEntries}
+                  availableDomains={availableDomains}
+                  activeTags={activeTags}
+                  activeDomains={activeDomains}
+                  datePreset={datePreset}
+                  datePresets={datePresets}
+                  hasActiveFilters={hasActiveFilters}
+                  onToggleTag={toggleTag}
+                  onToggleDomain={toggleDomain}
+                  onSetDatePreset={setDatePreset}
+                  onClearAll={clearAllFilters}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* <Link
+            to='/stats'
+            aria-label='Show stats'
+            className='shrink-0 flex items-center gap-1.5 px-3 py-[7px] rounded-full bg-neutral-950 border border-[#333333] text-sm text-neutral-400 hover:text-neutral-200 whitespace-nowrap cursor-pointer'
+          >
+            New Graph
+            <Plus size={13} />
+          </Link> */}
         </div>
 
-        {/* <Link
-          to='/stats'
-          aria-label='Show stats'
-          className='shrink-0 flex items-center gap-1.5 px-3 py-[7px] rounded-full bg-neutral-950 border border-[#333333] text-sm text-neutral-400 hover:text-neutral-200 whitespace-nowrap cursor-pointer'
-        >
-          New Graph
-          <Plus size={13} />
-        </Link> */}
-      </div>
+        {/* Search bar */}
+        <div className='flex-1 min-w-0 flex justify-center'>
+          <div className='w-full min-w-0 flex items-center justify-center gap-2 pointer-events-auto'>
+            <div className='flex-1 min-w-0 max-w-[550px] bg-[#2a2a2a] backdrop-blur-xs rounded-md'>
+              <div className='flex items-center gap-2'>
+                <div className='relative flex-1'>
+                  <Search
+                    className='absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none'
+                    size={16}
+                  />
+                  <input
+                    ref={searchInputRef}
+                    placeholder='Search papers on AI safety & alignment'
+                    value={query}
+                    onChange={(e) => {
+                      if (selectedId != null) onBackgroundClick()
+                      setQuery(e.target.value)
+                    }}
+                    className='w-full pl-9 pr-3 lg:pr-20 py-1 rounded-md bg-neutral-900 border border-[#333333] text-[#e5e5e5] placeholder-[#666666] outline-none focus:ring-2 focus:ring-[#4ea8de]'
+                  />
+                  <div className='absolute right-3 top-1/2 -translate-y-1/2 hidden lg:flex items-center gap-1 text-[11px] text-neutral-400 pointer-events-none select-none'>
+                    <kbd className='px-1.5 py-0.5 rounded bg-transparent border border-neutral-600 text-[11px] font-mono'>
+                      Ctrl
+                    </kbd>
+                    <kbd className='px-1.5 py-0.5 rounded bg-transparent border border-neutral-600 text-[11px] font-mono'>
+                      K
+                    </kbd>
+                  </div>
+                </div>
+                {query && (
+                  <button
+                    aria-label='Clear search query'
+                    onClick={() => setQuery('')}
+                    className='px-2 py-1 rounded-md cursor-pointer text-neutral-300 hover:text-white flex items-center gap-2'
+                  >
+                    <Trash size={15} />
+                    <span className='hidden lg:flex items-center gap-2'>
+                      <kbd className='px-1.5 py-0.5 rounded bg-transparent border border-neutral-600 text-[11px] font-mono'>
+                        Ctrl
+                      </kbd>
+                      <kbd className='px-1.5 py-0.5 rounded bg-transparent border border-neutral-600 text-[11px] font-mono'>
+                        Del
+                      </kbd>
+                    </span>
+                  </button>
+                )}
+              </div>
+            </div>
+            {semanticSearchEnabled && (
+              <>
+                <button
+                  type='button'
+                  aria-pressed={searchMode === 'semantic'}
+                  title={
+                    searchMode === 'semantic'
+                      ? 'Semantic search on'
+                      : 'Semantic search off'
+                  }
+                  onClick={() =>
+                    setSearchMode((m) =>
+                      m === 'semantic' ? 'keyword' : 'semantic',
+                    )
+                  }
+                  className={`shrink-0 px-2 py-1 rounded-md bg-neutral-950 border cursor-pointer transition-colors ${
+                    searchMode === 'semantic'
+                      ? 'border-[#4ea8de] text-[#4ea8de]'
+                      : 'border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white'
+                  }`}
+                >
+                  <Sparkles size={15} />
+                </button>
+                <span
+                  className={`hidden xl:inline shrink-0 text-[13px] whitespace-nowrap transition-colors ${searchMode === 'semantic' ? 'text-[#4ea8de]' : 'text-neutral-500'}`}
+                >
+                  {searchMode === 'semantic'
+                    ? 'semantic search on'
+                    : 'semantic search off'}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
 
-      <div className='fixed right-4 top-4 z-10 flex items-center gap-10'>
-        <Link
-          to='/about'
-          className='flex items-center gap-1.5 cursor-pointer text-[13px] text-neutral-300 hover:text-white underline underline-offset-2 transition-colors'
-        >
-          <Info size={14} />
-          About
-        </Link>
-        <LatestBatchBadge />
-        <a
-          target='_blank'
-          href='https://github.com/ai-safety-graph/alignment-graph'
-        >
-          <img
-            src='/ag-logo.svg'
-            alt='Alignment Graph Logo'
-            className='h-[34px] w-auto opacity-50 saturate-70'
-          />
-        </a>
+        <div className='shrink-0 flex items-center gap-4 xl:gap-10 pointer-events-auto'>
+          <Link
+            to='/about'
+            className='flex items-center gap-1.5 cursor-pointer text-[13px] text-neutral-300 hover:text-white underline underline-offset-2 transition-colors'
+          >
+            <Info size={14} />
+            About
+          </Link>
+          <LatestBatchBadge className='hidden lg:inline' />
+          <a
+            target='_blank'
+            href='https://github.com/ai-safety-graph/alignment-graph'
+          >
+            <img
+              src='/ag-logo.svg'
+              alt='Alignment Graph Logo'
+              className='h-[34px] w-auto opacity-50 saturate-70'
+            />
+          </a>
+        </div>
       </div>
     </div>
   )
