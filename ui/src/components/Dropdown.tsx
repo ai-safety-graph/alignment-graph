@@ -27,7 +27,7 @@ export default function Dropdown({
   }, [])
 
   return (
-    <div className='relative' ref={ref}>
+    <div className='relative min-w-0' ref={ref}>
       <button
         onClick={() => canOpen && setIsOpen((o) => !o)}
         title={typeof label === 'string' ? label : undefined}

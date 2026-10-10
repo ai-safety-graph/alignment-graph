@@ -268,27 +268,35 @@ export default function StatsView() {
 
   const newGraphControl = isCreatingSubgraph ? newGraphInput : newGraphButton
 
+  const renderSubgraphDropdown = (className: string) => (
+    <Dropdown
+      className={className}
+      label={selectedSubgraph?.name ?? 'Select graph'}
+    >
+      {subgraphs.map((subgraph) => (
+        <button
+          key={subgraph.id}
+          type='button'
+          onClick={() => setSelectedSubgraphId(subgraph.id)}
+          title={subgraph.name}
+          className='block w-full truncate text-left px-3 py-2 text-sm text-neutral-300 hover:bg-[#333333] hover:text-neutral-100'
+        >
+          {subgraph.name}
+        </button>
+      ))}
+    </Dropdown>
+  )
+
   const subgraphControl =
     subgraphs.length === 0 ? null : (
       <div className='shrink-0 flex items-center gap-2'>
-        <Dropdown
-          className='max-w-[240px] md:max-w-[140px] lg:max-w-[240px]'
-          label={selectedSubgraph?.name ?? 'Select graph'}
-        >
-          {subgraphs.map((subgraph) => (
-            <button
-              key={subgraph.id}
-              type='button'
-              onClick={() => setSelectedSubgraphId(subgraph.id)}
-              title={subgraph.name}
-              className='block w-full truncate text-left px-3 py-2 text-sm text-neutral-300 hover:bg-[#333333] hover:text-neutral-100'
-            >
-              {subgraph.name}
-            </button>
-          ))}
-        </Dropdown>
+        {renderSubgraphDropdown('md:max-w-[140px] lg:max-w-[240px]')}
       </div>
     )
+
+  // Mobile: sits inline in the status row and shrinks to leave room for
+  // the action buttons.
+  const subgraphDropdown = renderSubgraphDropdown('max-w-[200px]')
 
   const searchControls = (
     <>
@@ -488,7 +496,7 @@ export default function StatsView() {
 
   return (
     <div className='fixed inset-0 bg-neutral-950 text-[#e5e5e5] flex flex-col'>
-      <div className='hidden md:flex relative z-20 shrink-0 bg-neutral-950/90 backdrop-blur px-4 py-3 items-center gap-3 border-b border-neutral-800'>
+      <div className='hidden md:flex relative z-20 shrink-0 bg-neutral-950 px-4 py-3 items-center gap-3 border-b border-neutral-800'>
         {backLink}
         {subgraphControl}
         <div className='flex-1 min-w-0 flex justify-center'>
@@ -546,31 +554,37 @@ export default function StatsView() {
                 </a>
               </div>
 
-              <div className='md:hidden sticky top-0 z-20 bg-neutral-950/90 backdrop-blur'>
+              <div className='md:hidden sticky top-0 z-20 bg-neutral-950'>
                 <div className='p-3 flex flex-col gap-2'>
-                  <div className='flex items-center gap-3'>
-                    {backLink}
-                    {subgraphControl}
-                  </div>
+                  {backLink && (
+                    <div className='flex items-center gap-3'>{backLink}</div>
+                  )}
                   <div className='flex items-center gap-2'>
                     {isBrowsing ? searchControls : subgraphSearchControls}
                   </div>
                 </div>
-                {(selectedSubgraph || filterBar || isBrowsing) && (
+                {(selectedSubgraph ||
+                  subgraphs.length > 0 ||
+                  filterBar ||
+                  isBrowsing) && (
                   <div className='px-3 pb-2 flex items-center gap-2 text-sm text-neutral-400'>
-                    {!selectedSubgraph && isBrowsing && newGraphControl}
-                    {selectedSubgraph && isBrowsing && isCreatingSubgraph
-                      ? newGraphInput
-                      : selectedSubgraph && (
-                          <span className='flex-1 min-w-0 truncate'>
-                            {isBrowsing
-                              ? 'Adding papers to'
-                              : 'Viewing papers in'}{' '}
-                            <span className='font-medium text-neutral-200'>
-                              {selectedSubgraph.name}
-                            </span>
-                          </span>
+                    {isBrowsing && isCreatingSubgraph ? (
+                      newGraphInput
+                    ) : (
+                      <>
+                        {!selectedSubgraph && isBrowsing && newGraphButton}
+                        {subgraphs.length > 0 && (
+                          <div className='flex-1 min-w-0 flex items-center gap-1.5'>
+                            {selectedSubgraph && (
+                              <span className='shrink-0'>
+                                {isBrowsing ? 'Adding to' : 'Viewing'}
+                              </span>
+                            )}
+                            {subgraphDropdown}
+                          </div>
                         )}
+                      </>
+                    )}
                     <div className='ml-auto flex items-center gap-2'>
                       {selectedSubgraph && isBrowsing && newGraphButton}
                       {filterBar && filterToggleButton}
