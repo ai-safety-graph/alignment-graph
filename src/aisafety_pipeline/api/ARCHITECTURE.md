@@ -29,7 +29,7 @@ src/aisafety_pipeline/api/
 
 `main.py` uses FastAPI's `lifespan` context manager to **warm the search embedding generator** on startup (calls `_get_generator()`), so the first `/api/search` request isn't slowed by model load. The warm-up is best-effort — failures are swallowed and the model loads lazily on first request instead. The lifespan does **not** validate `DATABASE_URL`; that check happens per-request in `get_conn()`.
 
-CORS origins are configured from `config.API_CORS_ORIGINS` (includes `https://alignment-graph.netlify.app` and `http://localhost:5173`).
+CORS origins are configured from `config.API_CORS_ORIGINS` (includes `https://alignmentgraph.com`, `https://alignment-graph.netlify.app` and `http://localhost:5173`).
 
 ---
 
