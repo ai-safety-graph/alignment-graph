@@ -17,6 +17,12 @@ for = "/index.html"
 Cache-Control = "no-cache"
 
 [[redirects]]
+from = "https://alignment-graph.netlify.app/*"
+to = "https://alignmentgraph.com/:splat"
+status = 301
+force = true
+
+[[redirects]]
 from = "/assets/*"
 to = "/index.html"
 status = 404

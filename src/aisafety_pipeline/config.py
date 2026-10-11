@@ -39,7 +39,7 @@ API_HOST = os.getenv("API_HOST", "0.0.0.0")
 API_PORT = int(os.getenv("API_PORT", "8000"))
 API_CORS_ORIGINS = os.getenv(
     "CORS_ORIGINS",
-    "https://alignment-graph.netlify.app,http://localhost:5173,http://localhost:4173",
+    "https://alignmentgraph.com,https://alignment-graph.netlify.app,http://localhost:5173,http://localhost:4173",
 ).split(",")
 
 API_DB_POOL_MIN = int(os.getenv("API_DB_POOL_MIN", "1"))

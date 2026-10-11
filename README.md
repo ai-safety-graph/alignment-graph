@@ -2,7 +2,7 @@
 
 A staged pipeline for harvesting **arXiv** papers → storing in **PostgreSQL + pgvector** → generating **SPECTER2 embeddings** → applying filters → topic tagging → serving live via **FastAPI**.
 
-[Live Web App](https://alignment-graph.netlify.app/)
+[Live Web App](https://alignmentgraph.com/)
 
 ## Features
 
