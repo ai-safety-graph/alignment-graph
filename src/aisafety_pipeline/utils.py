@@ -62,8 +62,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Path to seeds_subtopics.tsv (arxiv_id, subtopic, ...) for --method centroid-multi "
                          "(default: seeds_subtopics.tsv)")
     d.add_argument("--labels", help="labels.csv with columns: id,label (0/1)")
-    d.add_argument("--tau", type=float, default=0.38,
-                    help="Threshold on sim/proba (centroid: raw cosine; centroid-multi: z-score, "
+    d.add_argument("--tau", type=float, default=None,
+                    help="Threshold on sim/proba (centroid: raw cosine, default "
+                         f"{config.STAGE2_CENTROID_TAU}; centroid-multi: z-score, default 0.38, "
                          "not directly comparable to the centroid method's tau)")
     d.add_argument("--full", action="store_true",
                    help="centroid: rescore every paper instead of only unscored ones (use after "
@@ -152,7 +153,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ra.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
     ra.add_argument("--seeds", default="seeds.txt", help="Path to seeds.txt for the stage-2 filter")
-    ra.add_argument("--tau", type=float, default=0.92, help="Stage-2 filter threshold")
+    ra.add_argument("--tau", type=float, default=None,
+                    help="Stage-2 filter threshold (default: the filter command's per-method default)")
     ra.add_argument("--filter-method", dest="filter_method", choices=["centroid", "centroid-multi", "logreg"],
                      default="centroid")
     ra.add_argument("--device", default="auto", help="auto|cpu|mps|cuda|cuda:N (embed / embed-topic)")
