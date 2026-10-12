@@ -15,6 +15,7 @@ src/aisafety_pipeline/api/
   __init__.py
   main.py          # FastAPI app, CORS, lifespan
   deps.py          # get_conn() dependency (yields PgConnection per request)
+  ratelimit.py     # slowapi Limiter + client_ip() key function
   routes/
     graph.py       # POST /api/graph/subset, GET /api/graph/range
     papers.py      # GET /api/papers, GET /api/papers/related, GET /api/papers/{arxiv_id:path}
@@ -30,6 +31,24 @@ src/aisafety_pipeline/api/
 `main.py` uses FastAPI's `lifespan` context manager to **warm the search embedding generator** on startup (calls `_get_generator()`), so the first `/api/search` request isn't slowed by model load. The warm-up is best-effort — failures are swallowed and the model loads lazily on first request instead. The lifespan does **not** validate `DATABASE_URL`; that check happens per-request in `get_conn()`.
 
 CORS origins are configured from `config.API_CORS_ORIGINS` (includes `https://alignmentgraph.com`, `https://alignment-graph.netlify.app` and `http://localhost:5173`).
+
+---
+
+## Rate Limiting
+
+Every route except `/health` is rate-limited per client IP by `slowapi` (`ratelimit.py`, wired in `main.py`):
+
+| Limit | Default | Env var | Routes |
+|---|---|---|---|
+| Expensive | `30/minute` | `RATE_LIMIT_EXPENSIVE` | `/api/papers/related`, `/api/graph/subset`, `/api/graph/range`, `/api/search` |
+| Default | `120/minute` | `RATE_LIMIT_DEFAULT` | everything else |
+
+`RATE_LIMIT_ENABLED=false` turns it off. Over-limit requests get a 429 JSON response.
+
+- **Client IP**: `client_ip()` uses `X-Real-IP`, then the *rightmost* `X-Forwarded-For` entry, then the socket peer. Railway's edge proxy sits in front, so the socket peer is the proxy. The leftmost XFF entry is client-spoofable and must not be used.
+- **Single-process assumption**: counters are in process memory. That's accurate while the API runs as one uvicorn process in one replica. If you scale out, pass a Redis `storage_uri` to the `Limiter`, or each replica will enforce its own limit.
+- **Middleware order**: `SlowAPIMiddleware` is added before `CORSMiddleware`, so CORS stays outermost and 429s carry CORS headers.
+- Routes with a stricter limit use `@limiter.limit(expensive_limit)` and must take a `request: Request` parameter.
 
 ---
 

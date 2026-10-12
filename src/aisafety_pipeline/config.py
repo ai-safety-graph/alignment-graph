@@ -45,6 +45,13 @@ API_CORS_ORIGINS = os.getenv(
 API_DB_POOL_MIN = int(os.getenv("API_DB_POOL_MIN", "1"))
 API_DB_POOL_MAX = int(os.getenv("API_DB_POOL_MAX", "10"))
 
+# Per-client-IP rate limits (slowapi / `limits` syntax, e.g. "120/minute").
+# Counters live in process memory, which is accurate only while the API runs
+# as a single process -- see api/ARCHITECTURE.md.
+RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "true").strip().lower() in ("1", "true", "yes")
+RATE_LIMIT_DEFAULT = os.getenv("RATE_LIMIT_DEFAULT", "120/minute")  # cheap reads
+RATE_LIMIT_EXPENSIVE = os.getenv("RATE_LIMIT_EXPENSIVE", "30/minute")  # pgvector / large graph queries
+
 # Semantic search loads a transformer embedding model into memory; only
 # self-hosted deployments (which run alongside the pipeline) enable it.
 ENABLE_SEMANTIC_SEARCH = os.getenv("ENABLE_SEMANTIC_SEARCH", "false").strip().lower() in (
