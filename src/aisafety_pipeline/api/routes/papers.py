@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from ..deps import get_conn
+from ..ratelimit import expensive_limit, limiter
 
 router = APIRouter(prefix="/api/papers", tags=["papers"])
 
@@ -74,7 +75,9 @@ def list_papers(
 
 
 @router.get("/related")
+@limiter.limit(expensive_limit)
 def get_related_papers(
+    request: Request,
     id: str = Query(...),
     limit: int = Query(10, ge=1, le=50),
     conn=Depends(get_conn),

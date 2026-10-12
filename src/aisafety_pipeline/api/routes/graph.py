@@ -3,11 +3,12 @@ from __future__ import annotations
 import datetime as dt
 from collections import defaultdict
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, field_validator
 
 from ...config import TOPIC_EMB_DIMS, TOPIC_EMB_MODEL
 from ..deps import get_conn
+from ..ratelimit import expensive_limit, limiter
 
 router = APIRouter(prefix="/api/graph", tags=["graph"])
 
@@ -160,7 +161,8 @@ def _graph_from_rows(rows) -> dict:
 
 
 @router.post("/subset")
-def get_subgraph(body: SubsetRequest, conn=Depends(get_conn)):
+@limiter.limit(expensive_limit)
+def get_subgraph(request: Request, body: SubsetRequest, conn=Depends(get_conn)):
     try:
         return _build_subgraph(conn, body.ids)
     except RuntimeError as e:
@@ -168,7 +170,9 @@ def get_subgraph(body: SubsetRequest, conn=Depends(get_conn)):
 
 
 @router.get("/range")
+@limiter.limit(expensive_limit)
 def get_range_graph(
+    request: Request,
     from_date: dt.date = Query(..., alias="from"),
     to_date: dt.date | None = Query(None, alias="to"),
     conn=Depends(get_conn),

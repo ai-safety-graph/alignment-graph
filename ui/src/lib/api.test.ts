@@ -59,6 +59,11 @@ describe('fetchPapers', () => {
     mockFetchOnce({}, { ok: false, status: 500 })
     await expect(fetchPapers()).rejects.toThrow('API 500')
   })
+
+  it('throws a readable message when rate limited', async () => {
+    mockFetchOnce({}, { ok: false, status: 429 })
+    await expect(fetchPapers()).rejects.toThrow('Too many requests')
+  })
 })
 
 describe('fetchGraphRange', () => {

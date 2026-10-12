@@ -5,6 +5,7 @@ const BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const url = BASE_URL ? `${BASE_URL}${path}` : path
   const res = await fetch(url, init)
+  if (res.status === 429) throw new Error('Too many requests — please wait a moment and try again.')
   if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`)
   return res.json() as Promise<T>
 }

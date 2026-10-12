@@ -71,6 +71,7 @@ def client(conn, monkeypatch: pytest.MonkeyPatch):
 
     from aisafety_pipeline.api import main as api_main
     from aisafety_pipeline.api.deps import get_conn
+    from aisafety_pipeline.api.ratelimit import limiter
     from aisafety_pipeline.api.routes import search as search_routes
 
     # Tests must be deterministic regardless of a developer's local .env —
@@ -79,6 +80,9 @@ def client(conn, monkeypatch: pytest.MonkeyPatch):
     # that specifically exercise semantic search can monkeypatch these back.
     monkeypatch.setattr(api_main, "ENABLE_SEMANTIC_SEARCH", False)
     monkeypatch.setattr(search_routes, "ENABLE_SEMANTIC_SEARCH", False)
+    # The limiter's in-memory counters are process-wide, so leaving it on
+    # would make tests throttle each other. test_ratelimit.py re-enables it.
+    monkeypatch.setattr(limiter, "enabled", False)
 
     def _override_get_conn():
         yield conn
