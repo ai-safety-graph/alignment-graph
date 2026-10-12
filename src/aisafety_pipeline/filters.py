@@ -8,7 +8,7 @@ import numpy as np
 from psycopg2.extras import execute_values
 
 from .arxiv_ids import normalize_arxiv_id_or_url
-from .config import BLUE, GREEN, RESET, YELLOW
+from .config import BLUE, GREEN, RESET, STAGE2_CENTROID_TAU, YELLOW
 from .db import vector_to_array
 from .embeddings import _MODEL_COLUMNS
 
@@ -424,6 +424,9 @@ def _run_centroid_multi(conn, args) -> None:
 
 def cmd_filter(args):
     from .db import connect
+    if args.tau is None:
+        # Each method's tau is on its own scale, so there's no shared default.
+        args.tau = STAGE2_CENTROID_TAU if args.method == "centroid" else 0.38
     conn = connect(args.db)
     try:
         if args.method == "centroid-multi":

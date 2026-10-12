@@ -28,6 +28,13 @@ EMB_MODEL = "specter2"
 TOPIC_EMB_DIMS = 768
 TOPIC_EMB_MODEL = "BAAI/bge-base-en-v1.5"
 
+# Stage-2 centroid filter threshold (raw cosine similarity to the seed
+# centroid). Deliberately loose: the LLM classification stage makes the real
+# relevance call, so stage 2 only needs to cut obvious non-matches. The
+# backfill classified everything >= 0.90, and the LLM still found 32-43% of
+# the 0.90-0.92 band relevant -- a 0.92 cut silently drops those papers.
+STAGE2_CENTROID_TAU = 0.90
+
 # OAI-PMH
 OAI_BASE = "https://export.arxiv.org/oai2"
 OAI_SETS = ["cs", "stat", "econ", "eess:eess:SY"]

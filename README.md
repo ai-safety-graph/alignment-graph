@@ -97,8 +97,10 @@ aisafety-pipeline embed --device auto
 **4. Stage-2 semantic filter**
 
 ```bash
-aisafety-pipeline filter --method centroid --seeds seeds.txt --tau 0.92
+aisafety-pipeline filter --method centroid --seeds seeds.txt
 ```
+
+The centroid threshold defaults to 0.90 cosine similarity (`STAGE2_CENTROID_TAU` in `config.py`). It is deliberately loose, since the LLM classification stage makes the real relevance call.
 
 Only scores papers that have no score yet (`ai_sem_sim IS NULL`). Pass `--full` to rescore everything after changing `seeds.txt` or `--tau`.
 
