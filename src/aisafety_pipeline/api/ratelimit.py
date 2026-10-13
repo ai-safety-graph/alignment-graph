@@ -9,16 +9,16 @@ from .. import config
 def client_ip(request: Request) -> str:
     """Rate-limit key: the real client IP behind Railway's edge proxy.
 
-    `request.client.host` is the proxy, so prefer forwarding headers. Take the
-    *rightmost* X-Forwarded-For entry (appended by the trusted proxy), never
-    the leftmost, which the client controls and could spoof to dodge limits.
+    Railway's edge (Fastly) *overwrites* X-Forwarded-For, so its leftmost
+    entry is the real client IP and a client-sent value can't spoof it.
+    X-Real-IP is deliberately ignored: on Railway it carries a shared
+    Fastly/edge IP, which lumped all users into a few buckets (verified with a
+    two-network test). `request.client.host` is the proxy too, so it's only a
+    fallback for local runs without a proxy.
     """
-    real_ip = request.headers.get("x-real-ip", "").strip()
-    if real_ip:
-        return real_ip
-    forwarded = [part.strip() for part in request.headers.get("x-forwarded-for", "").split(",") if part.strip()]
+    forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
     if forwarded:
-        return forwarded[-1]
+        return forwarded
     return request.client.host if request.client else "unknown"
 
 
