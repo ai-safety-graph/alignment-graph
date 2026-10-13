@@ -49,8 +49,12 @@ API_CORS_ORIGINS = os.getenv(
     "https://alignmentgraph.com,https://alignment-graph.netlify.app,http://localhost:5173,http://localhost:4173",
 ).split(",")
 
-API_DB_POOL_MIN = int(os.getenv("API_DB_POOL_MIN", "1"))
 API_DB_POOL_MAX = int(os.getenv("API_DB_POOL_MAX", "10"))
+# Defaults to MAX on purpose: psycopg2's pool *closes* any returned connection
+# beyond MIN, and opens new ones while holding its lock, so MIN=1 made every
+# concurrent request open a fresh TLS connection to Supabase, one at a time
+# (p50 5.2s at 5-way concurrency in production vs 0.7s with MIN=MAX).
+API_DB_POOL_MIN = int(os.getenv("API_DB_POOL_MIN", str(API_DB_POOL_MAX)))
 # Seconds a request waits for a free pooled connection before getting a 503.
 API_DB_POOL_TIMEOUT = float(os.getenv("API_DB_POOL_TIMEOUT", "5"))
 

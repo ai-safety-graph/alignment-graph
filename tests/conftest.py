@@ -66,9 +66,10 @@ def conn(test_dsn: str):
 
 
 @pytest.fixture
-def client(conn, monkeypatch: pytest.MonkeyPatch):
+def client(conn, test_dsn: str, monkeypatch: pytest.MonkeyPatch):
     from fastapi.testclient import TestClient
 
+    from aisafety_pipeline.api import deps
     from aisafety_pipeline.api import main as api_main
     from aisafety_pipeline.api.deps import get_conn
     from aisafety_pipeline.api.ratelimit import limiter
@@ -83,6 +84,11 @@ def client(conn, monkeypatch: pytest.MonkeyPatch):
     # The limiter's in-memory counters are process-wide, so leaving it on
     # would make tests throttle each other. test_ratelimit.py re-enables it.
     monkeypatch.setattr(limiter, "enabled", False)
+    # The app's lifespan opens the real pool (API_DB_POOL_MAX connections)
+    # from DATABASE_URL, which a developer's .env may point at production.
+    # Requests use the overridden get_conn below, but the pool would still
+    # connect there -- point it at the test database instead.
+    monkeypatch.setattr(deps, "DATABASE_URL", test_dsn)
 
     def _override_get_conn():
         yield conn
