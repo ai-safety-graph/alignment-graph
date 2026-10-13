@@ -45,7 +45,7 @@ Every route except `/health` is rate-limited per client IP by `slowapi` (`rateli
 
 `RATE_LIMIT_ENABLED=false` turns it off. Over-limit requests get a 429 JSON response.
 
-- **Client IP**: `client_ip()` uses `X-Real-IP`, then the *rightmost* `X-Forwarded-For` entry, then the socket peer. Railway's edge proxy sits in front, so the socket peer is the proxy. The leftmost XFF entry is client-spoofable and must not be used.
+- **Client IP**: `client_ip()` uses the *leftmost* `X-Forwarded-For` entry, then the socket peer. Railway's edge (Fastly) overwrites XFF, so the leftmost entry is the real client and can't be spoofed. Do **not** use `X-Real-IP`: on Railway it holds a shared Fastly IP, which puts all users in a few shared buckets. The socket peer is Railway's proxy, so it's only a fallback for local runs. This relies on Railway's overwrite behaviour; behind a proxy that *appends* to XFF instead, the leftmost entry would be spoofable.
 - **Single-process assumption**: counters are in process memory. That's accurate while the API runs as one uvicorn process in one replica. If you scale out, pass a Redis `storage_uri` to the `Limiter`, or each replica will enforce its own limit.
 - **Middleware order**: `SlowAPIMiddleware` is added before `CORSMiddleware`, so CORS stays outermost and 429s carry CORS headers.
 - Routes with a stricter limit use `@limiter.limit(expensive_limit)` and must take a `request: Request` parameter.

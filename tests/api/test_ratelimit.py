@@ -16,15 +16,17 @@ def _request(headers: dict[str, str], client_host: str | None = "10.0.0.1") -> R
     return Request(scope)
 
 
-def test_client_ip_prefers_x_real_ip():
-    req = _request({"X-Real-IP": "1.1.1.1", "X-Forwarded-For": "2.2.2.2, 3.3.3.3"})
-    assert client_ip(req) == "1.1.1.1"
-
-
-def test_client_ip_uses_rightmost_forwarded_for():
-    # The leftmost entry is client-controlled; the rightmost was appended by the proxy.
-    req = _request({"X-Forwarded-For": "6.6.6.6, 4.4.4.4"})
+def test_client_ip_uses_leftmost_forwarded_for():
+    # Railway's edge overwrites X-Forwarded-For, so the leftmost entry is the client.
+    req = _request({"X-Forwarded-For": "4.4.4.4, 100.64.0.2"})
     assert client_ip(req) == "4.4.4.4"
+
+
+def test_client_ip_ignores_x_real_ip():
+    # On Railway X-Real-IP is a shared edge IP; keying on it lumps users together.
+    req = _request({"X-Real-IP": "151.101.1.1", "X-Forwarded-For": "4.4.4.4"})
+    assert client_ip(req) == "4.4.4.4"
+    assert client_ip(_request({"X-Real-IP": "151.101.1.1"})) == "10.0.0.1"
 
 
 def test_client_ip_falls_back_to_socket_peer():
@@ -69,7 +71,7 @@ def limited_client(monkeypatch: pytest.MonkeyPatch):
 
 
 def _statuses(client, path: str, n: int, ip: str = "9.9.9.9") -> list[int]:
-    return [client.get(path, headers={"X-Real-IP": ip}).status_code for _ in range(n)]
+    return [client.get(path, headers={"X-Forwarded-For": ip}).status_code for _ in range(n)]
 
 
 def test_default_limit_returns_429(limited_client):
@@ -91,7 +93,7 @@ def test_health_is_exempt(limited_client):
 
 def test_429_carries_cors_headers(limited_client):
     origin = config.API_CORS_ORIGINS[0]
-    headers = {"X-Real-IP": "9.9.9.9", "Origin": origin}
+    headers = {"X-Forwarded-For": "9.9.9.9", "Origin": origin}
     responses = [limited_client.get("/api/papers/0000.00000", headers=headers) for _ in range(4)]
     assert responses[-1].status_code == 429
     assert responses[-1].headers.get("access-control-allow-origin") == origin
