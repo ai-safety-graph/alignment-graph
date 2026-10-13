@@ -837,13 +837,13 @@ export default function StatsView() {
       )}
 
       {selectedId && (
-        <div className='md:hidden fixed inset-0 z-20 bg-black/70 flex items-center justify-center p-3'>
+        <div className='md:hidden fixed inset-0 z-20 bg-black/70 flex items-center justify-center p-2'>
           <button
             aria-label='Close overlay'
             onClick={close}
             className='absolute inset-0'
           />
-          <div className='relative z-10 w-full max-w-[720px] h-[92dvh] rounded-2xl shadow-2xl overflow-hidden'>
+          <div className='relative z-10 w-full max-w-[720px] h-[calc(100dvh-1rem)] rounded-2xl shadow-2xl overflow-hidden'>
             {selected ? (
               <MobilePaperDetails
                 paper={selected}
