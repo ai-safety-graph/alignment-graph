@@ -1,9 +1,15 @@
 from __future__ import annotations
 
-from ..config import API_DB_POOL_MAX, API_DB_POOL_MIN, DATABASE_URL
+import threading
+
+from ..config import API_DB_POOL_MAX, API_DB_POOL_MIN, API_DB_POOL_TIMEOUT, DATABASE_URL
 from ..db import PgConnection
 
 _pool = None
+
+
+class PoolTimeout(Exception):
+    """No pooled connection became free within API_DB_POOL_TIMEOUT (mapped to 503 in main.py)."""
 
 
 class _VectorAwarePool:
@@ -38,12 +44,49 @@ class _VectorAwarePool:
         self._pool.closeall()
 
 
+class _BoundedPool:
+    """Makes callers wait for a free connection instead of failing.
+
+    psycopg2's ThreadedConnectionPool raises PoolError the moment all
+    `maxconn` connections are borrowed, so the 11th concurrent request was a
+    500. A semaphore sized to the pool queues borrowers for up to `timeout`
+    seconds and raises PoolTimeout only if nothing frees up.
+    """
+
+    def __init__(self, inner, maxconn: int, timeout: float):
+        self._inner = inner
+        self._slots = threading.BoundedSemaphore(maxconn)
+        self._timeout = timeout
+
+    def getconn(self):
+        if not self._slots.acquire(timeout=self._timeout):
+            raise PoolTimeout(f"no database connection free within {self._timeout}s")
+        try:
+            return self._inner.getconn()
+        except BaseException:
+            self._slots.release()
+            raise
+
+    def putconn(self, conn):
+        try:
+            self._inner.putconn(conn)
+        finally:
+            self._slots.release()
+
+    def closeall(self):
+        self._inner.closeall()
+
+
 def init_pool() -> None:
     """Create the API's connection pool. Call once, at app startup."""
     global _pool
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL is not set. The API requires PostgreSQL.")
-    _pool = _VectorAwarePool(API_DB_POOL_MIN, API_DB_POOL_MAX, DATABASE_URL)
+    _pool = _BoundedPool(
+        _VectorAwarePool(API_DB_POOL_MIN, API_DB_POOL_MAX, DATABASE_URL),
+        API_DB_POOL_MAX,
+        API_DB_POOL_TIMEOUT,
+    )
 
 
 def close_pool() -> None:
@@ -64,12 +107,14 @@ def get_conn():
     if _pool is None:
         raise RuntimeError("Connection pool not initialized — call init_pool() at startup.")
     raw = _pool.getconn()
-    conn = PgConnection.from_raw(raw)
     try:
-        yield conn
-    finally:
+        conn = PgConnection.from_raw(raw)
         try:
-            conn.rollback()
-        except Exception:
-            pass
+            yield conn
+        finally:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+    finally:
         _pool.putconn(raw)

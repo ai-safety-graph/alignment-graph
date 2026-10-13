@@ -56,6 +56,7 @@ Every route except `/health` is rate-limited per client IP by `slowapi` (`rateli
 
 `deps.py` pools connections rather than opening one per request:
 - `init_pool()` / `close_pool()` run in `main.py`'s `lifespan`, creating/closing a `ThreadedConnectionPool` (size from `config.API_DB_POOL_MIN`/`API_DB_POOL_MAX`) once for the process lifetime. `register_vector` is registered once per physical connection (in the pool's `_connect` override), not per request.
+- The pool is wrapped in `_BoundedPool`, a semaphore sized to `API_DB_POOL_MAX`. psycopg2's `ThreadedConnectionPool` raises `PoolError` immediately when every connection is borrowed, which turned bursts of more than 10 concurrent requests into 500s. With the wrapper, borrowers wait up to `config.API_DB_POOL_TIMEOUT` seconds (default 5). If none frees up they get `PoolTimeout`, which `main.py` maps to a `503` with `Retry-After: 1`.
 - `get_conn()` borrows a connection from the pool, wraps it via `PgConnection.from_raw()`, yields it, then rolls back (in case a request left an open transaction) and returns it to the pool in `finally` — it never closes the underlying connection.
 - Raises `RuntimeError` if the pool wasn't initialized (`DATABASE_URL` unset at startup).
 

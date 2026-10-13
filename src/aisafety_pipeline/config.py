@@ -51,6 +51,8 @@ API_CORS_ORIGINS = os.getenv(
 
 API_DB_POOL_MIN = int(os.getenv("API_DB_POOL_MIN", "1"))
 API_DB_POOL_MAX = int(os.getenv("API_DB_POOL_MAX", "10"))
+# Seconds a request waits for a free pooled connection before getting a 503.
+API_DB_POOL_TIMEOUT = float(os.getenv("API_DB_POOL_TIMEOUT", "5"))
 
 # Per-client-IP rate limits (slowapi / `limits` syntax, e.g. "120/minute").
 # Counters live in process memory, which is accurate only while the API runs
