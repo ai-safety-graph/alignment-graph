@@ -2,14 +2,15 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from ..config import API_CORS_ORIGINS, ENABLE_SEMANTIC_SEARCH
-from .deps import close_pool, init_pool
+from .deps import PoolTimeout, close_pool, init_pool
 from .ratelimit import limiter
 from .routes import graph, meta, papers, search, tags
 
@@ -36,8 +37,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+def _pool_timeout_handler(request: Request, exc: PoolTimeout) -> JSONResponse:
+    # Every DB connection stayed busy for API_DB_POOL_TIMEOUT: a transient
+    # overload, so tell the client to retry rather than returning a 500.
+    return JSONResponse({"detail": "Server busy, please retry."}, status_code=503, headers={"Retry-After": "1"})
+
+
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(PoolTimeout, _pool_timeout_handler)
 # Added before CORS so CORS is the outermost middleware (Starlette wraps in
 # reverse order) and 429 responses still carry CORS headers -- otherwise the
 # browser reports a throttled request as an opaque CORS failure.
