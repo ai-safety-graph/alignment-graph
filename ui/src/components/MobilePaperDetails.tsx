@@ -1,7 +1,7 @@
 import { CircleX } from 'lucide-react'
 import { domainLabel } from '../lib/domain'
 import type { NodeCompact } from '../lib/types'
-import { useRef, useLayoutEffect } from 'react'
+import { useRef, useLayoutEffect, useEffect, useState } from 'react'
 import TagChips from './TagChips'
 import SharePlusIcon from './icons/SharePlusIcon'
 import ShareMinusIcon from './icons/ShareMinusIcon'
@@ -39,7 +39,29 @@ export default function MobilePaperDetails({
   const isPaperInSubgraph = subgraphPaperIds?.has(paper.aid) ?? false
   const subgraphLabel = subgraphName ?? 'Subgraph'
   const scrollerRef = useRef<HTMLDivElement | null>(null)
+  const barRef = useRef<HTMLDivElement | null>(null)
+  const titleRef = useRef<HTMLHeadingElement | null>(null)
+  const [titleHidden, setTitleHidden] = useState(false)
   const summaryText = paper.sm
+
+  // Show a one-line title in the sticky bar once the full heading scrolls under it.
+  useEffect(() => {
+    const root = scrollerRef.current
+    const bar = barRef.current
+    const title = titleRef.current
+    if (!root || !bar || !title) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        const rootTop = entry.rootBounds?.top ?? 0
+        setTitleHidden(
+          !entry.isIntersecting && entry.boundingClientRect.top < rootTop,
+        )
+      },
+      { root, rootMargin: `-${bar.offsetHeight}px 0px 0px 0px` },
+    )
+    observer.observe(title)
+    return () => observer.disconnect()
+  }, [])
 
   useLayoutEffect(() => {
     const el = scrollerRef.current
@@ -53,48 +75,62 @@ export default function MobilePaperDetails({
       className='relative w-full h-full bg-neutral-950 backdrop-blur-md border border-[#333333] rounded-2xl pb-3 px-3 overflow-auto text-[#e5e5e5] scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent'
     >
       <div>
-        <div className='py-3 sticky top-0 bg-neutral-950'>
-          <div className='flex items-center justify-end mb-1'>
+        <div ref={barRef} className='sticky top-0 z-10 bg-neutral-950'>
+          <div className='py-2 flex items-center gap-2'>
+            <div className='flex-1 min-w-0'>
+              {navHistory.length > 0 && (
+                <div className='flex items-center gap-1 text-xs text-zinc-500 flex-nowrap overflow-hidden'>
+                  {navHistory.slice(-3).map((entry, i) => {
+                    const absoluteIndex =
+                      navHistory.length - Math.min(3, navHistory.length) + i
+                    return (
+                      <span key={entry.aid} className='flex items-center gap-1'>
+                        <button
+                          onClick={() => onNavigateTo(entry.aid, absoluteIndex)}
+                          className='hover:text-zinc-200 underline underline-offset-2 truncate max-w-[140px] text-left'
+                          title={entry.title}
+                        >
+                          {entry.title.length > 35
+                            ? entry.title.slice(0, 35) + '…'
+                            : entry.title}
+                        </button>
+                        <span className='text-zinc-700'>›</span>
+                      </span>
+                    )
+                  })}
+                  <span
+                    className='text-zinc-400 truncate max-w-[140px]'
+                    title={paper.t}
+                  >
+                    {paper.t.length > 35 ? paper.t.slice(0, 35) + '…' : paper.t}
+                  </span>
+                </div>
+              )}
+            </div>
             <button
               onClick={onClose}
-              className='p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200'
+              className='shrink-0 p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200'
               aria-label='Close details'
             >
               <CircleX size={20} />
             </button>
           </div>
-          <div className='min-h-[1.25rem] pb-2'>
-            {navHistory.length > 0 && (
-              <div className='flex items-center gap-1 text-xs text-zinc-500 flex-wrap'>
-                {navHistory.slice(-3).map((entry, i) => {
-                  const absoluteIndex =
-                    navHistory.length - Math.min(3, navHistory.length) + i
-                  return (
-                    <span key={entry.aid} className='flex items-center gap-1'>
-                      <button
-                        onClick={() => onNavigateTo(entry.aid, absoluteIndex)}
-                        className='hover:text-zinc-200 underline underline-offset-2 truncate max-w-[140px] text-left'
-                        title={entry.title}
-                      >
-                        {entry.title.length > 35
-                          ? entry.title.slice(0, 35) + '…'
-                          : entry.title}
-                      </button>
-                      <span className='text-zinc-700'>›</span>
-                    </span>
-                  )
-                })}
-                <span
-                  className='text-zinc-400 truncate max-w-[140px]'
-                  title={paper.t}
-                >
-                  {paper.t.length > 35 ? paper.t.slice(0, 35) + '…' : paper.t}
-                </span>
-              </div>
-            )}
-          </div>
+          {/* Absolutely positioned so showing it doesn't shift the heading being observed. */}
+          {titleHidden && (
+            <div
+              className='absolute top-full inset-x-0 pb-2 bg-neutral-950 border-b border-neutral-800 truncate text-sm font-semibold text-[#e5e5e5]'
+              title={paper.t}
+            >
+              {paper.t}
+            </div>
+          )}
+        </div>
 
-          <h4 className='mt-1 mb-2 text-lg font-semibold leading-snug text-[#e5e5e5]'>
+        <div className='pt-1'>
+          <h4
+            ref={titleRef}
+            className='mb-2 text-lg font-semibold leading-snug text-[#e5e5e5]'
+          >
             {paper.t}
           </h4>
           <div className='flex items-center gap-2 mb-2 text-[13px] text-neutral-400'>
@@ -112,7 +148,9 @@ export default function MobilePaperDetails({
               >
                 {isPaperInSubgraph ? (
                   <>
-                    <span className='truncate'>Remove from {subgraphLabel}</span>
+                    <span className='truncate'>
+                      Remove from {subgraphLabel}
+                    </span>
                     <ShareMinusIcon
                       size={14}
                       className='shrink-0 text-red-800 group-hover:text-red-500 transition-colors'
