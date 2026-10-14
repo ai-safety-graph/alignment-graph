@@ -39,10 +39,9 @@ def test_search_filters_by_tag(client, make_paper, monkeypatch):
 
 
 def test_semantic_search_is_logged(client, make_paper, monkeypatch, test_dsn):
+    from aisafety_pipeline import config
     from aisafety_pipeline.api.routes import search as search_routes
     from aisafety_pipeline.db import connect
-
-    from aisafety_pipeline import config
 
     monkeypatch.setattr(config, "SEARCH_LOG_ENABLED", True)
     monkeypatch.setattr(search_routes, "ENABLE_SEMANTIC_SEARCH", True)
