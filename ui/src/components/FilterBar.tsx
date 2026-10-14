@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import * as Slider from '@radix-ui/react-slider'
+import { track } from '../lib/analytics'
 import { RotateCcw } from 'lucide-react'
 import { tagIcon } from '../lib/tags'
 import { domainLabel } from '../lib/domain'
@@ -145,7 +146,10 @@ export default function FilterBar({
             <DateSlider
               value={datePreset}
               presets={datePresets}
-              onCommit={onSetDatePreset}
+              onCommit={(preset) => {
+                track('filter_change', { kind: 'date', value: preset })
+                onSetDatePreset(preset)
+              }}
             />
           )}
 

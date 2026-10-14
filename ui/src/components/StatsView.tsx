@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import StatsPaperDetails from './StatsPaperDetails'
 import MobilePaperDetails from './MobilePaperDetails'
+import { track } from '../lib/analytics'
 import PaperList from './PaperList'
 import FilterBar from './FilterBar'
 import Dropdown from './Dropdown'
@@ -191,11 +192,20 @@ export default function StatsView() {
     }
   }, [selected])
 
-  const handleSelectRelated = (aid: string) =>
+  const view = isSmall ? 'mobile' : 'stats'
+
+  const handleSelectFromList = (aid: string) => {
+    track('paper_open', { view, source: debouncedQuery ? 'search' : 'list' })
+    selectFromList(aid)
+  }
+
+  const handleSelectRelated = (aid: string) => {
+    track('paper_open', { view, source: 'related' })
     selectRelated(
       selected ? { aid: selected.aid, title: selected.t } : null,
       aid,
     )
+  }
 
   const onHome = useLocation().pathname === '/'
   const backLink =
@@ -331,9 +341,11 @@ export default function StatsView() {
                 ? 'Semantic search on'
                 : 'Semantic search off'
             }
-            onClick={() =>
-              setSearchMode((m) => (m === 'semantic' ? 'keyword' : 'semantic'))
-            }
+            onClick={() => {
+              const next = searchMode === 'semantic' ? 'keyword' : 'semantic'
+              track('search_mode', { mode: next })
+              setSearchMode(next)
+            }}
             className={`shrink-0 px-2 py-1 rounded-md bg-neutral-950 border cursor-pointer transition-colors ${
               searchMode === 'semantic'
                 ? 'border-[#4ea8de] text-[#4ea8de]'
@@ -697,7 +709,7 @@ export default function StatsView() {
                 searchMode === 'semantic' ? (
                   <PaperList
                     items={semanticItems}
-                    onSelectId={selectFromList}
+                    onSelectId={handleSelectFromList}
                     enableHover
                     resetKey={`semantic|${debouncedQuery}`}
                     selectedId={selectedId ?? undefined}
@@ -718,7 +730,7 @@ export default function StatsView() {
                   >
                     <PaperList
                       items={items}
-                      onSelectId={selectFromList}
+                      onSelectId={handleSelectFromList}
                       enableHover
                       resetKey={resetKey}
                       hasMore={hasMore}
@@ -740,7 +752,7 @@ export default function StatsView() {
               ) : (
                 <PaperList
                   items={subgraphItems}
-                  onSelectId={selectFromList}
+                  onSelectId={handleSelectFromList}
                   enableHover
                   resetKey={`${selectedSubgraphId ?? ''}|${debouncedSubgraphQuery}|${[...subgraphActiveTags].sort()}|${[...subgraphActiveDomains].sort()}`}
                   selectedId={selectedId ?? undefined}

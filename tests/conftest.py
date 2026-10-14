@@ -84,6 +84,12 @@ def client(conn, test_dsn: str, monkeypatch: pytest.MonkeyPatch):
     # The limiter's in-memory counters are process-wide, so leaving it on
     # would make tests throttle each other. test_ratelimit.py re-enables it.
     monkeypatch.setattr(limiter, "enabled", False)
+    # Search logging commits on its own pooled connection, outside the
+    # rolled-back test connection. Off by default so tests don't leave rows
+    # behind; the search-log tests turn it back on and clean up.
+    from aisafety_pipeline import config
+
+    monkeypatch.setattr(config, "SEARCH_LOG_ENABLED", False)
     # The app's lifespan opens the real pool (API_DB_POOL_MAX connections)
     # from DATABASE_URL, which a developer's .env may point at production.
     # Requests use the overridden get_conn below, but the pool would still

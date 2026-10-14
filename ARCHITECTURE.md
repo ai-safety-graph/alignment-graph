@@ -77,6 +77,7 @@ Frontend application built with Vite/React. Owns:
 - Subset graph rendering for desktop (`POST /api/graph/subset`) with semantic search and ghost nodes
 - Server-side filtered, paginated paper browsing for the list view (`GET /api/papers`)
 - On-demand related papers per paper selection (`GET /api/papers/related`)
+- Cookieless product analytics via Umami Cloud (`ui/src/lib/analytics.ts`), loaded only in production builds when `VITE_UMAMI_WEBSITE_ID` is set
 
 (`MobileView` was removed; mobile now uses `StatsView`.) See `ui/ARCHITECTURE.md` for frontend details.
 
@@ -85,6 +86,7 @@ Frontend application built with Vite/React. Owns:
 Postgres-specific setup utilities:
 
 - `enable_rls.sql`: Supabase row-level-security setup.
+- `add_search_log.sql`: creates the `search_log` analytics table (see `api/ARCHITECTURE.md`).
 
 ### `data/`
 

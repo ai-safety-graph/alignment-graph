@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ...config import ENABLE_SEMANTIC_SEARCH
 from ..deps import get_conn
 from ..ratelimit import expensive_limit, limiter
+from ..search_log import log_search
 
 router = APIRouter(prefix="/api/search", tags=["search"])
 
@@ -29,7 +30,12 @@ class SearchRequest(BaseModel):
 
 @router.post("")
 @limiter.limit(expensive_limit)
-def semantic_search(request: Request, req: SearchRequest, conn=Depends(get_conn)):
+def semantic_search(
+    request: Request,
+    req: SearchRequest,
+    background_tasks: BackgroundTasks,
+    conn=Depends(get_conn),
+):
     if not ENABLE_SEMANTIC_SEARCH:
         raise HTTPException(
             status_code=503,
@@ -66,6 +72,9 @@ def semantic_search(request: Request, req: SearchRequest, conn=Depends(get_conn)
     params = [query_vec] + filter_params + [query_vec, req.limit]
 
     rows = conn.execute(sql, params).fetchall()
+    background_tasks.add_task(
+        log_search, req.query, "semantic", len(rows), bool(req.domain or req.tag)
+    )
 
     return {
         "query": req.query,
