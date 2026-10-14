@@ -51,6 +51,7 @@ import Dropdown from './Dropdown'
 import FilterBar from './FilterBar'
 import LoadingIndicator from './LoadingIndicator'
 import LatestBatchBadge from './LatestBatchBadge'
+import { track } from '../lib/analytics'
 import { useCapabilities } from '../hooks/useCapabilities'
 
 // Node fills: papers in the loaded subgraph vs. ghost nodes surfaced as
@@ -456,6 +457,7 @@ export default function ArxivGraph({ paperIds }: { paperIds?: string[] }) {
   }, [apiResults, aidToId, adj])
 
   const onSearchPick = (aid: string) => {
+    track('paper_open', { view: 'graph', source: 'search' })
     const graphId = aidToId.get(aid)
     if (graphId !== undefined) {
       setSelectedId(graphId)
@@ -711,6 +713,7 @@ export default function ArxivGraph({ paperIds }: { paperIds?: string[] }) {
   }
 
   const onNodeClick = (node: NodeObject<NodeCompact>) => {
+    track('paper_open', { view: 'graph', source: 'graph' })
     if (ghostIds.has(node.id)) {
       setSelectedId(node.id)
       setLockedId(node.id)
@@ -952,6 +955,7 @@ export default function ArxivGraph({ paperIds }: { paperIds?: string[] }) {
           onSelectPaper={(aid) => {
             const id = aidToId.get(aid)
             if (id == null) return
+            track('paper_open', { view: 'graph', source: 'related' })
             setSelectedId(id)
             setLockedId(id)
             focusNodeById(id)
@@ -1127,11 +1131,12 @@ export default function ArxivGraph({ paperIds }: { paperIds?: string[] }) {
                       ? 'Semantic search on'
                       : 'Semantic search off'
                   }
-                  onClick={() =>
-                    setSearchMode((m) =>
-                      m === 'semantic' ? 'keyword' : 'semantic',
-                    )
-                  }
+                  onClick={() => {
+                    const next =
+                      searchMode === 'semantic' ? 'keyword' : 'semantic'
+                    track('search_mode', { mode: next })
+                    setSearchMode(next)
+                  }}
                   className={`shrink-0 px-2 py-1 rounded-md bg-neutral-950 border cursor-pointer transition-colors ${
                     searchMode === 'semantic'
                       ? 'border-[#4ea8de] text-[#4ea8de]'

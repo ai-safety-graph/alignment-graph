@@ -131,6 +131,8 @@ export default function StatsPaperDetails({
           <div className='flex gap-2 mb-3'>
             <a
               href={paper.ln}
+              data-umami-event='arxiv_click'
+              data-umami-event-view='stats'
               target='_blank'
               rel='noreferrer'
               className='text-[13px] text-[#4ea8de] hover:text-[#60a5fa] hover:underline'

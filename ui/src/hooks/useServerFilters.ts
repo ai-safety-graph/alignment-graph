@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { track } from '../lib/analytics'
 import type { TagsLegend } from '../lib/types'
 
 export type DatePreset =
@@ -69,12 +70,14 @@ export function useServerFilters(tags: TagsLegend) {
     activeTags.size > 0 || activeDomains.size > 0 || datePreset !== 'all'
 
   function clearAllFilters() {
+    track('filter_change', { kind: 'clear' })
     setActiveTags(new Set())
     setActiveDomains(new Set())
     setDatePreset('all')
   }
 
   function toggleTag(tag: string) {
+    track('filter_change', { kind: 'tag', value: tag })
     setActiveTags((prev) => {
       const next = new Set(prev)
       if (next.has(tag)) next.delete(tag)
@@ -84,6 +87,7 @@ export function useServerFilters(tags: TagsLegend) {
   }
 
   function toggleDomain(dm: string) {
+    track('filter_change', { kind: 'domain', value: dm })
     setActiveDomains((prev) => {
       const next = new Set(prev)
       if (next.has(dm)) next.delete(dm)

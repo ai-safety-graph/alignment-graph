@@ -73,6 +73,10 @@ ENABLE_SEMANTIC_SEARCH = os.getenv("ENABLE_SEMANTIC_SEARCH", "false").strip().lo
     "yes",
 )
 
+# Anonymous search analytics (api/search_log.py). On by default; set to
+# false to stop writing search_log rows.
+SEARCH_LOG_ENABLED = os.getenv("SEARCH_LOG_ENABLED", "true").strip().lower() in ("1", "true", "yes")
+
 # LLM classification (post stage-2 combined relevance + taxonomy tagging,
 # see llm_classify.py). Model name is kept as a plain, easily-swappable
 # string -- not validated against a known-model list.

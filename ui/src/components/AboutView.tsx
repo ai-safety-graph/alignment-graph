@@ -254,7 +254,14 @@ export default function AboutView() {
 
           <Section title='Privacy'>
             <ul className='list-disc pl-5 flex flex-col gap-2'>
-              <li>No accounts, cookies, analytics or third-party trackers.</li>
+              <li>No accounts, cookies or advertising trackers.</li>
+              <li>
+                We use{' '}
+                <ExternalLink href='https://umami.is'>Umami</ExternalLink>, a
+                cookieless analytics tool, to count page views and a few
+                anonymous interactions (such as opening a paper or changing a
+                filter). It doesn't identify you or follow you across sites.
+              </li>
               <li>
                 Saved graphs are stored only in your browser's local storage and
                 are never sent to our server. Clearing this site's data deletes
@@ -264,7 +271,8 @@ export default function AboutView() {
                 Searches, filters and paper lookups are sent to our API to fetch
                 results. They are not tied to any identity, but our hosting
                 providers may keep standard request logs such as IP address and
-                URL.
+                URL. We keep anonymous search terms and result counts, without
+                IP addresses, to learn what people look for.
               </li>
               <li>
                 Paper titles, authors and abstracts come from public arXiv

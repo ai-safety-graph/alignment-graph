@@ -5,6 +5,9 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import './index.css'
 import App from './App.tsx'
 import { queryClient } from './lib/queryClient.ts'
+import { initAnalytics } from './lib/analytics.ts'
+
+initAnalytics()
 
 // A stale tab can hold references to chunk hashes from before a deploy.
 // When a lazy import 404s against the new deploy, reload once to fetch

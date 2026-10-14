@@ -16,6 +16,7 @@ src/aisafety_pipeline/api/
   main.py          # FastAPI app, CORS, lifespan
   deps.py          # get_conn() dependency (yields PgConnection per request)
   ratelimit.py     # slowapi Limiter + client_ip() key function
+  search_log.py    # log_search(): anonymous search analytics (search_log table)
   routes/
     graph.py       # POST /api/graph/subset, GET /api/graph/range
     papers.py      # GET /api/papers, GET /api/papers/related, GET /api/papers/{arxiv_id:path}
@@ -57,10 +58,24 @@ Every route except `/health` is rate-limited per client IP by `slowapi` (`rateli
 `deps.py` pools connections rather than opening one per request:
 - `init_pool()` / `close_pool()` run in `main.py`'s `lifespan`, creating/closing a `ThreadedConnectionPool` (size from `config.API_DB_POOL_MIN`/`API_DB_POOL_MAX`) once for the process lifetime. `API_DB_POOL_MIN` defaults to `API_DB_POOL_MAX`, so every connection is opened at startup and kept. psycopg2's pool closes any returned connection beyond `minconn` and opens new ones while holding its lock. With `MIN=1`, concurrent requests each opened a fresh TLS connection to Supabase, one at a time (in production: p50 5.2s at 5 concurrent requests vs 0.7s with `MIN=MAX`). Don't lower it. `register_vector` is registered once per physical connection (in the pool's `_connect` override), not per request.
 - The pool is wrapped in `_BoundedPool`, a semaphore sized to `API_DB_POOL_MAX`. psycopg2's `ThreadedConnectionPool` raises `PoolError` immediately when every connection is borrowed, which turned bursts of more than 10 concurrent requests into 500s. With the wrapper, borrowers wait up to `config.API_DB_POOL_TIMEOUT` seconds (default 5). If none frees up they get `PoolTimeout`, which `main.py` maps to a `503` with `Retry-After: 1`.
-- `get_conn()` borrows a connection from the pool, wraps it via `PgConnection.from_raw()`, yields it, then rolls back (in case a request left an open transaction) and returns it to the pool in `finally` — it never closes the underlying connection.
+- `borrow_conn()` (context manager) borrows a connection from the pool, wraps it via `PgConnection.from_raw()`, yields it, then rolls back (in case a request left an open transaction) and returns it to the pool in `finally` — it never closes the underlying connection.
 - Raises `RuntimeError` if the pool wasn't initialized (`DATABASE_URL` unset at startup).
 
-Route handlers declare `conn=Depends(get_conn)`.
+`get_conn()` is the FastAPI dependency wrapper around `borrow_conn()`. Route handlers declare `conn=Depends(get_conn)`.
+
+---
+
+## Search Analytics
+
+`search_log.py` records one `search_log` row per search: normalized query text (whitespace-collapsed, lowercased, max 200 chars), `mode` (`keyword`/`semantic`), result `total`, and `has_filters`. No IPs or user identifiers.
+
+- `GET /api/papers` logs when `q` is set **and `page == 1`** (later pages are infinite scroll of the same query). `POST /api/search` logs every call.
+- Routes schedule `log_search` as a `BackgroundTasks` task, so it runs after the response is sent, on its **own** pooled connection via `borrow_conn()`, and commits. It can't reuse the request's connection: `get_conn()` rolls that back on release, and in tests the shared connection must never be committed.
+- Failures (including `PoolTimeout`) are logged and swallowed. `SEARCH_LOG_ENABLED=false` turns it off.
+- Search-as-you-type logs prefixes ("alig", "align"). `scripts/search_report.sql` filters these when reporting.
+- Prod table: `migrations/add_search_log.sql`.
+
+Frontend product analytics (pageviews, custom events) use Umami Cloud; see `ui/src/lib/analytics.ts`.
 
 ---
 

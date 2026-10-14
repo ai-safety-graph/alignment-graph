@@ -1,15 +1,17 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 
 from ..deps import get_conn
 from ..ratelimit import expensive_limit, limiter
+from ..search_log import log_search
 
 router = APIRouter(prefix="/api/papers", tags=["papers"])
 
 
 @router.get("")
 def list_papers(
+    background_tasks: BackgroundTasks,
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
     tags: list[str] = Query(default=[]),
@@ -47,6 +49,11 @@ def list_papers(
         f"SELECT COUNT(*) FROM papers {where_sql}", params
     ).fetchone()
     total = total_row[0] if total_row else 0
+
+    # Log each search once: later pages are infinite-scroll of the same query.
+    if q and page == 1:
+        has_filters = bool(tags or domain or from_date or to_date)
+        background_tasks.add_task(log_search, q, "keyword", total, has_filters)
 
     rows = conn.execute(
         f"""

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+from contextlib import contextmanager
 
 from ..config import API_DB_POOL_MAX, API_DB_POOL_MIN, API_DB_POOL_TIMEOUT, DATABASE_URL
 from ..db import PgConnection
@@ -97,12 +98,14 @@ def close_pool() -> None:
         _pool = None
 
 
-def get_conn():
-    """FastAPI dependency: yields a PgConnection borrowed from the pool.
+@contextmanager
+def borrow_conn():
+    """Borrow a PgConnection from the pool for the duration of a `with` block.
 
     Returns the underlying connection to the pool (rather than closing it)
-    once the request finishes, rolling back first so a request that raised
-    mid-transaction doesn't leak an open transaction to the next borrower.
+    afterwards, rolling back first so a caller that raised mid-transaction
+    doesn't leak an open transaction to the next borrower. Callers that write
+    must commit themselves.
     """
     if _pool is None:
         raise RuntimeError("Connection pool not initialized — call init_pool() at startup.")
@@ -118,3 +121,9 @@ def get_conn():
                 pass
     finally:
         _pool.putconn(raw)
+
+
+def get_conn():
+    """FastAPI dependency: yields a PgConnection borrowed from the pool."""
+    with borrow_conn() as conn:
+        yield conn

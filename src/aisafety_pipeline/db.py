@@ -249,6 +249,19 @@ _PG_SCHEMA = [
         updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
     """,
+    # Anonymous search analytics written by the API (api/search_log.py):
+    # query text and result count only -- no IPs or user identifiers.
+    """
+    CREATE TABLE IF NOT EXISTS search_log (
+        id BIGSERIAL PRIMARY KEY,
+        ts TIMESTAMPTZ NOT NULL DEFAULT now(),
+        query TEXT NOT NULL,
+        mode TEXT NOT NULL,
+        total INTEGER NOT NULL,
+        has_filters BOOLEAN NOT NULL DEFAULT FALSE
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_search_log_ts ON search_log (ts)",
 ]
 
 _PG_VECTOR_INDEX = (

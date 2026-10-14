@@ -146,3 +146,61 @@ def test_list_papers_gates_on_llm_relevant_not_stage2(client, make_paper):
     aids = {i["aid"] for i in client.get("/api/papers?limit=200").json()["items"]}
     assert yes in aids
     assert no not in aids
+
+
+def _search_log_rows(test_dsn, query):
+    # log_search commits on its own pooled connection, so read (and clean up)
+    # through a separate connection rather than the rolled-back test one.
+    from aisafety_pipeline.db import connect
+
+    c = connect(test_dsn)
+    try:
+        rows = c.execute(
+            "SELECT mode, total, has_filters FROM search_log WHERE query = %s", [query]
+        ).fetchall()
+        c.execute("DELETE FROM search_log WHERE query = %s", [query])
+        c.commit()
+        return [tuple(r) for r in rows]
+    finally:
+        c.close()
+
+
+def test_list_papers_logs_keyword_search_once(client, make_paper, test_dsn, monkeypatch):
+    from aisafety_pipeline import config
+
+    monkeypatch.setattr(config, "SEARCH_LOG_ENABLED", True)
+    make_paper("2401.00200", title="Zzlogtest interpretability")
+    res = client.get("/api/papers", params={"q": "ZzLogTest", "limit": 1})
+    assert res.status_code == 200
+    client.get("/api/papers", params={"q": "zzlogtest", "page": 2, "limit": 1})
+    assert _search_log_rows(test_dsn, "zzlogtest") == [("keyword", 1, False)]
+
+
+def test_list_papers_without_query_logs_nothing(client, test_dsn, monkeypatch):
+    from aisafety_pipeline import config
+    from aisafety_pipeline.db import connect
+
+    monkeypatch.setattr(config, "SEARCH_LOG_ENABLED", True)
+
+    c = connect(test_dsn)
+    try:
+        before = c.execute("SELECT count(*) FROM search_log").fetchone()[0]
+        client.get("/api/papers", params={"tags": ["rlhf"]})
+        after = c.execute("SELECT count(*) FROM search_log").fetchone()[0]
+    finally:
+        c.close()
+    assert after == before
+
+
+def test_search_log_failure_does_not_break_request(client, monkeypatch):
+    from aisafety_pipeline import config
+    from aisafety_pipeline.api import deps
+
+    monkeypatch.setattr(config, "SEARCH_LOG_ENABLED", True)
+
+    def _boom():
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(deps, "borrow_conn", _boom)
+    res = client.get("/api/papers", params={"q": "anything"})
+    assert res.status_code == 200
