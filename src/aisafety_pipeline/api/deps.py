@@ -28,7 +28,13 @@ class _VectorAwarePool:
                     from pgvector.psycopg2 import register_vector
                     register_vector(conn)
                 except Exception:
-                    conn.rollback()
+                    if conn.closed:
+                        raise  # dead connection: surface the real error
+                # register_vector's type lookup opens an implicit transaction.
+                # End it so an idle pooled connection isn't "idle in
+                # transaction" -- through Supabase's transaction-mode pooler
+                # that pins a server backend to us until first borrowed.
+                conn.rollback()
                 return conn
 
         self._pool = _Inner(
