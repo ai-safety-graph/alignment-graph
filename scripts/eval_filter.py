@@ -3,9 +3,7 @@
 Score stage-2 relevance filtering methods against the hand-labeled set
 built by build_relevance_eval_set.py, so the single global centroid and
 the multi-centroid (seeds_subtopics.tsv) approach can be compared on the
-same yardstick instead of by eyeballing `filter` output -- same idea as
-scripts/eval_tagging.py, applied to the stage-2 keep/reject decision
-instead of tag selection.
+same yardstick instead of by eyeballing `filter` output.
 
 The two methods use tau on different scales (single: raw cosine; multi:
 per-group z-score, see filters._col_zscore), so this sweeps each

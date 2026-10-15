@@ -17,10 +17,6 @@ interface FilterBarProps {
   onToggleTag: (tag: string) => void
   onToggleDomain: (domain: string) => void
   onClearAll: () => void
-  // Year chips (MobileView / legacy)
-  availableYears?: number[]
-  activeYear?: number | null
-  onToggleYear?: (year: number) => void
   // Date preset chips (StatsView)
   datePreset?: DatePreset
   onSetDatePreset?: (preset: DatePreset) => void
@@ -111,9 +107,6 @@ export default function FilterBar({
   onToggleTag,
   onToggleDomain,
   onClearAll,
-  availableYears,
-  activeYear,
-  onToggleYear,
   datePreset,
   onSetDatePreset,
   datePresets = DATE_PRESETS,
@@ -151,30 +144,6 @@ export default function FilterBar({
                 onSetDatePreset(preset)
               }}
             />
-          )}
-
-        {!datePreset &&
-          availableYears &&
-          availableYears.length > 0 &&
-          onToggleYear && (
-            <div className='flex flex-col gap-1.5'>
-              <span className='shrink-0 text-xs text-neutral-500'>Year</span>
-              <div className='flex flex-wrap gap-2'>
-                {availableYears.map((year) => (
-                  <button
-                    key={year}
-                    onClick={() => onToggleYear(year)}
-                    className={`px-3 py-1 rounded-md border text-xs whitespace-nowrap ${
-                      activeYear === year
-                        ? 'bg-neutral-600 border-neutral-500 text-white'
-                        : 'bg-neutral-950 border-neutral-700 hover:border-neutral-500'
-                    }`}
-                  >
-                    {year}
-                  </button>
-                ))}
-              </div>
-            </div>
           )}
 
         {(isLoading || availableDomains.length > 0) && (

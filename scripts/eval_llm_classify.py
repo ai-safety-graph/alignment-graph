@@ -5,8 +5,7 @@ hand-labeled set built by build_llm_eval_set.py, WITHOUT writing to the
 production `papers` table -- reads paper text read-only, calls
 llm_classify.classify_paper directly for each labeled paper, and reports
 relevance precision/recall/F1 plus tag-level micro precision/recall/F1
-(only over taxonomy phrases the human actually reviewed for a paper, same
-convention as eval_tagging.py). Also prints running token/cost totals,
+(only over taxonomy phrases the human actually reviewed for a paper). Also prints running token/cost totals,
 since this script itself spends LLM API budget.
 
 Usage:
