@@ -3,10 +3,10 @@
 Interactively build a hand-labeled ground-truth set for the combined
 LLM relevance + taxonomy classification stage (llm_classify.py), by
 sampling stage-2-kept, topic-embedded papers and asking a human to judge
-both relevance and which taxonomy phrases apply -- merges the two label
-types build_relevance_eval_set.py and build_tag_eval_set.py collect
-separately, since llm_classify.py produces both from one call and needs
-both to be scored (see eval_llm_classify.py).
+both relevance and which taxonomy phrases apply -- collects both label
+types together (build_relevance_eval_set.py only covers relevance),
+since llm_classify.py produces both from one call and needs both to be
+scored (see eval_llm_classify.py).
 
 Progress is written after every paper, so runs are resumable and `--n`
 just controls how many *additional* papers to review this session.

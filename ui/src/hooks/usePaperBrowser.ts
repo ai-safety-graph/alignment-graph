@@ -11,7 +11,7 @@ type Params = {
   fromDate: string | undefined
   activeTags: Set<string>
   activeDomains: Set<string>
-  /** When false, the browser pauses fetching (e.g. MobileView semantic mode). */
+  /** When false, the browser pauses fetching (e.g. while semantic search is active). */
   enabled?: boolean
 }
 

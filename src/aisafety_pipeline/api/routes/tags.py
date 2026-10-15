@@ -9,7 +9,7 @@ router = APIRouter(prefix="/api/tags", tags=["tags"])
 
 # `size` counts every paper that holds the tag at any rank (drives filter-chip
 # counts and "how many papers match if I filter by this tag"). `primary_size`
-# counts only papers where this tag is their top-scored (rank-0) tag -- used
+# counts only papers where this tag is their primary (first-listed) tag -- used
 # by the pie chart so percentages sum to 100% instead of being inflated by
 # multi-tag overlap. The LLM lists tags in its own order; the first is
 # treated as primary. Only LLM-relevant papers are counted. `description` is

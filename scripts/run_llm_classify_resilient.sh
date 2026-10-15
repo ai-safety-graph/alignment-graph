@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Retry wrapper for `aisafety-pipeline llm-classify-run`. The command itself
 # is safely resumable (submit_batch/collect_batch track everything needed
-# in the DB and data/llm_batches.json), but this session's Mac has been
+# in the DB, under the `llm_batches` key in `pipeline_state`), but this session's Mac has been
 # OOM-killing it repeatedly due to unrelated memory pressure from other
 # apps -- this wrapper restarts it automatically on any non-zero exit
 # instead of requiring a human/agent to notice and re-run it by hand.
