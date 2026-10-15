@@ -89,8 +89,6 @@ Frontend product analytics (pageviews, custom events) use Umami Cloud; see `ui/s
 
 All endpoints gate on the LLM classification stage (`llm_classify.py`): a paper is served only if `papers.llm_relevant = TRUE`, and its tags come from `papers.llm_tags` (taxonomy names, LLM order, no scores). `ai_stage2_keep` is not read by the API; the legacy zero-shot tagger and its `paper_tags` table have been removed from the codebase and dropped from the database. Unclassified papers (`llm_relevant IS NULL`) are hidden until classified.
 
-Exceptions (lookups by explicit id, not listings): `GET /api/papers/{arxiv_id:path}` and the source-paper lookup in `GET /api/papers/related` do not check `llm_relevant` — the related *results* are still gated.
-
 Response items carry no numeric `id` except graph nodes (`/subset`, `/range`); the UI assigns `id` by index for everything else.
 
 ### `POST /api/graph/subset`
