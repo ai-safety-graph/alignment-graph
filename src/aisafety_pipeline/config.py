@@ -36,7 +36,7 @@ TOPIC_EMB_MODEL = "BAAI/bge-base-en-v1.5"
 STAGE2_CENTROID_TAU = 0.90
 
 # OAI-PMH
-OAI_BASE = "https://export.arxiv.org/oai2"
+OAI_BASE = "https://oaipmh.arxiv.org/oai"
 OAI_SETS = ["cs", "stat", "econ", "eess:eess:SY"]
 OAI_PREFIX = "arXiv"
 OAI_THROTTLE_SEC = 3
