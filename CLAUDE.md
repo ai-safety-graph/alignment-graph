@@ -10,7 +10,7 @@ When implementing any feature:
 
 - Assume `VITE_API_URL` is always set — all data comes from the FastAPI backend
 - Do **not** add static JSON fallback paths or load from `ui/public/graph.json` / `summaries.json`
-- Do **not** wrap new features in `hasApi()` guards — new features require the API
+- Do **not** reintroduce API-presence guards (the old `hasApi()` helper has been removed) — new features require the API
 - Database is PostgreSQL + pgvector.
 - Use functions in `ui/src/lib/api.ts` for all UI data fetching
 
@@ -18,15 +18,16 @@ When implementing any feature:
 
 See the ARCHITECTURE.md files for full detail. Short version:
 
-- **Pipeline** (`src/aisafety_pipeline/`) — harvests arXiv, stores in PostgreSQL, computes embeddings, tags papers
+- **Pipeline** (`src/aisafety_pipeline/`) — harvests arXiv into PostgreSQL, filters (regex stage 1 + semantic stage 2), embeds (SPECTER2 + BGE topic), LLM-classifies/tags, and computes the graph layout
 - **API** (`src/aisafety_pipeline/api/`) — FastAPI serving live data from PostgreSQL
 - **UI** (`ui/`) — React/Vite frontend, fetches all data from the API
 
 ## Key Invariants
 
 - All tag data served to the API/UI comes from the LLM classification stage (`src/aisafety_pipeline/llm_classify.py`, columns `llm_relevant`/`llm_tags` on `papers`). The older zero-shot `tagging.py` module and its `paper_tags` table have been removed from the codebase, and the table has been dropped from the database (`migrations/drop_paper_tags.sql`). See `src/aisafety_pipeline/api/ARCHITECTURE.md` for the authoritative statement.
-- Paper identity key is the canonical arXiv abs URL (`aid`), not the numeric `id` (which is session-assigned by index — by the graph response from `/api/graph/subset` or `/api/graph/range` for the graph, or inline in `fetchPapers` results for MobileView/StatsView)
-- Compact node fields are: `id`, `aid`, `t`, `au`, `pd`, `dm`, `ln`, `tags` — do not rename without coordinating across API routes and the UI
+- Paper identity key is the canonical arXiv abs URL (`aid`), not the numeric `id`. `id` is session-assigned by index: server-side only in graph responses (`/api/graph/subset`, `/api/graph/range`, via `_graph_from_rows` in `graph.py`); for `/api/papers`, `/api/search` and `/api/papers/related` results the UI assigns it client-side (`usePaperBrowser`, `GraphView` search, `useRelatedPapers`)
+- Compact node fields are: `id`, `aid`, `t`, `au`, `pd`, `dm`, `ln`, `tags` — do not rename without coordinating across API routes and the UI. Graph nodes additionally carry `x`/`y` (canvas) and `rx`/`ry` (raw layout coords); the single-paper endpoint adds `sm` (summary), search adds `sim`, and related adds `sim`/`rx`/`ry`
+- Two embedding columns with different jobs: `papers.embedding` (SPECTER2) powers related papers and stage-2 filtering; `papers.embedding_topic` (BGE) powers semantic search and the graph layout
 - `GET /api/papers/related` must stay registered before `GET /api/papers/{arxiv_id:path}` in `papers.py`
 
 ## Safe Edit Zones
@@ -38,8 +39,8 @@ See the ARCHITECTURE.md files for full detail. Short version:
 - Pipeline internal helpers and logging
 
 **Be careful around:**
-- SQL schema changes (either backend)
+- SQL schema changes (`init_db()` in `db.py` is the schema source of truth; one-off migrations live in `migrations/`)
 - Compact graph field names
 - pgvector operator syntax (`<=>`)
-- CORS origins in `main.py`
+- CORS origins (defined in `config.py` / `CORS_ORIGINS` env, applied in `main.py`)
 - Route registration order in `papers.py`
