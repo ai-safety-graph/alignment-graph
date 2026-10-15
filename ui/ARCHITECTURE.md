@@ -6,10 +6,10 @@ React/Vite frontend that renders AI safety paper data.
 
 Two renderers share one compact data model:
 
-- **`GraphView`** (desktop) → interactive force-graph canvas with semantic search
+- **`GraphView`** (desktop) → interactive force-graph canvas with keyword/semantic search and ghost nodes
 - **`StatsView`** (mobile + `/stats`) → server-filtered, paginated paper list/browser
 
-All data comes from the **FastAPI backend** via `lib/api.ts`. This is **API mode** (see top-level `CLAUDE.md`): `VITE_API_URL` is assumed to be set. The only remaining static-file path is the legacy `summaries.json` fallback in `lib/summaries.ts`; new features do not add static paths.
+All data comes from the **FastAPI backend** via `lib/api.ts`. This is **API mode** (see top-level `CLAUDE.md`): `VITE_API_URL` is assumed to be set. There are no static-file data paths; new features must not add any.
 
 ---
 
@@ -17,41 +17,44 @@ All data comes from the **FastAPI backend** via `lib/api.ts`. This is **API mode
 
 All data comes from the FastAPI backend via `lib/api.ts`:
 
-- `fetchTags()` → `GET /api/tags` — tag labels, sizes and taxonomy descriptions
-- `fetchLatestBatch()` → `GET /api/batch/latest` — latest pipeline batch for the header badge
-- `fetchCoverage()` → `GET /api/batch/coverage` — collection size and date span for the About page
-- `fetchPapers(params)` → `GET /api/papers` — paginated, server-side filtered listing (used by `StatsView` via `usePaperBrowser`)
-- `fetchSubgraph(ids)` → `POST /api/graph/subset` — graph data for a specific set of paper IDs (desktop `GraphView`)
-- `fetchGraphRange({from, to})` → `GET /api/graph/range` — graph data for every relevant paper in a date range (desktop `GraphView`'s default recent-papers graph)
-- `fetchRelated(arxivId)` → `GET /api/papers/related` — on-demand nearest-neighbor lookup for paper detail panels and graph ghost nodes
-- `fetchPaper(url)` → `GET /api/papers/{id}` — single paper detail including summary
-- `searchPapers(query, opts)` → `POST /api/search` — semantic search (used by `GraphView`)
+- `fetchTags()` → `GET /api/tags`: tag labels, sizes and taxonomy descriptions
+- `fetchLatestBatch()` → `GET /api/batch/latest`: latest pipeline batch for the header badge
+- `fetchCoverage()` → `GET /api/batch/coverage`: collection size and date span for the About page
+- `fetchHealth()` → `GET /health`: backend capabilities (whether semantic search is enabled), via `useCapabilities`
+- `fetchPapers(params)` → `GET /api/papers`: paginated, server-side filtered listing (used by `StatsView` via `usePaperBrowser`, and by `GraphView`'s keyword search)
+- `fetchSubgraph(ids)` → `POST /api/graph/subset`: graph data for a specific set of paper IDs (`GraphView` saved graphs and search ghosts, `StatsView` saved-graph view via `useSubgraphManager`)
+- `fetchGraphRange({from, to})` → `GET /api/graph/range`: graph data for every relevant paper in a date range (desktop `GraphView`'s default recent-papers graph)
+- `fetchRelated(arxivId)` → `GET /api/papers/related`: on-demand nearest-neighbor lookup for paper detail panels and graph ghost nodes
+- `fetchPaper(url)` → `GET /api/papers/{id}`: single paper detail including summary
+- `searchPapers(query, opts)` → `POST /api/search`: semantic search (used by `GraphView` and `StatsView` in semantic mode)
 
-There is **no** full-graph load — the desktop graph works with either an ID subset (`fetchSubgraph`) or a date range (`fetchGraphRange`), and the list views paginate (`fetchPapers`).
-
-### Legacy static fallback (`VITE_API_URL` unset)
-
-Only `lib/summaries.ts` retains a fallback: `getSummaryByUrl()` fetches `/summaries.json` and caches it in module scope when `hasApi()` is false. Everything else requires the API. `hasApi()` from `api.ts` returns `Boolean(BASE_URL)`.
+There is **no** full-graph load. The desktop graph works with either an ID subset (`fetchSubgraph`) or a date range (`fetchGraphRange`), and the list views paginate (`fetchPapers`).
 
 ### Environment configuration
 
-- `ui/.env.development`: `VITE_API_URL=http://localhost:8000`
-- `ui/.env.production`: set to deployed API URL (Render/Railway)
+- `VITE_API_URL`: API base URL. `ui/.env.development` sets `http://localhost:8000`. `ui/.env.production` leaves it commented out, so production builds get it from Netlify's environment variables. If it is unset, `api.ts` falls back to same-origin relative paths, which only works behind a proxy (`netlify.toml` doesn't define one).
+- `VITE_UMAMI_WEBSITE_ID`: Umami Cloud website id (set in `ui/.env.production`; not a secret). Remove it to disable analytics.
 
 ---
 
 ## Top-Level Flow
 
 ```text
+main.tsx
+  initAnalytics(); QueryClientProvider(queryClient) > BrowserRouter > App
 App.tsx (Routes)
   / route
     -> GraphView   (desktop, > 768px)
     -> StatsView   (mobile,  <= 768px)
   /stats route
     -> StatsView   (all screen sizes)
+  /about route
+    -> AboutView   (coverage, latest batch, tag glossary, privacy note)
 ```
 
-Both views are `lazy`-loaded. `useMediaQuery('(max-width: 768px)')` decides which renderer serves `/`. This is a **view router**, not shared responsive styling. (`MobileView` was removed — mobile users now get `StatsView`, which adapts its layout to small screens and uses `MobilePaperDetails` as a modal.)
+All three views are `lazy`-loaded. `useMediaQuery('(max-width: 768px)')` decides which renderer serves `/`, and `App` renders a blank screen until the query resolves. This is a **view router**, not shared responsive styling. (`MobileView` was removed. Mobile users now get `StatsView`, which adapts its layout to small screens and uses `MobilePaperDetails` as a modal.)
+
+`main.tsx` also listens for `vite:preloadError` (a stale tab requesting chunk hashes from a previous deploy) and reloads once, rate-limited via `sessionStorage`.
 
 ---
 
@@ -60,25 +63,29 @@ Both views are `lazy`-loaded. `useMediaQuery('(max-width: 768px)')` decides whic
 Uses `react-force-graph-2d`. (Exported as `ArxivGraph`; the file was renamed from `Graph.tsx`.)
 
 Responsibilities:
-- Fetch the graph: `fetchSubgraph(ids)` for explicit `paperIds` or the active saved graph; otherwise (no `paperIds`, no saved graphs) the last month of papers via a single `fetchGraphRange` call (`isDemo` flag, shown as "Recent papers")
+- Fetch the graph: `fetchSubgraph(ids)` for explicit `paperIds` or the active saved graph (query key `['subgraph', ids]`). Otherwise (no `paperIds`, no saved graphs) it loads the last month of papers with a single `fetchGraphRange` call (`['recentGraph']`, `isDemo` flag, shown as "Recent papers")
+- Saved-graph dropdown (switch between saved graphs and "Recent papers"), plus add/remove of the selected paper to/from the active saved graph (`lib/storage.ts`). Shows empty states for an empty saved graph and for "no nodes match filters"
 - Build adjacency from subset links for neighbor highlighting
-- Canvas rendering with hover/select/lock state
+- Canvas rendering with hover/select/lock state. Overlapping nodes are spread apart with `separatePoints()` (`lib/graph.ts`)
 - Neighborhood-only edge visibility
-- Semantic search via `searchPapers` (debounced `POST /api/search`, 350ms)
+- Search, debounced 350ms, in two modes:
+  - **keyword** (default): `fetchPapers({ q, limit: 50 })`
+  - **semantic**: `searchPapers`. The toggle is shown only when `useCapabilities().semanticSearch` is true (`GET /health`)
 - On-demand related papers per selection via `fetchRelated`
-- Client-side tag / domain / date-preset filters (`FilterBar` + `useServerFilters`, predicate `nodeMatchesFilters` in `lib/graph.ts`); excluded subgraph nodes and their links are hidden, ghosts are never filtered
-- Side-panel paper details (`GraphPaperDetails`)
+- Client-side tag / domain / date-preset filters (`FilterBar` + `useServerFilters`, predicate `nodeMatchesFilters` in `lib/graph.ts`). Here `useServerFilters` only holds state and nothing is re-fetched. Excluded subgraph nodes and their links are hidden; ghosts are never filtered
+- Keyboard shortcuts via `useGraphShortcuts` (Ctrl/Cmd+K or `/` focuses search; Esc or Ctrl/Cmd+Backspace clears it). Force parameters via `useForceConfig`
+- Side-panel paper details (`GraphPaperDetails`). Search results list in `SearchResultsOverlay`. Header has the `LatestBatchBadge` and an About link
 
 ### Ghost nodes
 
 Beyond the loaded subset, the graph renders two kinds of transient **ghost** nodes:
 
-- **Search ghosts** — `searchPapers` results not already in the subset
-- **Related ghosts** — the selected paper's `fetchRelated` results not already on the canvas
+- **Search ghosts**: search results not already in the subset
+- **Related ghosts**: the selected paper's `fetchRelated` results not already on the canvas
 
-Both are positioned by `ghostCoord()` in `GraphView.tsx`, which re-applies the **main graph's** normalisation (`meta.coords.bounds` + `meta.coords.canvas`) to each paper's raw `rx`/`ry`. This places ghosts in the same coordinate space as the loaded nodes (e.g. related papers cluster near their source) rather than each fetch using its own min/max normalisation. Papers without raw coords, or when the main graph has no `bounds`, are skipped (related ghosts) or fall back to the fetched `x`/`y` (search ghosts). Search ghosts are fetched by re-querying `fetchSubgraph` with the result `aid`s not already on the canvas.
+Both are positioned by `ghostCoord()` in `GraphView.tsx`, which re-applies the **main graph's** normalisation (`meta.coords.bounds` + `meta.coords.canvas`) to each paper's raw `rx`/`ry`. This puts ghosts in the same coordinate space as the loaded nodes (e.g. related papers cluster near their source), instead of each fetch using its own min/max normalisation. If a paper has no raw coords, or the main graph has no `bounds`, related ghosts are skipped and search ghosts fall back to the fetched `x`/`y`. Ghost positions then go through `separatePoints()` against the existing nodes when coords are included. Search ghosts are fetched by re-querying `fetchSubgraph` with the result `aid`s not already on the canvas.
 
-Related ghosts use **replace-each-time** semantics: selecting a new paper swaps the related-ghost set (retaining the selected node if it is itself a related ghost); clearing the selection removes them. Ghost ids are assigned past the max existing id, and the lookup maps (`aidToId`, `byId`, `simById`) merge subset + search + related ghosts so ghosts are selectable and reachable from the side-panel "Aligned Papers" links.
+Related ghosts use **replace-each-time** semantics: selecting a new paper swaps the related-ghost set (keeping the selected node if it is itself a related ghost), and clearing the selection removes them. Ghost ids are assigned past the max existing id. The lookup maps (`aidToId`, `byId`, `simById`) merge subset + search + related ghosts, so ghosts are selectable and reachable from the side-panel "Aligned Papers" links.
 
 Optimized for **local neighborhood exploration**, not full persistent edge display.
 
@@ -86,39 +93,53 @@ Optimized for **local neighborhood exploration**, not full persistent edge displ
 
 ## List Renderer (`StatsView.tsx`)
 
-Server-filtered paper browser. Serves both the `/stats` route (all sizes) and the `/` route on mobile (≤768px). Layout adapts: split-pane (list left, `StatsPaperDetails` right) on desktop; single-column list with a `MobilePaperDetails` modal on small screens.
+Server-filtered paper browser. Serves both the `/stats` route (all sizes) and the `/` route on mobile (≤768px). The layout adapts: split-pane on desktop (list left, `StatsPaperDetails` right), and a single-column list with a `MobilePaperDetails` modal on small screens.
 
 Responsibilities:
-- Paginated, server-side filtered loading via the shared `usePaperBrowser` hook (keyword `q` / `from` date / `tags` / `domains`; infinite scroll via its `loadMore`)
-- Tags legend + available domains via the shared `useTagCatalog` hook (one mount fetch of `fetchTags`; domains are a hardcoded fixed set — see `useTagCatalog.ts`)
+- Paginated, server-side filtered loading via the shared `usePaperBrowser` hook: keyword `q` / `from` date / `tags` / `domains`, infinite scroll via its `loadMore`, `useInfiniteQuery` keyed `['papers', ...]`
+- Keyword / semantic search toggle. Semantic mode (offered only when `useCapabilities().semanticSearch`) calls `searchPapers(q, { limit: 50 })` and pauses `usePaperBrowser` (`enabled: false`)
+- Saved graphs via `useSubgraphManager`: create, select and delete saved graphs, add/remove papers, and switch between browsing and a saved graph's papers (loaded with `fetchSubgraph`)
+- Tags legend + available domains via the shared `useTagCatalog` hook (one fetch of `fetchTags`; domains are a hardcoded fixed set, see `useTagCatalog.ts`)
 - Query debounce via `useDebouncedValue` (300ms)
-- Filter state managed by the `useServerFilters` hook — changing any filter triggers a fresh fetch inside `usePaperBrowser`
-- Filter UI via `FilterBar`; results rendered by `PaperList`
+- Filter state managed by the `useServerFilters` hook. Changing any filter triggers a fresh fetch inside `usePaperBrowser`
+- Filter UI via `FilterBar`. Results are rendered by `PaperList`
 - Selected-paper detail via `usePaperDetail`; related papers via `useRelatedPapers`
 - Breadcrumb navigation through related-paper links via `useNavHistory`
 - Auto-selects the first result into the side pane on desktop only (skipped ≤768px so the modal doesn't pop open unprompted)
 
-All filtering in this view is **server-side**. There is no semantic search here — semantic search lives only in the desktop `GraphView`.
+Filtering is **server-side** when browsing. When viewing a saved graph, `useSubgraphManager` filters the already-loaded nodes client-side (query on title/authors, tags, domains).
+
+---
+
+## About Page (`AboutView.tsx`)
+
+Static copy plus live data: collection coverage (`fetchCoverage`, `['coverage']`), latest batch (`useLatestBatch`), and a tag glossary from `useTagCatalog` (each tag's taxonomy `description`). Also contains the privacy note about cookieless Umami analytics.
 
 ---
 
 ## Shared Detail Surface
 
-Three detail components share a common core props interface (`paper`, `onSelectPaper`), with per-renderer differences in how related papers are supplied:
+Three detail components share a common core props interface (`paper`, `onSelectPaper`). They differ in how related papers are supplied:
 
-- `GraphPaperDetails.tsx` — fixed side panel for the desktop graph view
-- `StatsPaperDetails.tsx` — right pane for the stats view (desktop)
-- `MobilePaperDetails.tsx` — modal used by `StatsView` on small screens
+- `GraphPaperDetails.tsx`: fixed side panel for the desktop graph view
+- `StatsPaperDetails.tsx`: right pane for the stats view (desktop)
+- `MobilePaperDetails.tsx`: modal used by `StatsView` on small screens
 
 `neighbors` is typed as `{ n: NodeCompact; w: number }[]`. In `StatsView` (both its desktop and mobile detail surfaces) it comes from `useRelatedPapers`.
 
-`GraphPaperDetails` diverges from the other two: it is **presentational**, receiving `related: RelatedPaper[]` and `relatedLoading: boolean` as props. `GraphView.tsx` owns the `fetchRelated` call (so it can also build related ghost nodes from the result) and passes the list down. Its `onSelectPaper(aid: string)` is resolved to a numeric node id via the `aidToId` map in `GraphView.tsx`; because that map includes related ghosts, clicking a related paper navigates to its on-canvas ghost.
+`GraphPaperDetails` differs from the other two in that it is **presentational**: it receives `related: RelatedPaper[]` and `relatedLoading: boolean` as props. `GraphView.tsx` owns the `fetchRelated` call (so it can also build related ghost nodes from the result) and passes the list down. Its `onSelectPaper(aid: string)` is resolved to a numeric node id via the `aidToId` map in `GraphView.tsx`. Because that map includes related ghosts, clicking a related paper navigates to its on-canvas ghost.
 
 `onSelectPaper` takes `aid: string` (the paper's canonical arXiv URL) in all three detail components.
 
-Lazy summary hydration via `lib/summaries.ts` → `usePaperSummary` hook.
-In API mode, `getSummaryByUrl()` calls `fetchPaper()` and adapts the result to the `Summary` shape.
-In static mode, it fetches `/summaries.json` and caches in module scope.
+Summaries: graph nodes carry no `sm`, so `GraphPaperDetails` loads it lazily via the `usePaperSummary` hook → `lib/summaries.ts` `getSummaryByUrl()` → `fetchPaper()` (adapted to the `Summary` shape). `StatsPaperDetails`/`MobilePaperDetails` read `sm` from the `PaperDetail` that `usePaperDetail` fetches.
+
+---
+
+## Client State and Caching
+
+- **React Query** (`lib/queryClient.ts`): a single `QueryClient` with `staleTime: Infinity`. Data only changes when the pipeline runs, so a page reload is the only refresh. Query keys: `['recentGraph']`, `['subgraph', ids]`, `['papers', q, from, tags, domains]`, `['paper', aid]`, `['related', aid]`, `['tag-catalog']`, `['health']`, `['latest-batch']`, `['coverage']`.
+- **Saved graphs** (`lib/storage.ts`): stored in `localStorage` with an id index under `ais_graphs` and each graph under `ais_graph_<id>`. Limits: 50 graphs, 500 papers per graph, 40-character names. Shared by `GraphView` and `useSubgraphManager`.
+- **Analytics** (`lib/analytics.ts`): `initAnalytics()` injects the Umami Cloud script only in production builds with `VITE_UMAMI_WEBSITE_ID` set (`data-domains=alignmentgraph.com`). `track(event, data)` is a no-throw wrapper around `window.umami.track`. Events: `paper_open` (`view`, `source`), `search_mode` (`mode`), `filter_change` (`kind`, `value`). Server-side search logging is separate (see `api/ARCHITECTURE.md`).
 
 ---
 
@@ -129,32 +150,45 @@ In static mode, it fetches `/summaries.json` and caches in module scope.
 ### `NodeCompact`
 
 Required fields: `id`, `aid`, `t`, `au`, `pd`, `dm`, `ln`, `tags`
-Optional: `sm`, `x`, `y` (canvas-normalised coords), `rx`, `ry` (raw stored `graph_x`/`graph_y`, nullable — used to place ghost nodes)
+Optional: `sm`, `x`, `y` (canvas-normalised coords), `rx`, `ry` (raw stored `graph_x`/`graph_y`, nullable; used to place ghost nodes)
 
-### `SearchResult` / `RelatedPaper` (from `api.ts`)
+Only graph responses include `id` from the server. For `fetchPapers`, `searchPapers` and `fetchRelated` results, the UI assigns `id` by index.
 
-`SearchResult` extends `NodeCompact` with `sim: number | null` (cosine similarity, 0–1). `RelatedPaper` extends it further with `rx`/`ry` raw coords for ghost placement.
+### `api.ts` types
+
+- `SearchResult` = `NodeCompact & { sim: number | null }` (cosine similarity, 0–1)
+- `RelatedPaper` = `NodeCompact & { sim: number; rx; ry }` (raw coords for ghost placement)
+- `PaperDetail` = `NodeCompact & { sm: string }`
+- `PaginatedPapers`, `SearchResponse`, `HealthResponse`, `LatestBatch`, `Coverage`
 
 ### `GraphDataCompact`
 
-Top-level artifact shape: `{ meta, tags, nodes: NodeCompact[], links: LinkCompact[] }`
+Graph response shape: `{ meta, tags, nodes: NodeCompact[], links: LinkCompact[] }`
 
-`meta.coords` carries `included`, `method`, `canvas` (`w`/`h`/`pad`), and `bounds` (raw `x_min`/`x_max`/`y_min`/`y_max`, or `null`). `bounds` is what `ghostCoord()` uses to align ghost nodes to the loaded subset's coordinate space.
+`meta.coords` carries `included`, `method`, `canvas` (`w`/`h`/`pad`), and `bounds` (raw `x_min`/`x_max`/`y_min`/`y_max`, or `null`). `ghostCoord()` uses `bounds` to align ghost nodes to the loaded subset's coordinate space.
 
 ---
 
 ## `lib/api.ts`
 
-Central API client. Key exports:
+Central API client. All UI data fetching goes through it. Internals:
 
-- `BASE_URL` — from `import.meta.env.VITE_API_URL`, trailing slash stripped
-- `hasApi()` — `Boolean(BASE_URL)`
-- `fetchTags()` — hits `GET /api/tags`, returns `TagsLegend`
-- `fetchSubgraph(ids)` — hits `POST /api/graph/subset`, returns `GraphDataCompact`
-- `fetchRelated(arxivId, limit?)` — hits `GET /api/papers/related`, returns `RelatedPaper[]` (NodeCompact + `sim` + raw coords `rx`/`ry`)
-- `fetchPaper(arxivUrl)` — hits `/api/papers/{id}`, returns `PaperDetail | null` (module-level `paperCache` memoises by id)
-- `searchPapers(query, opts)` — hits `POST /api/search`, returns `SearchResponse` (`sim` may be `null`)
-- `fetchPapers(params)` — hits `GET /api/papers` with optional `q`, `from`, `to`, `tags: string[]`, `domains: string[]`, `page`, `limit`; returns `PaginatedPapers`; used by `StatsView` (via `usePaperBrowser`) for server-side filtered pagination
+- `BASE_URL` (not exported): `import.meta.env.VITE_API_URL` with the trailing slash stripped. When it's empty, paths are relative
+- `apiFetch()`: throws a friendly error on 429 and `API <status>` on other non-OK responses
+- `withTags()`: normalises a missing `tags` field to `[]`
+
+Exports:
+
+- `fetchTags()`: `GET /api/tags`, returns `TagsLegend`
+- `fetchSubgraph(ids)`: `POST /api/graph/subset`, returns `GraphDataCompact`
+- `fetchGraphRange({ from, to? })`: `GET /api/graph/range`, returns `GraphDataCompact`
+- `fetchRelated(arxivId, limit?)`: `GET /api/papers/related`, returns `RelatedPaper[]`
+- `fetchPaper(arxivUrl)`: `GET /api/papers/{id}` (the id is taken from the URL's `/abs/` pathname, which drops any hash/query), returns `PaperDetail | null`. No module-level cache; caching comes from React Query in `usePaperDetail`
+- `searchPapers(query, opts)`: `POST /api/search`, returns `SearchResponse` (`sim` may be `null`)
+- `fetchPapers(params)`: `GET /api/papers` with optional `q`, `from`, `to`, `tags: string[]`, `domains: string[]` (sent as repeated `domain` params), `page`, `limit`; returns `PaginatedPapers`
+- `fetchHealth()`, `fetchLatestBatch()`, `fetchCoverage()`
+
+Other `lib/` modules: `graph.ts` (`buildAdjacency`, `nodeMatchesFilters`, `separatePoints`, `clamp`, `lc`), `tags.ts` (`tagIcon()`, lucide icons keyed by taxonomy names, which must match `taxonomy.py`), `domain.ts` (`domainLabel()`), `summaries.ts`, `storage.ts`, `analytics.ts`, `queryClient.ts`.
 
 ---
 
@@ -162,29 +196,21 @@ Central API client. Key exports:
 
 ### Compact schema is the contract
 
-Do not rename compact fields without updating API route responses (`api/routes/graph.py`, `api/routes/papers.py`).
+Do not rename compact fields without updating the API route responses (`api/routes/graph.py`, `api/routes/papers.py`, `api/routes/search.py`).
 
 ### `ghostCoord()` must mirror the backend subset normalisation
 
-`ghostCoord()` in `GraphView.tsx` replicates the canvas-mapping formula in `graph.py`'s `_build_subgraph` (`PAD + (raw - min) / range * (CANVAS - 2*PAD)`). If the backend changes how it normalises `graph_x/y`, or the meaning of `meta.coords.bounds` / `canvas`, this helper must change in lockstep or ghost nodes will be misplaced relative to the loaded subset.
+`ghostCoord()` in `GraphView.tsx` reproduces the canvas-mapping formula in `graph.py`'s `_graph_from_rows` (`PAD + (raw - min) / range * (CANVAS - 2*PAD)`), which is shared by `/subset` and `/range`. One deliberate difference: for a degenerate range (≤ 1e-6) `ghostCoord` uses a scale of 1, while the backend floors the range at 1e-9. If the backend changes how it normalises `graph_x/y`, or what `meta.coords.bounds` / `canvas` mean, this helper must change at the same time or ghost nodes will be misplaced relative to the loaded subset.
 
 ### Numeric `id` is graph-local; `aid` is the durable key
 
-In `GraphView`, numeric `id` is assigned by `_build_subgraph` (subset index) and extended for ghost nodes past the max existing id. It is only meaningful within a single graph session; selection, adjacency and the `aidToId`/`byId`/`simById` maps run on it.
+In `GraphView`, the numeric `id` of loaded nodes is assigned server-side by `_graph_from_rows` (subset index). Ghost nodes get ids past the max existing id. The `id` only means something within a single graph session; selection, adjacency and the `aidToId`/`byId`/`simById` maps all use it.
 
-`StatsView` selects papers by `aid` (`selectedId: string | null`), not by numeric `id`. `useRelatedPapers` returns results keyed by `aid` directly from the API — no `aidToId` map is needed. Clicking a related paper always works regardless of whether it is in the currently-loaded page. `aid` (the canonical arXiv abs URL) is the persistent identifier across the whole app.
+`StatsView` selects papers by `aid` (`selectedId: string | null`), not by numeric `id`. `useRelatedPapers` returns `{ n, w }` entries whose `n.id` is just the result index; identity is carried by `n.aid`, so no `aidToId` map is needed. Clicking a related paper always works, whether or not it is in the currently-loaded page. `aid` (the canonical arXiv abs URL) is the persistent identifier across the whole app.
 
-### Search quality depends on `sm`
+### Keyword search is server-side
 
-Both renderers use `sm` (summary) when present. Graph exports without summaries reduce keyword search quality.
-
-### Summary lookup depends on canonical URLs
-
-`lib/summaries.ts` strips hashes/query strings and indexes by both JSON key and `ln` field.
-
-### `hasApi()` gates the legacy summary fallback only
-
-The app runs in API mode. `hasApi()` now only switches `lib/summaries.ts` between the live `fetchPaper()` path and the legacy `/summaries.json` fallback. The graph and list views require the API and will fail to load without it.
+Keyword search in both views is `GET /api/papers?q=`, an `ILIKE` match on title/authors. Summaries are not searched.
 
 ---
 
@@ -199,9 +225,10 @@ Usually safe:
 
 High-risk:
 - Compact graph field names (`t`, `au`, `pd`, etc.)
-- Summary URL canonicalization in `lib/summaries.ts`
-- `hasApi()` guard logic
-- `useServerFilters` signature — takes `tags: TagsLegend`; returns `activeTags: Set<string>`, `activeDomains: Set<string>`, `fromDate`, `datePreset`/`setDatePreset`, `tagEntries`, `hasActiveFilters`, and toggle/clear functions; changing any value triggers a server re-fetch in `usePaperBrowser` callers
+- The arXiv URL → id extraction in `fetchPaper` (`lib/api.ts`)
+- `ghostCoord()` / `separatePoints()` coordinate handling
+- `lib/storage.ts` key names (changing them orphans users' saved graphs)
+- `useServerFilters` signature: takes `tags: TagsLegend` and returns `activeTags: Set<string>`, `activeDomains: Set<string>`, `fromDate`, `datePreset`/`setDatePreset`, `tagEntries`, `hasActiveFilters`, and toggle/clear functions. In `usePaperBrowser` callers (StatsView), changing any value triggers a server re-fetch; GraphView uses it for client-side filtering only
 - `GraphDataCompact` typing changes
 
 ---
@@ -210,9 +237,9 @@ High-risk:
 
 Four layers:
 
-1. **API loading** (`lib/api.ts`, `lib/summaries.ts`)
-2. **Shared data derivation** (`buildAdjacency`, `useServerFilters`, `usePaperSummary`, `useRelatedPapers`, `useTagCatalog`, `useDebouncedValue`, `usePaperBrowser`, `usePaperDetail`, `useNavHistory`)
-3. **View routing** (`App.tsx` media query split)
-4. **Renderer-specific UX** (`GraphView.tsx`, `StatsView.tsx`)
+1. **API loading** (`lib/api.ts`, `lib/summaries.ts`, `lib/queryClient.ts`)
+2. **Shared data derivation and state** (`buildAdjacency`, `useServerFilters`, `usePaperSummary`, `useRelatedPapers`, `useTagCatalog`, `useDebouncedValue`, `usePaperBrowser`, `usePaperDetail`, `useNavHistory`, `useCapabilities`, `useLatestBatch`, `useSubgraphManager`, `lib/storage.ts`)
+3. **View routing** (`App.tsx` media query split via `useMediaQuery`)
+4. **Renderer-specific UX** (`GraphView.tsx` + `useForceConfig`/`useGraphShortcuts`, `StatsView.tsx`, `AboutView.tsx`, and shared components: `FilterBar`, `PaperList`, `TagChips`, `Dropdown`, `LoadingIndicator`, `LatestBatchBadge`, `SearchResultsOverlay`, `icons/`)
 
 Keep data assumptions shared. Keep renderer behavior separate.

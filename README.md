@@ -1,19 +1,19 @@
 # AI Safety Pipeline & Visualisation
 
-A staged pipeline for harvesting **arXiv** papers → storing in **PostgreSQL + pgvector** → generating **SPECTER2 embeddings** → applying filters → topic tagging → serving live via **FastAPI**.
+A staged pipeline for harvesting **arXiv** papers → storing in **PostgreSQL + pgvector** → generating **SPECTER2 embeddings** → applying filters → LLM topic tagging → BGE topic embeddings + 2-D layout → serving live via **FastAPI**.
 
 [Live Web App](https://alignmentgraph.com/)
 
 ## Features
 
-- 🔄 OAI-PMH harvest from arXiv (`cs`, `stat`, `econ`)
+- 🔄 OAI-PMH harvest from arXiv (`cs`, `stat`, `econ`, `eess.SY`)
 - 🗄️ Storage: **PostgreSQL + pgvector**
-- 🧠 Embeddings via [SPECTER2](https://huggingface.co/allenai/specter2)
-- 🧹 Two-stage filtering: regex + semantic centroid/logreg
+- 🧠 Embeddings via [SPECTER2](https://huggingface.co/allenai/specter2) (filtering, related papers) and [BGE](https://huggingface.co/BAAI/bge-base-en-v1.5) (semantic search, layout)
+- 🧹 Two-stage filtering: regex + semantic centroid / multi-centroid
 - 🏷️ LLM-based relevance + multi-label taxonomy tagging (OpenAI, sync or Batch API) — the live tag source served by the API
-- 🔍 Semantic search via pgvector ANN (API mode)
+- 🔍 Semantic search via pgvector ANN (self-hosted only; `ENABLE_SEMANTIC_SEARCH=true`)
 - 🚀 FastAPI backend with live paper listing, detail, and semantic search endpoints
-- 🗺️ 2D graph layout coordinates (UMAP/PCA) precomputed and served live from Postgres
+- 🗺️ 2D graph layout coordinates (UMAP/PCA, then incremental kNN placement) precomputed and served live from Postgres
 
 ---
 
@@ -29,8 +29,11 @@ source .venv/bin/activate
 # API only (serving an already-populated database):
 uv pip install -e .
 
-# Full pipeline (harvesting, embeddings, tagging, self-hosted semantic search):
+# Full pipeline (harvesting, embeddings, self-hosted semantic search):
 uv pip install -e ".[pipeline]"
+
+# ...plus LLM classification (needs OPENAI_API_KEY):
+uv pip install -e ".[pipeline,llm]"
 
 # Install PyTorch (choose your platform / CUDA build) -- only needed for the pipeline extra
 uv pip install torch --index-url https://download.pytorch.org/whl/cpu
@@ -161,7 +164,8 @@ VITE_API_URL=http://localhost:8000
 - Pipeline code: `src/aisafety_pipeline/`
 - FastAPI backend: `src/aisafety_pipeline/api/`
 - CLI entrypoint: `utils.py`
-- Run without install: `python -m aisafety_pipeline.utils --help`
+- Run without activating the venv: `uv run aisafety-pipeline --help`
+- Architecture docs: [ARCHITECTURE.md](ARCHITECTURE.md), plus per-subsystem files in `src/aisafety_pipeline/`, `src/aisafety_pipeline/api/` and `ui/`
 - Frontend: `cd ui && npm install && npm run dev`
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for branching conventions and how to run the same checks CI runs.
