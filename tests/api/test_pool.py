@@ -98,3 +98,20 @@ def test_pool_timeout_returns_503_with_cors(monkeypatch: pytest.MonkeyPatch):
     assert res.status_code == 503
     assert res.headers["retry-after"] == "1"
     assert res.headers.get("access-control-allow-origin") == origin
+
+
+def test_new_pool_connections_are_not_left_in_a_transaction(test_dsn: str):
+    import psycopg2.extensions as ext
+
+    from aisafety_pipeline.api.deps import _VectorAwarePool
+
+    pool = _VectorAwarePool(2, 2, test_dsn)
+    try:
+        conns = [pool.getconn() for _ in range(2)]
+        assert all(
+            c.get_transaction_status() == ext.TRANSACTION_STATUS_IDLE for c in conns
+        )
+        for c in conns:
+            pool.putconn(c)
+    finally:
+        pool.closeall()
