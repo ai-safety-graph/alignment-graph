@@ -158,6 +158,23 @@ def test_related_papers_404_when_source_not_llm_relevant(client, make_paper):
     assert res.status_code == 404
 
 
+def test_related_papers_excludes_non_llm_relevant_neighbours(client, make_paper):
+    base = np.zeros(768, dtype=np.float32)
+    base[0] = 1.0
+    far = np.zeros(768, dtype=np.float32)
+    far[1] = 1.0
+
+    source = make_paper("2401.00150", embedding=base)
+    rejected = make_paper("2401.00151", embedding=base, llm_relevant=False)
+    relevant = make_paper("2401.00152", embedding=far)
+
+    res = client.get("/api/papers/related", params={"id": source, "limit": 10})
+    assert res.status_code == 200
+    aids = [item["aid"] for item in res.json()]
+    assert relevant in aids
+    assert rejected not in aids
+
+
 def test_list_papers_gates_on_llm_relevant_not_stage2(client, make_paper):
     yes = make_paper("2401.00120", ai_stage2_keep=False, llm_relevant=True)
     no = make_paper("2401.00121", ai_stage2_keep=True, llm_relevant=False)
