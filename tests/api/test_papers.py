@@ -139,6 +139,25 @@ def test_related_papers_orders_by_similarity(client, make_paper):
     assert by_aid[far_id]["tags"] == []
 
 
+def test_get_paper_404_when_not_llm_relevant(client, conn, make_paper):
+    make_paper("2401.00130", llm_relevant=False)
+    unclassified = make_paper("2401.00131")
+    conn.execute("UPDATE papers SET llm_relevant = NULL WHERE id = %s", [unclassified])
+
+    assert client.get("/api/papers/2401.00130").status_code == 404
+    assert client.get("/api/papers/2401.00131").status_code == 404
+
+
+def test_related_papers_404_when_source_not_llm_relevant(client, make_paper):
+    emb = np.zeros(768, dtype=np.float32)
+    emb[0] = 1.0
+    source = make_paper("2401.00140", embedding=emb, llm_relevant=False)
+    make_paper("2401.00141", embedding=emb)
+
+    res = client.get("/api/papers/related", params={"id": source})
+    assert res.status_code == 404
+
+
 def test_list_papers_gates_on_llm_relevant_not_stage2(client, make_paper):
     yes = make_paper("2401.00120", ai_stage2_keep=False, llm_relevant=True)
     no = make_paper("2401.00121", ai_stage2_keep=True, llm_relevant=False)

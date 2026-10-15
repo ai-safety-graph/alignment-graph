@@ -92,7 +92,8 @@ def get_related_papers(
     paper_id = id if id.startswith("http") else f"https://arxiv.org/abs/{id}"
 
     emb_row = conn.execute(
-        "SELECT embedding FROM papers WHERE id = %s AND embedding IS NOT NULL",
+        "SELECT embedding FROM papers"
+        " WHERE id = %s AND llm_relevant = TRUE AND embedding IS NOT NULL",
         (paper_id,),
     ).fetchone()
 
@@ -143,7 +144,7 @@ def get_paper(arxiv_id: str, conn=Depends(get_conn)):
         """
         SELECT id, title, authors, published, summary, link, domain_tag,
                llm_tags AS tags
-        FROM papers WHERE id = %s
+        FROM papers WHERE id = %s AND llm_relevant = TRUE
         """,
         (arxiv_id,),
     ).fetchone()
