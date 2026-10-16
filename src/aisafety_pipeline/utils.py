@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import os
+import sys
+import threading
+import traceback
 
 from . import compute_layout, config, embeddings, filters, llm_classify, oai
 from .config import API_HOST, API_PORT, BLUE, GREEN, RED, RESET, YELLOW
@@ -282,4 +286,47 @@ def _cmd_serve(args):
 def cli_entry():
     parser = build_parser()
     args = parser.parse_args()
-    args.func(args)
+    if args.cmd != "run-all":
+        args.func(args)
+        return
+
+    # run-all is the cron entrypoint, and must actually exit when done: a
+    # normal interpreter shutdown waits on any non-daemon threads a library
+    # (torch / HF / openai) left behind. In practice a finished run's
+    # container stayed alive at ~2.5GB for ~10h, and the next scheduled run
+    # (on a newer deployment, so Railway didn't skip it) was killed mid-stage
+    # with nothing in the logs. os._exit skips that wait (sys.exit does not),
+    # so flush output first.
+    code = 0
+    try:
+        args.func(args)
+    except SystemExit as exc:
+        # Stages raise SystemExit("message") for config errors
+        if isinstance(exc.code, int) or exc.code is None:
+            code = exc.code or 0
+        else:
+            print(exc.code, file=sys.stderr)
+            code = 1
+    except BaseException:
+        traceback.print_exc()
+        code = 1
+    finally:
+        _log_lingering_threads()
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(code)
+
+
+def _log_lingering_threads() -> None:
+    """Name any non-daemon threads still alive after run-all -- the ones
+    that would have blocked a normal exit -- so a would-be hang shows up in
+    the logs with its culprit."""
+    lingering = [t for t in threading.enumerate()
+                 if t is not threading.main_thread() and not t.daemon and t.is_alive()]
+    if lingering:
+        def describe(t: threading.Thread) -> str:
+            # Thread(target=...) keeps the target privately; subclasses override run
+            fn = getattr(t, "_target", None) or t.run
+            return f"{t.name} ({getattr(fn, '__module__', '?')}.{getattr(fn, '__qualname__', type(t).__name__)})"
+        names = ", ".join(describe(t) for t in lingering)
+        print(f"{YELLOW}run-all:{RESET} forcing exit past {len(lingering)} non-daemon thread(s): {names}")
