@@ -92,3 +92,40 @@ def test_run_all_does_not_record_latest_batch_when_a_stage_fails(monkeypatch, _r
         utils._cmd_run_all(_make_args())
 
     assert _record_calls == []
+
+
+# cli_entry os._exit()s after run-all, so these run it in a subprocess.
+_CLI_SCRIPT = """
+import sys, threading, time
+from aisafety_pipeline import utils
+
+def leak_thread(ns):
+    # Stand-in for a library leaving a non-daemon thread behind
+    threading.Thread(target=time.sleep, args=(3600,)).start()
+
+def fail(ns):
+    raise RuntimeError("stage exploded")
+
+utils._record_latest_batch_safely = lambda db, started_at: None
+utils._RUN_ALL_STAGES = [("harvest", leak_thread)] + (
+    [("stage1", fail)] if sys.argv[1] == "fail" else [])
+sys.argv = ["aisafety-pipeline", "run-all"]
+utils.cli_entry()
+"""
+
+
+@pytest.mark.parametrize("mode, expected_code", [("ok", 0), ("fail", 1)])
+def test_cli_run_all_exits_despite_lingering_non_daemon_thread(mode, expected_code):
+    import subprocess
+    import sys
+
+    proc = subprocess.run(
+        [sys.executable, "-c", _CLI_SCRIPT, mode],
+        capture_output=True, text=True, timeout=30,
+    )
+    assert proc.returncode == expected_code
+    assert "forcing exit past 1 non-daemon thread(s)" in proc.stdout
+    if mode == "ok":
+        assert "run-all: complete" in proc.stdout
+    else:
+        assert "stage exploded" in proc.stderr
