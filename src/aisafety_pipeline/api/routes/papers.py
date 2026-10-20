@@ -45,26 +45,32 @@ def list_papers(
 
     where_sql = "WHERE " + " AND ".join(where)
 
-    total_row = conn.execute(
-        f"SELECT COUNT(*) FROM papers {where_sql}", params
-    ).fetchone()
-    total = total_row[0] if total_row else 0
-
-    # Log each search once: later pages are infinite-scroll of the same query.
-    if q and page == 1:
-        has_filters = bool(tags or domain or from_date or to_date)
-        background_tasks.add_task(log_search, q, "keyword", total, has_filters)
-
+    # count(*) OVER () gives the total in the same round trip as the page.
     rows = conn.execute(
         f"""
         SELECT id, title, authors, published, link, domain_tag,
-               llm_tags AS tags
+               llm_tags AS tags, count(*) OVER () AS total
         FROM papers {where_sql}
         ORDER BY published DESC, id
         LIMIT %s OFFSET %s
         """,
         params + [limit, offset],
     ).fetchall()
+
+    if rows:
+        total = rows[0][7]
+    elif offset == 0:
+        total = 0
+    else:
+        # Past the last page there's no row to carry the total.
+        total = conn.execute(
+            f"SELECT COUNT(*) FROM papers {where_sql}", params
+        ).fetchone()[0]
+
+    # Log each search once: later pages are infinite-scroll of the same query.
+    if q and page == 1:
+        has_filters = bool(tags or domain or from_date or to_date)
+        background_tasks.add_task(log_search, q, "keyword", total, has_filters)
 
     items = [
         {

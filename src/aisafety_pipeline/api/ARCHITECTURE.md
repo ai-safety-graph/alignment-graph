@@ -61,8 +61,9 @@ Every route except `/health` is rate-limited per client IP by `slowapi` (`rateli
 
 `deps.py` pools connections rather than opening one per request:
 - `init_pool()` / `close_pool()` run in `main.py`'s `lifespan`, creating/closing a `ThreadedConnectionPool` (size from `config.API_DB_POOL_MIN`/`API_DB_POOL_MAX`) once for the process lifetime. `API_DB_POOL_MIN` defaults to `API_DB_POOL_MAX`, so every connection is opened at startup and kept. psycopg2's pool closes any returned connection beyond `minconn` and opens new ones while holding its lock. With `MIN=1`, concurrent requests each opened a fresh TLS connection to Supabase, one at a time (in production: p50 5.2s at 5 concurrent requests vs 0.7s with `MIN=MAX`). Don't lower it. `register_vector` is registered once per physical connection (in the pool's `_connect` override), not per request.
+- Pooled connections are in **autocommit** mode (set in `_connect`, before `register_vector`). Every route only reads, so this saves the implicit `BEGIN` and the `ROLLBACK` on release, each a round trip to the database. Each statement commits on its own: a future route that needs several writes to be atomic must open a transaction explicitly.
 - The pool is wrapped in `_BoundedPool`, a semaphore sized to `API_DB_POOL_MAX`. psycopg2's `ThreadedConnectionPool` raises `PoolError` immediately when every connection is borrowed, which turned bursts of more than 10 concurrent requests into 500s. With the wrapper, borrowers wait up to `config.API_DB_POOL_TIMEOUT` seconds (default 5). If none frees up they get `PoolTimeout`, which `main.py` maps to a `503` with `Retry-After: 1`.
-- `borrow_conn()` (context manager) borrows a connection from the pool, wraps it via `PgConnection.from_raw()`, yields it, then rolls back (in case a request left an open transaction) and returns it to the pool in `finally` — it never closes the underlying connection.
+- `borrow_conn()` (context manager) borrows a connection from the pool, wraps it via `PgConnection.from_raw()`, yields it, then rolls back (a safety net in case a request opened a transaction; with none open psycopg2 skips it without contacting the server) and returns it to the pool in `finally` — it never closes the underlying connection.
 - Raises `RuntimeError` if `init_pool()` was never called (e.g. outside the app lifespan).
 - Pooled connections use psycopg2's `DictCursor`, so rows support both index and key access (`meta.py` relies on `row["value"]`).
 
@@ -75,7 +76,7 @@ Every route except `/health` is rate-limited per client IP by `slowapi` (`rateli
 `search_log.py` records one `search_log` row per search: normalized query text (whitespace-collapsed, lowercased, max 200 chars), `mode` (`keyword`/`semantic`), result `total`, and `has_filters`. No IPs or user identifiers.
 
 - `GET /api/papers` logs when `q` is set **and `page == 1`** (later pages are infinite scroll of the same query). `POST /api/search` logs every call.
-- Routes schedule `log_search` as a `BackgroundTasks` task, so it runs after the response is sent, on its **own** pooled connection via `borrow_conn()`, and commits. It can't reuse the request's connection: `get_conn()` rolls that back on release, and in tests the shared connection must never be committed.
+- Routes schedule `log_search` as a `BackgroundTasks` task, so it runs after the response is sent, on its **own** pooled connection via `borrow_conn()`, and commits (a no-op under autocommit, kept so it still works on a non-autocommit connection). It can't reuse the request's connection: in tests that is a shared connection that must never be committed.
 - Failures (including `PoolTimeout`) are logged and swallowed. `SEARCH_LOG_ENABLED=false` turns it off.
 - Search-as-you-type logs prefixes ("alig", "align"). `scripts/search_report.sql` filters these when reporting.
 - The table is created by `init_db()`; `migrations/add_search_log.sql` is for databases created before that (and enables RLS).
@@ -135,7 +136,7 @@ Query params:
 - `from` / `to` — `published` date bounds (plain strings compared against the TEXT column; not validated, unlike `/range`)
 - `q` — keyword substring match on `title`/`authors` (`ILIKE`)
 
-Ordered by `published DESC, id` (stable across pages). Returns: `{ total, page, limit, items }` where items have `aid, t, au, pd, ln, dm, tags` — no `id`, coords or `sm` (summary); fetch a single paper for the summary.
+Ordered by `published DESC, id` (stable across pages). `total` comes from `count(*) OVER ()` on the page query (one round trip); only a page past the end, which has no row to carry it, runs a separate `COUNT(*)`. Returns: `{ total, page, limit, items }` where items have `aid, t, au, pd, ln, dm, tags` — no `id`, coords or `sm` (summary); fetch a single paper for the summary.
 
 ### `GET /api/papers/related`
 
@@ -235,5 +236,5 @@ Be careful around:
 - pgvector operator syntax (`<=>` for cosine distance)
 - Parameter order in search SQL (`query_vec` used twice)
 - Route registration order in `papers.py` (`/related` before `/{arxiv_id:path}`)
-- `get_conn()` / the pool in `deps.py` — keep `API_DB_POOL_MIN` = MAX, and keep the rollback before a connection is returned to the pool
+- `get_conn()` / the pool in `deps.py` — keep `API_DB_POOL_MIN` = MAX, keep pooled connections in autocommit, and keep the rollback before a connection is returned to the pool
 - CORS origins list (`config.py` / `CORS_ORIGINS`; affects which frontends can call the API)
