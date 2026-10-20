@@ -16,6 +16,27 @@ def test_list_papers_pagination(client, make_paper):
     assert len(body["items"]) == 2
 
 
+def test_list_papers_total_on_last_and_past_last_page(client, make_paper):
+    for i in range(3):
+        make_paper(f"2401.0002{i}", published=f"2024-01-0{i + 1}")
+
+    last = client.get("/api/papers", params={"page": 2, "limit": 2}).json()
+    assert last["total"] == 3
+    assert len(last["items"]) == 1
+
+    past = client.get("/api/papers", params={"page": 5, "limit": 2}).json()
+    assert past["total"] == 3
+    assert past["items"] == []
+
+
+def test_list_papers_total_zero_when_nothing_matches(client, make_paper):
+    make_paper("2401.00030", title="Alignment")
+
+    body = client.get("/api/papers", params={"q": "no-such-title"}).json()
+    assert body["total"] == 0
+    assert body["items"] == []
+
+
 def test_list_papers_pages_are_stable_across_same_date_papers(client, make_paper):
     # Inserted in reverse id order so heap order disagrees with the id
     # tie-breaker; without it, pages over same-date papers can overlap.

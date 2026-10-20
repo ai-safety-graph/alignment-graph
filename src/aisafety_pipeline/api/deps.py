@@ -24,17 +24,19 @@ class _VectorAwarePool:
         class _Inner(ThreadedConnectionPool):
             def _connect(self, key=None):
                 conn = super()._connect(key)
+                # Autocommit: the API only reads, so skip the implicit BEGIN
+                # and the ROLLBACK on release -- each is a round trip to the
+                # database. Set before register_vector so its type lookup
+                # doesn't leave the connection "idle in transaction" either
+                # (through Supabase's transaction-mode pooler that pins a
+                # server backend to us until first borrowed).
+                conn.autocommit = True
                 try:
                     from pgvector.psycopg2 import register_vector
                     register_vector(conn)
                 except Exception:
                     if conn.closed:
                         raise  # dead connection: surface the real error
-                # register_vector's type lookup opens an implicit transaction.
-                # End it so an idle pooled connection isn't "idle in
-                # transaction" -- through Supabase's transaction-mode pooler
-                # that pins a server backend to us until first borrowed.
-                conn.rollback()
                 return conn
 
         self._pool = _Inner(
@@ -108,10 +110,14 @@ def close_pool() -> None:
 def borrow_conn():
     """Borrow a PgConnection from the pool for the duration of a `with` block.
 
+    Pooled connections are in autocommit mode: every statement commits on its
+    own, with no BEGIN/ROLLBACK round trips. A caller that needs several
+    writes to be atomic must open a transaction explicitly.
+
     Returns the underlying connection to the pool (rather than closing it)
-    afterwards, rolling back first so a caller that raised mid-transaction
-    doesn't leak an open transaction to the next borrower. Callers that write
-    must commit themselves.
+    afterwards. The rollback before that is a safety net for a caller that
+    opened a transaction and raised; with none open, psycopg2 skips it
+    without contacting the server.
     """
     if _pool is None:
         raise RuntimeError("Connection pool not initialized — call init_pool() at startup.")
