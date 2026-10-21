@@ -1,7 +1,8 @@
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import * as Slider from '@radix-ui/react-slider'
 import { track } from '../lib/analytics'
-import { RotateCcw } from 'lucide-react'
+import { RotateCcw, X } from 'lucide-react'
 import { tagIcon } from '../lib/tags'
 import { domainLabel } from '../lib/domain'
 import { DATE_PRESETS } from '../hooks/useServerFilters'
@@ -97,6 +98,74 @@ function DateSlider({
   )
 }
 
+// One row of removable chips shown while the full filter panel is collapsed,
+// so active filters stay visible without taking over the list column.
+function ActiveFilterSummary({
+  activeTags,
+  activeDomains,
+  datePresetLabel,
+  onClearDate,
+  onToggleTag,
+  onToggleDomain,
+  onClearAll,
+}: {
+  activeTags: Set<string>
+  activeDomains: Set<string>
+  datePresetLabel?: string
+  onClearDate?: () => void
+  onToggleTag: (tag: string) => void
+  onToggleDomain: (domain: string) => void
+  onClearAll: () => void
+}) {
+  const chip = (key: string, label: ReactNode, onRemove: () => void) => (
+    <button
+      key={key}
+      type='button'
+      onClick={onRemove}
+      title='Remove filter'
+      className='shrink-0 inline-flex items-center gap-1 pl-2.5 pr-1.5 py-0.5 rounded-md border border-neutral-600 bg-neutral-800 text-xs text-neutral-200 whitespace-nowrap hover:border-neutral-400 cursor-pointer'
+    >
+      {label}
+      <X size={12} className='text-neutral-400' aria-hidden />
+    </button>
+  )
+
+  return (
+    <div className='flex items-start gap-2 px-4 pb-2'>
+      <div className='flex flex-1 min-w-0 flex-wrap items-center gap-2'>
+        {datePresetLabel &&
+          onClearDate &&
+          chip('date', datePresetLabel, () => {
+            track('filter_change', { kind: 'date', value: 'all' })
+            onClearDate()
+          })}
+        {[...activeDomains].map((dm) =>
+          chip(`dm:${dm}`, domainLabel(dm), () => onToggleDomain(dm)),
+        )}
+        {[...activeTags].map((tag) => {
+          const Icon = tagIcon(tag)
+          return chip(
+            `tag:${tag}`,
+            <>
+              <Icon size={12} className='text-[#4ea8de]' aria-hidden />
+              {tag}
+            </>,
+            () => onToggleTag(tag),
+          )
+        })}
+      </div>
+      <button
+        type='button'
+        onClick={onClearAll}
+        className='shrink-0 flex items-center gap-1 py-0.5 text-xs text-neutral-400 hover:text-neutral-200 cursor-pointer'
+      >
+        Clear
+        <RotateCcw size={12} aria-hidden />
+      </button>
+    </div>
+  )
+}
+
 export default function FilterBar({
   tagEntries,
   availableDomains,
@@ -114,7 +183,23 @@ export default function FilterBar({
   showTagCounts = true,
   bordered = true,
 }: FilterBarProps) {
-  if (!isExpanded) return null
+  if (!isExpanded) {
+    return hasActiveFilters ? (
+      <ActiveFilterSummary
+        activeTags={activeTags}
+        activeDomains={activeDomains}
+        datePresetLabel={
+          datePreset && datePreset !== 'all'
+            ? datePresets.find((p) => p.value === datePreset)?.label
+            : undefined
+        }
+        onClearDate={onSetDatePreset && (() => onSetDatePreset('all'))}
+        onToggleTag={onToggleTag}
+        onToggleDomain={onToggleDomain}
+        onClearAll={onClearAll}
+      />
+    ) : null
+  }
 
   return (
     <div

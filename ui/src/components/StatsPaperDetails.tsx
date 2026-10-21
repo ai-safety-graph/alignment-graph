@@ -142,7 +142,7 @@ export default function StatsPaperDetails({
           </div>
 
           {summaryText ? (
-            <p className='whitespace-pre-wrap leading-relaxed text-neutral-300'>
+            <p className='whitespace-pre-wrap text-sm leading-relaxed text-neutral-300'>
               {summaryText}
             </p>
           ) : (

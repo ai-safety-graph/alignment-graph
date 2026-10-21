@@ -48,10 +48,9 @@ export default function StatsView() {
     null,
   )
   const [semanticLoading, setSemanticLoading] = useState(false)
-  // Expanded by default on desktop (Tailwind `md`), collapsed on mobile.
-  const [filterExpanded, setFilterExpanded] = useState(
-    () => window.matchMedia('(min-width: 768px)').matches,
-  )
+  // Collapsed by default so the list gets the column; active filters still
+  // show as a summary row while collapsed.
+  const [filterExpanded, setFilterExpanded] = useState(false)
 
   const {
     subgraphs,
@@ -435,6 +434,10 @@ export default function StatsView() {
       : ''
     : `${subgraphItems.length} of ${subgraphNodes?.length ?? 0} papers`
 
+  const activeFilterCount = isBrowsing
+    ? activeTags.size + activeDomains.size + (datePreset !== 'all' ? 1 : 0)
+    : subgraphActiveTags.size + subgraphActiveDomains.size
+
   const filterToggleButton = (
     <button
       type='button'
@@ -445,6 +448,11 @@ export default function StatsView() {
     >
       <SlidersHorizontal size={15} />
       <span className='hidden md:inline'>Filters</span>
+      {activeFilterCount > 0 && (
+        <span className='ml-1 md:ml-0 min-w-4 h-4 px-1 rounded-full bg-[#4ea8de] text-[10px] leading-4 text-neutral-950 font-medium'>
+          {activeFilterCount}
+        </span>
+      )}
     </button>
   )
 
@@ -765,7 +773,7 @@ export default function StatsView() {
           </div>
         </div>
 
-        <div className='hidden md:block w-[55%] border-l border-neutral-800 overflow-y-auto'>
+        <div className='hidden md:block w-1/2 border-l border-neutral-800 overflow-y-auto'>
           <div className='h-full'>
             {selected ? (
               <StatsPaperDetails
