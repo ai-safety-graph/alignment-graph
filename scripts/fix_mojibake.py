@@ -1,20 +1,16 @@
 #!/usr/bin/env python3
 """
-Fix UTF-8-decoded-as-Latin-1 mojibake left over from the old SQLite pipeline
-(e.g. "FranÃ§ois" -> "François") in the PostgreSQL database.
+Fix UTF-8-decoded-as-Latin-1 mojibake (e.g. "PaweÅ\\x82 Batorski" ->
+"Paweł Batorski") in `papers_raw` and `papers`.
 
-The corruption happened when the original harvester wrote UTF-8 bytes into
-SQLite after decoding them as Latin-1/cp1252, so the bad text was carried
-verbatim into Postgres by the (now-removed) sqlite_to_postgres.py migration
--- no encoding conversion happened there.
+arXiv's OAI-PMH responses omit a charset, so before commit 74c7dec the
+harvester let `requests` decode them as ISO-8859-1 and stored the mojibake.
+New harvests are clean; this repairs the rows written before the fix.
 
-The fix: for the affected text columns, try
-    value.encode("latin-1").decode("utf-8")
-This only succeeds when `value` is itself the mojibake pattern (the encode
-step recovers the original UTF-8 byte sequence, and the decode step parses
-it back into the correct characters). Correctly-stored UTF-8 text almost
-always raises UnicodeDecodeError on this roundtrip and is left untouched;
-pure ASCII round-trips to itself, so it's also a safe no-op.
+Both tables are repaired: stage1 (`--full`) re-copies title/authors/summary
+from `papers_raw` into `papers`, so fixing `papers` alone would be undone.
+
+See `aisafety_pipeline.text_fix.fix_mojibake` for the repair rules.
 
 Usage:
     DATABASE_URL=postgresql://... python scripts/fix_mojibake.py            # dry run, reports counts + samples
@@ -34,78 +30,84 @@ except ImportError:
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+from psycopg2.extras import execute_values  # noqa: E402
+
 from aisafety_pipeline.db import connect  # noqa: E402
+from aisafety_pipeline.text_fix import fix_mojibake  # noqa: E402
 
-# (table, primary key column, [text columns to check])
-TARGETS = [
-    ("papers", "id", ["title", "authors", "summary", "domain_tag"]),
-]
+TABLES = ["papers_raw", "papers"]
+COLUMNS = ["title", "authors", "summary"]
 
-# Scope to the papers that actually made it through stage-2 filtering --
-# these are the only ones the API/UI ever surfaces.
-WHERE_CLAUSE = "ai_stage2_keep = true"
+# Postgres-side prefilter: a mojibake sequence anywhere, or (authors only)
+# a bare "Ã" closing a word, left behind when the harvester stripped \xa0.
+_SEQ = r"[Â-ô][\u0080-¿]"
+_PREFILTER = (
+    f"title ~ '{_SEQ}' OR summary ~ '{_SEQ}' OR authors ~ '{_SEQ}' "
+    r"OR authors ~ 'Ã([, ]|$)'"
+)
 
-
-def try_fix(value: str | None) -> str | None:
-    if not value:
-        return None
-    try:
-        fixed = value.encode("latin-1").decode("utf-8")
-    except (UnicodeEncodeError, UnicodeDecodeError):
-        return None
-    if fixed == value:
-        return None
-    return fixed
+# Keys per id-range window; each window's regex scan is bounded so it stays
+# well under the DB's statement_timeout.
+WINDOW = 5000
 
 
-BATCH = 2000
+def _fix_row(row) -> dict[str, str]:
+    updates = {}
+    for col in COLUMNS:
+        fixed = fix_mojibake(row[col], restore_stripped_nbsp=(col == "authors"))
+        if fixed != row[col]:
+            updates[col] = fixed
+    return updates
 
 
-def process_simple_table(conn, table: str, pk: str, columns: list[str], apply: bool, where: str | None = None):
-    col_list = ", ".join([pk] + columns)
-    base_where = f"({where})" if where else None
-    changed = 0
-    total = 0
+def process_table(conn, table: str, apply: bool):
+    write_cur = conn.raw_cursor()
+    changed = scanned = 0
+    per_col = dict.fromkeys(COLUMNS, 0)
     samples = []
-    last_pk = None
+    last_id = ""
     while True:
-        if last_pk is None:
-            clause = f"WHERE {base_where}" if base_where else ""
-            batch_rows = conn.execute(
-                f"SELECT {col_list} FROM {table} {clause} ORDER BY {pk} LIMIT {BATCH}"
-            ).fetchall()
-        else:
-            clause = f"WHERE {base_where} AND {pk} > %s" if base_where else f"WHERE {pk} > %s"
-            batch_rows = conn.execute(
-                f"SELECT {col_list} FROM {table} {clause} ORDER BY {pk} LIMIT {BATCH}",
-                (last_pk,),
-            ).fetchall()
-        if not batch_rows:
+        bound = conn.execute(
+            f"SELECT max(id) AS hi, count(*) AS n FROM "
+            f"(SELECT id FROM {table} WHERE id > %s ORDER BY id LIMIT {WINDOW}) w",
+            (last_id,),
+        ).fetchone()
+        if not bound["n"]:
             break
-        last_pk = batch_rows[-1][pk]
-        total += len(batch_rows)
-        for r in batch_rows:
-            updates = {}
-            for col in columns:
-                fixed = try_fix(r[col])
-                if fixed is not None:
-                    updates[col] = fixed
-            if updates:
-                changed += 1
-                if len(samples) < 8:
-                    samples.append((r[pk], updates))
-                if apply:
-                    set_clause = ", ".join(f"{c} = %({c})s" for c in updates)
-                    params = dict(updates)
-                    params["pk"] = r[pk]
-                    conn.execute(
-                        f"UPDATE {table} SET {set_clause} WHERE {pk} = %(pk)s", params
-                    )
-        if apply:
+        hi = bound["hi"]
+        rows = conn.execute(
+            f"SELECT id, {', '.join(COLUMNS)} FROM {table} "
+            f"WHERE id > %s AND id <= %s AND ({_PREFILTER})",
+            (last_id, hi),
+        ).fetchall()
+        scanned += bound["n"]
+        last_id = hi
+
+        batch = []
+        for r in rows:
+            updates = _fix_row(r)
+            if not updates:
+                continue
+            changed += 1
+            for col in updates:
+                per_col[col] += 1
+            if len(samples) < 10:
+                samples.append((r["id"], {c: (r[c], v) for c, v in updates.items()}))
+            merged = {c: updates.get(c, r[c]) for c in COLUMNS}
+            batch.append((r["id"], merged["title"], merged["authors"], merged["summary"]))
+
+        if apply and batch:
+            execute_values(
+                write_cur,
+                f"UPDATE {table} AS t SET title = v.title, authors = v.authors, summary = v.summary "
+                "FROM (VALUES %s) AS v(id, title, authors, summary) WHERE t.id = v.id",
+                batch,
+                page_size=500,
+            )
             conn.commit()
-        print(f"  … {total} rows scanned", end="\r", file=sys.stderr)
+        print(f"  … {table}: {scanned} rows scanned, {changed} to fix", end="\r", file=sys.stderr)
     print(file=sys.stderr)
-    return changed, total, samples
+    return changed, scanned, per_col, samples
 
 
 def main():
@@ -115,15 +117,15 @@ def main():
 
     conn = connect()
     total_changed = 0
-    for table, pk, columns in TARGETS:
-        changed, total, samples = process_simple_table(
-            conn, table, pk, columns, args.apply, where=WHERE_CLAUSE
-        )
+    for table in TABLES:
+        changed, scanned, per_col, samples = process_table(conn, table, args.apply)
         total_changed += changed
-        print(f"\n{table}: {changed}/{total} rows with mojibake" + (" (fixed)" if args.apply else " (would fix)"))
+        cols = ", ".join(f"{c}={n}" for c, n in per_col.items())
+        print(f"\n{table}: {changed}/{scanned} rows with mojibake ({cols})"
+              + (" (fixed)" if args.apply else " (would fix)"))
         for pk_val, updates in samples:
-            for col, new_val in updates.items():
-                print(f"  [{pk_val}] {col}: {new_val!r}")
+            for col, (old, new) in updates.items():
+                print(f"  [{pk_val}] {col}:\n      {old[:120]!r}\n   -> {new[:120]!r}")
 
     print(f"\n{'Applied' if args.apply else 'Would apply'} fixes to {total_changed} row(s) total.")
     if not args.apply and total_changed:
