@@ -45,13 +45,19 @@ export function presetToFromDate(preset: DatePreset): string | undefined {
 
 // Presets that actually narrow data whose oldest publish date is `oldestPd`
 // (ISO YYYY-MM-DD), plus 'all'. Windows reaching past the oldest paper are
-// indistinguishable from 'all', so they're dropped.
+// indistinguishable from 'all', so they're dropped, and 'all' takes the label
+// of the narrowest dropped window (e.g. "Past month" for the recent graph)
+// rather than claiming "Any time".
 export function availableDatePresets(oldestPd: string | undefined) {
-  return DATE_PRESETS.filter(
-    (p) =>
-      p.value === 'all' ||
-      (oldestPd !== undefined && presetToFromDate(p.value)! > oldestPd),
-  )
+  const kept: typeof DATE_PRESETS = []
+  let allLabel: string | undefined
+  for (const p of DATE_PRESETS) {
+    if (p.value === 'all') continue
+    if (oldestPd !== undefined && presetToFromDate(p.value)! > oldestPd)
+      kept.push(p)
+    else if (oldestPd !== undefined) allLabel ??= p.label
+  }
+  return [...kept, { value: 'all' as const, label: allLabel ?? 'Any time' }]
 }
 
 export function useServerFilters(tags: TagsLegend) {
