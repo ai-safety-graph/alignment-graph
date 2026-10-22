@@ -87,15 +87,76 @@ def list_papers(
     return {"total": total, "page": page, "limit": limit, "items": items}
 
 
+# Precomputed neighbours (paper_related, written by the compute-related
+# stage). Re-checks llm_relevant on both ends so a stale row can't serve a
+# paper that has since been reclassified. The inner LIMIT trims the stored
+# list before the join -- otherwise every stored neighbour is looked up in
+# `papers` before the outer LIMIT applies -- keeping a few spare in case
+# some are skipped as no longer relevant.
+_RELATED_PRECOMPUTED = """
+    SELECT p.id, p.title, p.authors, p.published, p.link, p.domain_tag,
+           p.graph_x, p.graph_y, n.sim, p.llm_tags AS tags
+    FROM paper_related r
+    JOIN papers s ON s.id = r.paper_id AND s.llm_relevant = TRUE AND s.embedding IS NOT NULL
+    CROSS JOIN LATERAL (
+        SELECT u.nid, u.sim, u.ord
+        FROM unnest(r.neighbor_ids, r.sims) WITH ORDINALITY AS u(nid, sim, ord)
+        ORDER BY u.ord
+        LIMIT %s
+    ) n
+    JOIN papers p ON p.id = n.nid AND p.llm_relevant = TRUE
+    WHERE r.paper_id = %s
+    ORDER BY n.ord
+    LIMIT %s
+"""
+_RELATED_SPARE = 5
+
+# Live HNSW lookup, for papers compute-related hasn't covered yet. Slow when
+# the index isn't cached (hundreds of pages read from disk).
+_RELATED_HNSW = """
+    SELECT id, title, authors, published, link, domain_tag,
+           graph_x, graph_y, 1 - (embedding <=> %s) AS sim,
+           llm_tags AS tags
+    FROM papers
+    WHERE id != %s
+      AND llm_relevant = TRUE
+      AND embedding IS NOT NULL
+    ORDER BY embedding <=> %s
+    LIMIT %s
+"""
+
+
+def _related_row(r) -> dict:
+    return {
+        "aid": r[0],
+        "t": r[1] or "",
+        "au": r[2] or "",
+        "pd": str(r[3]) if r[3] else "",
+        "ln": r[4] or r[0],
+        "dm": r[5] or "unknown",
+        "rx": float(r[6]) if r[6] is not None else None,
+        "ry": float(r[7]) if r[7] is not None else None,
+        "sim": float(r[8]),
+        "tags": list(r[9]) if r[9] else [],
+    }
+
+
 @router.get("/related")
 @limiter.limit(expensive_limit)
 def get_related_papers(
     request: Request,
     id: str = Query(...),
-    limit: int = Query(10, ge=1, le=50),
+    # Capped at related.RELATED_K, the neighbours stored per paper.
+    limit: int = Query(10, ge=1, le=20),
     conn=Depends(get_conn),
 ):
     paper_id = id if id.startswith("http") else f"https://arxiv.org/abs/{id}"
+
+    rows = conn.execute(
+        _RELATED_PRECOMPUTED, (limit + _RELATED_SPARE, paper_id, limit)
+    ).fetchall()
+    if rows:
+        return [_related_row(r) for r in rows]
 
     emb_row = conn.execute(
         "SELECT embedding FROM papers"
@@ -107,37 +168,8 @@ def get_related_papers(
         raise HTTPException(status_code=404, detail="Paper not found or has no embedding")
 
     embedding = emb_row[0]
-
-    rows = conn.execute(
-        """
-        SELECT id, title, authors, published, link, domain_tag,
-               graph_x, graph_y, 1 - (embedding <=> %s) AS sim,
-               llm_tags AS tags
-        FROM papers
-        WHERE id != %s
-          AND llm_relevant = TRUE
-          AND embedding IS NOT NULL
-        ORDER BY embedding <=> %s
-        LIMIT %s
-        """,
-        (embedding, paper_id, embedding, limit),
-    ).fetchall()
-
-    return [
-        {
-            "aid": r[0],
-            "t": r[1] or "",
-            "au": r[2] or "",
-            "pd": str(r[3]) if r[3] else "",
-            "ln": r[4] or r[0],
-            "dm": r[5] or "unknown",
-            "rx": float(r[6]) if r[6] is not None else None,
-            "ry": float(r[7]) if r[7] is not None else None,
-            "sim": float(r[8]),
-            "tags": list(r[9]) if r[9] else [],
-        }
-        for r in rows
-    ]
+    rows = conn.execute(_RELATED_HNSW, (embedding, paper_id, embedding, limit)).fetchall()
+    return [_related_row(r) for r in rows]
 
 
 @router.get("/{arxiv_id:path}")

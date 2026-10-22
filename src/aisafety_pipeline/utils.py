@@ -7,7 +7,7 @@ import sys
 import threading
 import traceback
 
-from . import compute_layout, config, embeddings, filters, llm_classify, oai
+from . import compute_layout, config, embeddings, filters, llm_classify, oai, related
 from .config import API_HOST, API_PORT, BLUE, GREEN, RED, RESET, YELLOW
 
 
@@ -92,6 +92,12 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Neighbours averaged to place each new paper (incremental mode)")
     cl.set_defaults(func=compute_layout.cmd_compute_layout)
 
+    cr = sp.add_parser("compute-related",
+                       help="Precompute SPECTER2 nearest neighbours into paper_related (served by "
+                            "GET /api/papers/related)")
+    cr.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
+    cr.set_defaults(func=related.cmd_compute_related)
+
     lc = sp.add_parser("llm-classify", help="LLM-based combined relevance + taxonomy classification (post stage-2)")
     lc.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
     lc.add_argument("--model", default=config.LLM_MODEL, help="OpenAI model name/id")
@@ -153,7 +159,7 @@ def build_parser() -> argparse.ArgumentParser:
     ra = sp.add_parser(
         "run-all",
         help="Chain harvest -> stage1 -> embed -> filter -> llm-classify-run -> embed-topic -> "
-             "compute-layout in order, for unattended/cron use",
+             "compute-layout -> compute-related in order, for unattended/cron use",
     )
     ra.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
     ra.add_argument("--seeds", default="seeds.txt", help="Path to seeds.txt for the stage-2 filter")
@@ -182,7 +188,9 @@ def _cmd_init_db(args):
 # ensure_topic_embeddings_for_candidates docstring), and compute-layout only
 # lays out llm_relevant rows that already have a topic embedding, so it must
 # run after both. Running these out of order silently leaves newly-relevant
-# papers without graph coordinates -- see ARCHITECTURE.md.
+# papers without graph coordinates -- see ARCHITECTURE.md. compute-related
+# only needs llm-classify and embed, but runs last as a full recompute over
+# the final relevant set.
 _RUN_ALL_STAGES = [
     ("harvest", oai.cmd_harvest),
     ("stage1", filters.cmd_stage1),
@@ -191,6 +199,7 @@ _RUN_ALL_STAGES = [
     ("llm-classify", llm_classify.cmd_llm_classify_run),
     ("embed-topic", embeddings.cmd_embed_topic),
     ("compute-layout", compute_layout.cmd_compute_layout),
+    ("compute-related", related.cmd_compute_related),
 ]
 _RUN_ALL_STAGE_NAMES = [name for name, _ in _RUN_ALL_STAGES]
 

@@ -140,13 +140,14 @@ Ordered by `published DESC, id` (stable across pages). `total` comes from `count
 
 ### `GET /api/papers/related`
 
-On-demand related papers for a selected paper using pgvector HNSW nearest-neighbor lookup. Registered before the catch-all `/{arxiv_id:path}` route.
+Related papers for a selected paper, by SPECTER2 similarity. Served from neighbours precomputed by the `compute-related` pipeline stage, with a live pgvector HNSW lookup as fallback. Registered before the catch-all `/{arxiv_id:path}` route.
 
-Query params: `id` (arxiv ID or full URL, required), `limit` (default 10, 1–50)
+Query params: `id` (arxiv ID or full URL, required), `limit` (default 10, 1–20)
 
 Implementation:
-- Reads the paper's stored SPECTER2 `embedding` vector (single row lookup); 404 `"Paper not found or has no embedding"` if missing
-- SQL: `WHERE id != <self> AND llm_relevant = TRUE ... ORDER BY embedding <=> %s LIMIT %s` — served by the partial HNSW index `idx_papers_embedding_llm` in ~1–5ms
+- Fast path: reads the source's `paper_related` row (top 20 neighbour ids + sims, precomputed), takes the first `limit` + 5 in stored order and joins only those to `papers` by PK (the spare 5 cover neighbours skipped as no longer relevant). Both the source and each neighbour must still be `llm_relevant`, so stale rows never serve reclassified papers. One query, a few ms even when nothing is cached.
+- Fallback, when the fast path returns no rows (paper classified since the last `compute-related`, or the table not yet populated): reads the paper's SPECTER2 `embedding` (404 `"Paper not found or has no embedding"` if missing or not relevant), then `WHERE id != <self> AND llm_relevant = TRUE ... ORDER BY embedding <=> %s LIMIT %s` via the partial HNSW index `idx_papers_embedding_llm`. That's ~1 ms when the index is cached, but 0.4–0.9 s cold on the production tier (see `docs/audits/2026-10-15-performance-audit.md`, finding 2), which is why the fast path exists.
+- `limit`'s cap of 20 matches `related.RELATED_K`, the neighbours stored per paper. Raise both together.
 - No embedding inference at query time
 
 Returns: an array of `{ aid, t, au, pd, ln, dm, tags, sim, rx, ry }` — `sim` is cosine similarity (0–1), `rx`/`ry` the raw stored coords (= `graph_x`/`graph_y`, nullable); no `id`. The UI uses `rx`/`ry` together with the main graph's `meta.coords.bounds` to place related papers as ghost nodes in the correct position.

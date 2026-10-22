@@ -235,6 +235,18 @@ _PG_SCHEMA = [
         embedding vector(768)
     )
     """,
+    # Precomputed SPECTER2 nearest neighbours per llm_relevant paper, written
+    # by the compute-related stage (related.py) and read by
+    # GET /api/papers/related -- a cold HNSW lookup reads hundreds of index
+    # pages from disk, this is one row plus a PK lookup per neighbour.
+    """
+    CREATE TABLE IF NOT EXISTS paper_related (
+        paper_id TEXT PRIMARY KEY REFERENCES papers(id) ON DELETE CASCADE,
+        neighbor_ids TEXT[] NOT NULL,
+        sims REAL[] NOT NULL,
+        computed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+    """,
     "CREATE INDEX IF NOT EXISTS idx_papers_keep ON papers (ai_stage2_keep)",
     "CREATE INDEX IF NOT EXISTS idx_papers_domain ON papers (domain_tag)",
     # Small key/value store for cross-run pipeline bookkeeping (harvest
