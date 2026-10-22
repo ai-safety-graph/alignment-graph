@@ -196,6 +196,60 @@ def test_related_papers_excludes_non_llm_relevant_neighbours(client, make_paper)
     assert rejected not in aids
 
 
+def _set_related(conn, source, neighbor_ids, sims):
+    conn.execute(
+        "INSERT INTO paper_related (paper_id, neighbor_ids, sims) VALUES (%s, %s, %s)",
+        (source, neighbor_ids, sims),
+    )
+
+
+def test_related_papers_serves_precomputed_neighbours_in_stored_order(client, conn, make_paper):
+    emb = np.zeros(768, dtype=np.float32)
+    emb[0] = 1.0
+    source = make_paper("2401.00160", embedding=emb)
+    a = make_paper("2401.00161", embedding=emb, tags=[("reward hacking", 0.9)])
+    b = make_paper("2401.00162", embedding=emb)
+    # Order and sims deliberately differ from what HNSW would return
+    # (both are identical to the source), so this only passes via the table.
+    _set_related(conn, source, [b, a], [0.5, 0.25])
+
+    res = client.get("/api/papers/related", params={"id": source, "limit": 10})
+    assert res.status_code == 200
+    body = res.json()
+    assert [item["aid"] for item in body] == [b, a]
+    assert [item["sim"] for item in body] == [0.5, 0.25]
+    assert body[1]["tags"] == ["reward hacking"]
+
+
+def test_related_papers_precomputed_skips_neighbours_no_longer_relevant(client, conn, make_paper):
+    emb = np.zeros(768, dtype=np.float32)
+    emb[0] = 1.0
+    source = make_paper("2401.00170", embedding=emb)
+    stale = make_paper("2401.00171", embedding=emb, llm_relevant=False)
+    kept = make_paper("2401.00172", embedding=emb)
+    _set_related(conn, source, [stale, kept], [0.9, 0.8])
+
+    res = client.get("/api/papers/related", params={"id": source, "limit": 1})
+    assert res.status_code == 200
+    assert [item["aid"] for item in res.json()] == [kept]
+
+
+def test_related_papers_limit_capped_at_stored_neighbour_count(client):
+    res = client.get("/api/papers/related", params={"id": "2401.00190", "limit": 21})
+    assert res.status_code == 422
+
+
+def test_related_papers_404_when_source_no_longer_relevant_despite_stale_row(client, conn, make_paper):
+    emb = np.zeros(768, dtype=np.float32)
+    emb[0] = 1.0
+    source = make_paper("2401.00180", embedding=emb, llm_relevant=False)
+    other = make_paper("2401.00181", embedding=emb)
+    _set_related(conn, source, [other], [0.9])
+
+    res = client.get("/api/papers/related", params={"id": source})
+    assert res.status_code == 404
+
+
 def test_list_papers_gates_on_llm_relevant_not_stage2(client, make_paper):
     yes = make_paper("2401.00120", ai_stage2_keep=False, llm_relevant=True)
     no = make_paper("2401.00121", ai_stage2_keep=True, llm_relevant=False)

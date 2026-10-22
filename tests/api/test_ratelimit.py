@@ -38,6 +38,9 @@ class _StubCursor:
     def fetchone(self):
         return None
 
+    def fetchall(self):
+        return []
+
 
 class _StubConn:
     def execute(self, *args, **kwargs):

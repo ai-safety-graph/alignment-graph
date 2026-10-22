@@ -45,6 +45,7 @@ def test_run_all_runs_every_stage_in_documented_order(monkeypatch):
 
     assert calls == [
         "harvest", "stage1", "embed", "filter", "llm-classify", "embed-topic", "compute-layout",
+        "compute-related",
     ]
 
 
@@ -62,7 +63,7 @@ def test_run_all_skips_named_stages(monkeypatch):
 
     utils._cmd_run_all(_make_args(skip=["embed", "llm-classify"]))
 
-    assert calls == ["harvest", "stage1", "filter", "embed-topic", "compute-layout"]
+    assert calls == ["harvest", "stage1", "filter", "embed-topic", "compute-layout", "compute-related"]
 
 
 def test_run_all_stops_at_first_failing_stage_without_running_later_ones(monkeypatch):

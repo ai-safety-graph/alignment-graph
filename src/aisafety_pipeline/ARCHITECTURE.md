@@ -7,7 +7,7 @@
 Its core job is to manage a staged literature-processing pipeline:
 
 ```text
-harvest -> stage1 -> embed -> filter -> llm-classify(-run) -> embed-topic -> compute-layout -> serve
+harvest -> stage1 -> embed -> filter -> llm-classify(-run) -> embed-topic -> compute-layout -> compute-related -> serve
 ```
 
 The package is PostgreSQL + pgvector only — every pipeline command and the API require `DATABASE_URL` to be set.
@@ -52,7 +52,7 @@ Key exports:
 
 `PgConnection` uses psycopg2 with `DictCursor` and intercepts `BEGIN`/`COMMIT`/`ROLLBACK` strings to map them to connection-level calls. Parameter placeholders (`?` with tuple params, `:name` with dict params) are translated to psycopg2 format (`%s`, `%(name)s`) automatically via `_to_pg_sql()` in `.execute()`; `raw_cursor()` bypasses this for `psycopg2.extras.execute_values`.
 
-Schema: `papers_raw`, `papers`, `pipeline_state`, `search_log` — see Database Architecture below.
+Schema: `papers_raw`, `papers`, `paper_related`, `pipeline_state`, `search_log` — see Database Architecture below.
 
 ### `oai.py`
 
@@ -81,6 +81,10 @@ Eligible papers are `ai_stage2_keep = TRUE` rows not yet classified and not in f
 
 Places `llm_relevant` papers in 2D from their topic embeddings — incrementally (new papers at the mean of their nearest placed neighbours) by default, or a full umap/pca refit with `--full` — and persists `graph_x` / `graph_y` back to the `papers` table. No JSON output — purely a DB-persistence stage consumed live by `api/routes/graph.py`.
 
+### `related.py`
+
+Precomputes the top `RELATED_K` (20) SPECTER2 neighbours of every `llm_relevant` paper into `paper_related`, which `GET /api/papers/related` serves. It's an exact cosine search in numpy over the whole relevant set (chunked `X @ X.T` + `argpartition`), always a full recompute since new papers change old papers' neighbours. An upsert skips rows whose neighbours didn't change (sims rounded to 4 dp so float noise doesn't rewrite everything), and rows for papers no longer relevant/embedded are deleted.
+
 ### `api/`
 
 FastAPI backend module. See `src/aisafety_pipeline/api/ARCHITECTURE.md`.
@@ -103,10 +107,11 @@ aisafety-pipeline filter            # semantic stage-2
 aisafety-pipeline llm-classify-run  # LLM relevance + taxonomy tags (live source, into llm_relevant/llm_tags)
 aisafety-pipeline embed-topic       # BGE topic vectors (relevant rows only, after llm-classify)
 aisafety-pipeline compute-layout    # persists graph_x/y to DB
+aisafety-pipeline compute-related   # precomputes related papers into paper_related
 aisafety-pipeline serve             # FastAPI (DATABASE_URL required)
 ```
 
-Each pipeline stage persists its outputs back into the database. `serve` requires PostgreSQL — as does every other command. `aisafety-pipeline run-all` chains harvest through compute-layout in this exact order for unattended use (the daily Railway cron job).
+Each pipeline stage persists its outputs back into the database. `serve` requires PostgreSQL — as does every other command. `aisafety-pipeline run-all` chains harvest through compute-related in this exact order for unattended use (the daily Railway cron job).
 
 ---
 
@@ -129,6 +134,10 @@ Raw upstream metadata from OAI harvest. Columns: `id`, `title`, `authors`, `publ
 Working set and pipeline state.
 
 Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `ai_regex_hit`, `ai_sem_sim`, `ai_stage2_keep`, `ai_stage2_reason`, `domain_tag`, `graph_x`, `graph_y`, `embedding vector(768)` (SPECTER2), `embedding_topic vector(768)` (BGE), plus LLM classification columns `llm_relevant`, `llm_confidence`, `llm_tags`, `llm_reason`, `llm_model`, `llm_classified_at`, `llm_batch_id` (written by `llm_classify.py`; these are what the API reads)
+
+### `paper_related`
+
+`paper_id TEXT PRIMARY KEY REFERENCES papers(id) ON DELETE CASCADE, neighbor_ids TEXT[], sims REAL[], computed_at`. One row per `llm_relevant` paper with a SPECTER2 embedding: neighbour ids most similar first (self excluded) and their cosine sims in parallel. Written by `compute-related` (`related.py`), read by `GET /api/papers/related`.
 
 ### `pipeline_state`
 
@@ -158,7 +167,8 @@ Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `ai_regex_hit
 5. **LLM classification** → `papers` (`llm_relevant`, `llm_tags`, etc.) — the live tag source read by the API
 6. **Topic embedding** → `papers.embedding_topic` (`llm_relevant` rows only)
 7. **Compute layout** → `papers.graph_x/y`
-8. **Serve** → FastAPI reads from PostgreSQL live
+8. **Compute related** → `paper_related`
+9. **Serve** → FastAPI reads from PostgreSQL live
 
 ---
 
