@@ -8,6 +8,7 @@ export type Summary = {
   ln: string
   dm: string
   tags: string[]
+  lr: string
 }
 
 export async function getSummaryByUrl(
@@ -25,5 +26,6 @@ export async function getSummaryByUrl(
     ln: paper.ln,
     dm: paper.dm,
     tags: paper.tags,
+    lr: paper.lr ?? '',
   }
 }

@@ -9,6 +9,8 @@ export type NodeCompact = {
   /** Taxonomy tags. Order carries no meaning -- no tag is more "primary" than another. */
   tags: string[]
   sm?: string
+  /** LLM classifier's one-line reason the paper counts as AI safety (single-paper endpoint only). */
+  lr?: string
   x?: number
   y?: number
   rx?: number | null

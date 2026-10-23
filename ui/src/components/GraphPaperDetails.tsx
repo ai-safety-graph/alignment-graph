@@ -37,6 +37,7 @@ export default function GraphPaperDetails({
   const { data: lazy, loading, error } = usePaperSummary(urlKey)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const summaryText = lazy?.sm ?? paper.sm
+  const reasonText = lazy?.lr || paper.lr
 
   useLayoutEffect(() => {
     const el = scrollerRef.current
@@ -111,6 +112,11 @@ export default function GraphPaperDetails({
         <div className='text-[13px] mb-1.5'>
           <strong>arXiv domain:</strong> {domainLabel(paper.dm)}
         </div>
+        {reasonText && (
+          <div className='text-[13px] mb-1.5'>
+            <strong>Why it's included:</strong> {reasonText}
+          </div>
+        )}
 
         <div className='flex gap-2 mb-3'>
           <a
@@ -147,15 +153,6 @@ export default function GraphPaperDetails({
               No summary available.
             </div>
           )
-        )}
-
-        {paper.sm && (
-          <>
-            <div className='font-semibold my-2 text-neutral-200'>Summary</div>
-            <p className='whitespace-pre-wrap leading-relaxed text-neutral-300'>
-              {paper.sm}
-            </p>
-          </>
         )}
 
         <div className='font-semibold my-2 text-neutral-200'>

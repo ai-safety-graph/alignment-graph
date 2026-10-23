@@ -126,6 +126,22 @@ def test_get_paper_includes_tags(client, make_paper):
     assert res.json()["tags"] == ["reward hacking", "rlhf"]
 
 
+def test_get_paper_includes_llm_reason(client, conn, make_paper):
+    aid = make_paper("2401.00053", title="Reasoned Paper")
+    conn.execute("UPDATE papers SET llm_reason = %s WHERE id = %s", ("Studies reward hacking.", aid))
+
+    res = client.get("/api/papers/2401.00053")
+    assert res.status_code == 200
+    assert res.json()["lr"] == "Studies reward hacking."
+
+
+def test_get_paper_without_llm_reason(client, make_paper):
+    make_paper("2401.00054", title="Unreasoned Paper")
+
+    res = client.get("/api/papers/2401.00054")
+    assert res.json()["lr"] == ""
+
+
 def test_get_paper_not_found(client):
     res = client.get("/api/papers/9999.99999")
     assert res.status_code == 404

@@ -156,7 +156,7 @@ Returns: an array of `{ aid, t, au, pd, ln, dm, tags, sim, rx, ry }` — `sim` i
 
 Single paper detail. The `:path` type handles both bare IDs (`2503.01694`) and full URLs (`https://arxiv.org/abs/2503.01694`).
 
-Returns `{ aid, t, au, pd, sm, ln, dm, tags }` (`sm` = summary), or 404 if no such paper.
+Returns `{ aid, t, au, pd, sm, ln, dm, tags, lr }` (`sm` = summary, `lr` = the LLM classifier's one-line relevance reason, `""` if none), or 404 if no such paper.
 
 ### `POST /api/search`
 
