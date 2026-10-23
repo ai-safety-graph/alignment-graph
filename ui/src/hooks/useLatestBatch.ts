@@ -4,7 +4,7 @@ import type { LatestBatch } from '../lib/api'
 
 /**
  * Fetches the latest pipeline batch ({date, added}) for the header badge.
- * Cached by the QueryClient so StatsView and GraphView share one request.
+ * Cached by the QueryClient so BrowseView and GraphView share one request.
  */
 export function useLatestBatch(): LatestBatch | null {
   const { data } = useQuery({

@@ -7,7 +7,7 @@ React/Vite frontend that renders AI safety paper data.
 Two renderers share one compact data model:
 
 - **`GraphView`** (desktop) → interactive force-graph canvas with keyword/semantic search and ghost nodes
-- **`StatsView`** (mobile + `/stats`) → server-filtered, paginated paper list/browser
+- **`BrowseView`** (mobile + `/browse`) → server-filtered, paginated paper list/browser
 
 All data comes from the **FastAPI backend** via `lib/api.ts`. This is **API mode** (see top-level `CLAUDE.md`): `VITE_API_URL` is assumed to be set. There are no static-file data paths; new features must not add any.
 
@@ -21,12 +21,12 @@ All data comes from the FastAPI backend via `lib/api.ts`:
 - `fetchLatestBatch()` → `GET /api/batch/latest`: latest pipeline batch for the header badge
 - `fetchCoverage()` → `GET /api/batch/coverage`: collection size and date span for the About page
 - `fetchHealth()` → `GET /health`: backend capabilities (whether semantic search is enabled), via `useCapabilities`
-- `fetchPapers(params)` → `GET /api/papers`: paginated, server-side filtered listing (used by `StatsView` via `usePaperBrowser`, and by `GraphView`'s keyword search)
-- `fetchSubgraph(ids)` → `POST /api/graph/subset`: graph data for a specific set of paper IDs (`GraphView` saved graphs and search ghosts, `StatsView` saved-graph view via `useSubgraphManager`)
+- `fetchPapers(params)` → `GET /api/papers`: paginated, server-side filtered listing (used by `BrowseView` via `usePaperBrowser`, and by `GraphView`'s keyword search)
+- `fetchSubgraph(ids)` → `POST /api/graph/subset`: graph data for a specific set of paper IDs (`GraphView` saved graphs and search ghosts, `BrowseView` saved-graph view via `useSubgraphManager`)
 - `fetchGraphRange({from, to})` → `GET /api/graph/range`: graph data for every relevant paper in a date range (desktop `GraphView`'s default recent-papers graph)
 - `fetchRelated(arxivId)` → `GET /api/papers/related`: on-demand nearest-neighbor lookup for paper detail panels and graph ghost nodes
 - `fetchPaper(url)` → `GET /api/papers/{id}`: single paper detail including summary
-- `searchPapers(query, opts)` → `POST /api/search`: semantic search (used by `GraphView` and `StatsView` in semantic mode)
+- `searchPapers(query, opts)` → `POST /api/search`: semantic search (used by `GraphView` and `BrowseView` in semantic mode)
 
 There is **no** full-graph load. The desktop graph works with either an ID subset (`fetchSubgraph`) or a date range (`fetchGraphRange`), and the list views paginate (`fetchPapers`).
 
@@ -45,14 +45,14 @@ main.tsx
 App.tsx (Routes)
   / route
     -> GraphView   (desktop, > 768px)
-    -> StatsView   (mobile,  <= 768px)
-  /stats route
-    -> StatsView   (all screen sizes)
+    -> BrowseView  (mobile,  <= 768px)
+  /browse route
+    -> BrowseView  (all screen sizes)
   /about route
     -> AboutView   (coverage, latest batch, tag glossary, privacy note)
 ```
 
-All three views are `lazy`-loaded. `useMediaQuery('(max-width: 768px)')` decides which renderer serves `/`, and `App` renders a blank screen until the query resolves. This is a **view router**, not shared responsive styling. (`MobileView` was removed. Mobile users now get `StatsView`, which adapts its layout to small screens and uses `MobilePaperDetails` as a modal.)
+All three views are `lazy`-loaded. `useMediaQuery('(max-width: 768px)')` decides which renderer serves `/`, and `App` renders a blank screen until the query resolves. This is a **view router**, not shared responsive styling. (`MobileView` was removed. Mobile users now get `BrowseView`, which adapts its layout to small screens and uses `MobilePaperDetails` as a modal.)
 
 `main.tsx` also listens for `vite:preloadError` (a stale tab requesting chunk hashes from a previous deploy) and reloads once, rate-limited via `sessionStorage`.
 
@@ -91,9 +91,9 @@ Optimized for **local neighborhood exploration**, not full persistent edge displ
 
 ---
 
-## List Renderer (`StatsView.tsx`)
+## List Renderer (`BrowseView.tsx`)
 
-Server-filtered paper browser. Serves both the `/stats` route (all sizes) and the `/` route on mobile (≤768px). The layout adapts: split-pane on desktop (list left, `StatsPaperDetails` right), and a single-column list with a `MobilePaperDetails` modal on small screens.
+Server-filtered paper browser. Serves both the `/browse` route (all sizes) and the `/` route on mobile (≤768px). The layout adapts: split-pane on desktop (list left, `BrowsePaperDetails` right), and a single-column list with a `MobilePaperDetails` modal on small screens.
 
 Responsibilities:
 - Paginated, server-side filtered loading via the shared `usePaperBrowser` hook: keyword `q` / `from` date / `tags` / `domains`, infinite scroll via its `loadMore`, `useInfiniteQuery` keyed `['papers', ...]`
@@ -122,16 +122,16 @@ Static copy plus live data: collection coverage (`fetchCoverage`, `['coverage']`
 Three detail components share a common core props interface (`paper`, `onSelectPaper`). They differ in how related papers are supplied:
 
 - `GraphPaperDetails.tsx`: fixed side panel for the desktop graph view
-- `StatsPaperDetails.tsx`: right pane for the stats view (desktop)
-- `MobilePaperDetails.tsx`: modal used by `StatsView` on small screens
+- `BrowsePaperDetails.tsx`: right pane for the browse view (desktop)
+- `MobilePaperDetails.tsx`: modal used by `BrowseView` on small screens
 
-`neighbors` is typed as `{ n: NodeCompact; w: number }[]`. In `StatsView` (both its desktop and mobile detail surfaces) it comes from `useRelatedPapers`.
+`neighbors` is typed as `{ n: NodeCompact; w: number }[]`. In `BrowseView` (both its desktop and mobile detail surfaces) it comes from `useRelatedPapers`.
 
 `GraphPaperDetails` differs from the other two in that it is **presentational**: it receives `related: RelatedPaper[]` and `relatedLoading: boolean` as props. `GraphView.tsx` owns the `fetchRelated` call (so it can also build related ghost nodes from the result) and passes the list down. Its `onSelectPaper(aid: string)` is resolved to a numeric node id via the `aidToId` map in `GraphView.tsx`. Because that map includes related ghosts, clicking a related paper navigates to its on-canvas ghost.
 
 `onSelectPaper` takes `aid: string` (the paper's canonical arXiv URL) in all three detail components.
 
-Summaries: graph nodes carry no `sm`, so `GraphPaperDetails` loads it lazily via the `usePaperSummary` hook → `lib/summaries.ts` `getSummaryByUrl()` → `fetchPaper()` (adapted to the `Summary` shape). `StatsPaperDetails`/`MobilePaperDetails` read `sm` from the `PaperDetail` that `usePaperDetail` fetches.
+Summaries: graph nodes carry no `sm`, so `GraphPaperDetails` loads it lazily via the `usePaperSummary` hook → `lib/summaries.ts` `getSummaryByUrl()` → `fetchPaper()` (adapted to the `Summary` shape). `BrowsePaperDetails`/`MobilePaperDetails` read `sm` from the `PaperDetail` that `usePaperDetail` fetches.
 
 ---
 
@@ -206,7 +206,7 @@ Do not rename compact fields without updating the API route responses (`api/rout
 
 In `GraphView`, the numeric `id` of loaded nodes is assigned server-side by `_graph_from_rows` (subset index). Ghost nodes get ids past the max existing id. The `id` only means something within a single graph session; selection, adjacency and the `aidToId`/`byId`/`simById` maps all use it.
 
-`StatsView` selects papers by `aid` (`selectedId: string | null`), not by numeric `id`. `useRelatedPapers` returns `{ n, w }` entries whose `n.id` is just the result index; identity is carried by `n.aid`, so no `aidToId` map is needed. Clicking a related paper always works, whether or not it is in the currently-loaded page. `aid` (the canonical arXiv abs URL) is the persistent identifier across the whole app.
+`BrowseView` selects papers by `aid` (`selectedId: string | null`), not by numeric `id`. `useRelatedPapers` returns `{ n, w }` entries whose `n.id` is just the result index; identity is carried by `n.aid`, so no `aidToId` map is needed. Clicking a related paper always works, whether or not it is in the currently-loaded page. `aid` (the canonical arXiv abs URL) is the persistent identifier across the whole app.
 
 ### Keyword search is server-side
 
@@ -219,7 +219,7 @@ Keyword search in both views is `GET /api/papers?q=`, an `ILIKE` match on title/
 Usually safe:
 - Renderer UX and layout
 - Overlay composition
-- Pagination and filter behavior in `StatsView`
+- Pagination and filter behavior in `BrowseView`
 - Detail panel presentation
 - `fetchRelated` limit default
 
@@ -228,7 +228,7 @@ High-risk:
 - The arXiv URL → id extraction in `fetchPaper` (`lib/api.ts`)
 - `ghostCoord()` / `separatePoints()` coordinate handling
 - `lib/storage.ts` key names (changing them orphans users' saved graphs)
-- `useServerFilters` signature: takes `tags: TagsLegend` and returns `activeTags: Set<string>`, `activeDomains: Set<string>`, `fromDate`, `datePreset`/`setDatePreset`, `tagEntries`, `hasActiveFilters`, and toggle/clear functions. In `usePaperBrowser` callers (StatsView), changing any value triggers a server re-fetch; GraphView uses it for client-side filtering only
+- `useServerFilters` signature: takes `tags: TagsLegend` and returns `activeTags: Set<string>`, `activeDomains: Set<string>`, `fromDate`, `datePreset`/`setDatePreset`, `tagEntries`, `hasActiveFilters`, and toggle/clear functions. In `usePaperBrowser` callers (BrowseView), changing any value triggers a server re-fetch; GraphView uses it for client-side filtering only
 - `GraphDataCompact` typing changes
 
 ---
@@ -240,6 +240,6 @@ Four layers:
 1. **API loading** (`lib/api.ts`, `lib/summaries.ts`, `lib/queryClient.ts`)
 2. **Shared data derivation and state** (`buildAdjacency`, `useServerFilters`, `usePaperSummary`, `useRelatedPapers`, `useTagCatalog`, `useDebouncedValue`, `usePaperBrowser`, `usePaperDetail`, `useNavHistory`, `useCapabilities`, `useLatestBatch`, `useSubgraphManager`, `lib/storage.ts`)
 3. **View routing** (`App.tsx` media query split via `useMediaQuery`)
-4. **Renderer-specific UX** (`GraphView.tsx` + `useForceConfig`/`useGraphShortcuts`, `StatsView.tsx`, `AboutView.tsx`, and shared components: `FilterBar`, `PaperList`, `TagChips`, `Dropdown`, `LoadingIndicator`, `LatestBatchBadge`, `SearchResultsOverlay`, `icons/`)
+4. **Renderer-specific UX** (`GraphView.tsx` + `useForceConfig`/`useGraphShortcuts`, `BrowseView.tsx`, `AboutView.tsx`, and shared components: `FilterBar`, `PaperList`, `TagChips`, `Dropdown`, `LoadingIndicator`, `LatestBatchBadge`, `SearchResultsOverlay`, `icons/`)
 
 Keep data assumptions shared. Keep renderer behavior separate.

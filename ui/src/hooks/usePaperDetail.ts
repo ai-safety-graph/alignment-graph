@@ -4,7 +4,7 @@ import { fetchPaper, type PaperDetail } from '../lib/api'
 /**
  * Loads the full paper detail (including summary) for the selected `aid`.
  * Returns `null` while loading or when nothing is selected. Mirrors the shape
- * of `useRelatedPapers` so StatsView reads declaratively. Cached per `aid` by
+ * of `useRelatedPapers` so BrowseView reads declaratively. Cached per `aid` by
  * the QueryClient so re-selecting a paper doesn't refetch it.
  */
 export function usePaperDetail(aid: string | null): PaperDetail | null {

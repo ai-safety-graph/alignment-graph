@@ -18,7 +18,7 @@ interface FilterBarProps {
   onToggleTag: (tag: string) => void
   onToggleDomain: (domain: string) => void
   onClearAll: () => void
-  // Date preset chips (StatsView)
+  // Date preset chips (BrowseView)
   datePreset?: DatePreset
   onSetDatePreset?: (preset: DatePreset) => void
   // Slider notches; defaults to every preset
@@ -43,7 +43,7 @@ function DateSlider({
   // A preset missing from the list is wider than the data, i.e. "Any time"
   const committedIndex = foundIndex === -1 ? lastIndex : foundIndex
   // Tracks the thumb while dragging; the filter itself only updates on commit
-  // so StatsView doesn't refetch at every notch.
+  // so BrowseView doesn't refetch at every notch.
   const [pendingIndex, setPendingIndex] = useState(committedIndex)
   const [prevCommitted, setPrevCommitted] = useState(committedIndex)
   if (committedIndex !== prevCommitted) {
