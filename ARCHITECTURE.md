@@ -80,7 +80,7 @@ See `src/aisafety_pipeline/api/ARCHITECTURE.md` for route-level details.
 
 Frontend application built with Vite/React. Owns:
 
-- Choosing desktop (`GraphView`) vs mobile (`StatsView`) rendering at `/`; `/stats` always renders `StatsView`; `/about` renders `AboutView`
+- Choosing desktop (`GraphView`) vs mobile (`BrowseView`) rendering at `/`; `/browse` always renders `BrowseView` (`/stats` redirects there); `/about` renders `AboutView`
 - Desktop graph rendering: the last month of papers by default (`GET /api/graph/range`) or a saved graph (`POST /api/graph/subset`), with keyword/semantic search and ghost nodes
 - Saved graphs (user-curated paper sets) kept in browser `localStorage`
 - Server-side filtered, paginated paper browsing for the list view (`GET /api/papers`)

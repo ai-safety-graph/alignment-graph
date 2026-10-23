@@ -5,7 +5,7 @@ export type NavEntry = { aid: string; title: string }
 /**
  * Tracks the selected paper plus a breadcrumb trail built by following
  * related-paper links, so the detail panel can offer "back to" navigation.
- * Used by StatsView.
+ * Used by BrowseView.
  */
 export function useNavHistory() {
   const [selectedId, setSelectedId] = useState<string | null>(null)

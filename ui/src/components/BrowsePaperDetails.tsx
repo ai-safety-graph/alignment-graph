@@ -22,7 +22,7 @@ interface Props {
   subgraphName?: string
 }
 
-export default function StatsPaperDetails({
+export default function BrowsePaperDetails({
   paper,
   neighbors,
   neighborsLoading,
@@ -137,7 +137,7 @@ export default function StatsPaperDetails({
             <a
               href={paper.ln}
               data-umami-event='arxiv_click'
-              data-umami-event-view='stats'
+              data-umami-event-view='browse'
               target='_blank'
               rel='noreferrer'
               className='text-[13px] text-[#4ea8de] hover:text-[#60a5fa] hover:underline'

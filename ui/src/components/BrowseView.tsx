@@ -15,7 +15,7 @@ import {
   SlidersHorizontal,
   Info,
 } from 'lucide-react'
-import StatsPaperDetails from './StatsPaperDetails'
+import BrowsePaperDetails from './BrowsePaperDetails'
 import MobilePaperDetails from './MobilePaperDetails'
 import { track } from '../lib/analytics'
 import PaperList from './PaperList'
@@ -36,7 +36,7 @@ import { useCapabilities } from '../hooks/useCapabilities'
 import { useSubgraphManager } from '../hooks/useSubgraphManager'
 import { MAX_GRAPH_NAME_LENGTH } from '../lib/storage'
 
-export default function StatsView() {
+export default function BrowseView() {
   const { tags, availableDomains, isLoading: tagsLoading } = useTagCatalog()
   const { semanticSearch: semanticSearchEnabled } = useCapabilities()
   const [searchMode, setSearchMode] = useState<'keyword' | 'semantic'>(
@@ -191,7 +191,7 @@ export default function StatsView() {
     }
   }, [selected])
 
-  const view = isSmall ? 'mobile' : 'stats'
+  const view = isSmall ? 'mobile' : 'browse'
 
   const handleSelectFromList = (aid: string) => {
     track('paper_open', { view, source: debouncedQuery ? 'search' : 'list' })
@@ -776,7 +776,7 @@ export default function StatsView() {
         <div className='hidden md:block w-1/2 border-l border-neutral-800 overflow-y-auto'>
           <div className='h-full'>
             {selected ? (
-              <StatsPaperDetails
+              <BrowsePaperDetails
                 paper={selected}
                 neighbors={neighbors}
                 neighborsLoading={neighborsLoading}

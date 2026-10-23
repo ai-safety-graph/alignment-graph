@@ -200,7 +200,7 @@ export default function ArxivGraph({ paperIds }: { paperIds?: string[] }) {
   }, [])
 
   // Data fetch. Cached by ids so revisiting the same graph (e.g. navigating
-  // away to /stats and back) doesn't refire /api/graph/subset.
+  // away to /browse and back) doesn't refire /api/graph/subset.
   const {
     data: subgraph,
     error: queryError,
@@ -968,14 +968,15 @@ export default function ArxivGraph({ paperIds }: { paperIds?: string[] }) {
           at narrower breakpoints. It stays one row tall, which the overlays'
           top offsets rely on. */}
       <div className='fixed top-3 inset-x-4 z-10 flex items-center gap-3 pointer-events-none'>
-        {/* Stats toggle + subgraph dropdown + filters */}
+        {/* Browse link + subgraph dropdown + filters */}
         <div className='shrink-0 flex items-center gap-2 pointer-events-auto'>
           <Link
-            to='/stats'
-            aria-label='Show stats'
-            className='px-2 py-1 rounded-md cursor-pointer bg-neutral-950 border border-neutral-700 hover:border-neutral-500 text-neutral-300 hover:text-white transition-colors'
+            to='/browse'
+            aria-label='Browse papers'
+            className='flex items-center gap-1.5 px-2.5 py-1 rounded-md cursor-pointer bg-neutral-950 border border-neutral-700 hover:border-neutral-500 text-[13px] text-neutral-300 hover:text-white transition-colors'
           >
-            <Library size={18} />
+            <Library size={14} />
+            Browse
           </Link>
 
           <Dropdown
@@ -1064,8 +1065,8 @@ export default function ArxivGraph({ paperIds }: { paperIds?: string[] }) {
           </div>
 
           {/* <Link
-            to='/stats'
-            aria-label='Show stats'
+            to='/browse'
+            aria-label='Browse papers'
             className='shrink-0 flex items-center gap-1.5 px-3 py-[7px] rounded-full bg-neutral-950 border border-[#333333] text-sm text-neutral-400 hover:text-neutral-200 whitespace-nowrap cursor-pointer'
           >
             New Graph
