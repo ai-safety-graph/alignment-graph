@@ -127,6 +127,11 @@ export default function StatsPaperDetails({
           <div className='text-[13px] mb-1.5'>
             <strong>arXiv domain:</strong> {domainLabel(paper.dm)}
           </div>
+          {paper.lr && (
+            <div className='text-[13px] mb-1.5'>
+              <strong>Why it's included:</strong> {paper.lr}
+            </div>
+          )}
 
           <div className='flex gap-2 mb-3'>
             <a

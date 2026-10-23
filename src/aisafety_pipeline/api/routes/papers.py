@@ -181,7 +181,7 @@ def get_paper(arxiv_id: str, conn=Depends(get_conn)):
     row = conn.execute(
         """
         SELECT id, title, authors, published, summary, link, domain_tag,
-               llm_tags AS tags
+               llm_tags AS tags, llm_reason
         FROM papers WHERE id = %s AND llm_relevant = TRUE
         """,
         (arxiv_id,),
@@ -199,4 +199,5 @@ def get_paper(arxiv_id: str, conn=Depends(get_conn)):
         "ln": row[5] or row[0],
         "dm": row[6] or "unknown",
         "tags": list(row[7]) if row[7] else [],
+        "lr": row[8] or "",
     }
