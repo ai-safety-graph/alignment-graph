@@ -49,7 +49,10 @@ def _get_session() -> requests.Session:
     retry = Retry(
         total=8,                      # overall cap
         connect=5,                    # connection-level retries
-        read=5,                       # read timeouts / incomplete reads
+        # No read retries here: _oai_fetch's own loop retries read timeouts,
+        # and stacking both (5 x 6 attempts at 120s each) let an arXiv outage
+        # stall a run for over an hour before failing.
+        read=0,
         backoff_factor=1.5,           # 0, 1.5, 3.0, 6.0, 12.0, ...
         status_forcelist=(429, 500, 502, 503, 504),
         allowed_methods=frozenset(["GET"]),
