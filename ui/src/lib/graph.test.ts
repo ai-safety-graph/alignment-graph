@@ -5,6 +5,7 @@ import {
   lc,
   nodeMatchesFilters,
   separatePoints,
+  stepAlpha,
 } from './graph'
 import type { LinkCompact, NodeCompact } from './types'
 
@@ -174,5 +175,27 @@ describe('nodeMatchesFilters', () => {
     expect(nodeMatchesFilters(node, { ...f, domains: new Set(['tech']) })).toBe(
       true,
     )
+  })
+})
+
+describe('stepAlpha', () => {
+  it('moves toward the target by dt / fadeMs', () => {
+    expect(stepAlpha(1, 0.3, 50, 100)).toBeCloseTo(0.5)
+    expect(stepAlpha(0.3, 1, 50, 100)).toBeCloseTo(0.8)
+  })
+
+  it('never overshoots the target', () => {
+    expect(stepAlpha(1, 0.3, 1000, 100)).toBe(0.3)
+    expect(stepAlpha(0.15, 1, 1000, 100)).toBe(1)
+  })
+
+  it('reaches the target within fadeMs over several frames', () => {
+    let a = 1
+    for (let t = 0; t < 100; t += 16) a = stepAlpha(a, 0.3, 16, 100)
+    expect(a).toBe(0.3)
+  })
+
+  it('stays put when dt is 0', () => {
+    expect(stepAlpha(0.6, 1, 0, 100)).toBe(0.6)
   })
 })

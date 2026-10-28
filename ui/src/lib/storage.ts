@@ -75,3 +75,24 @@ export function deleteSavedGraph(id: string): void {
   localStorage.removeItem(KEY_PREFIX + id)
   setIndex(getIndex().filter((i) => i !== id))
 }
+
+const LEGEND_COLLAPSED_KEY = 'ais_legend_collapsed'
+
+// Storage can be unavailable (private windows, blocked site data), so the
+// legend falls back to expanded and simply forgets the choice.
+export function getLegendCollapsed(): boolean {
+  try {
+    return localStorage.getItem(LEGEND_COLLAPSED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function setLegendCollapsed(collapsed: boolean): void {
+  try {
+    if (collapsed) localStorage.setItem(LEGEND_COLLAPSED_KEY, '1')
+    else localStorage.removeItem(LEGEND_COLLAPSED_KEY)
+  } catch {
+    // ignore
+  }
+}
