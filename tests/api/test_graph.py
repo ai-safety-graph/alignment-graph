@@ -87,6 +87,74 @@ def test_range_excludes_irrelevant_papers(client, make_paper):
     assert res.json()["nodes"] == []
 
 
-def test_range_requires_valid_from(client):
-    assert client.get("/api/graph/range").status_code == 422
+def test_range_rejects_malformed_dates(client):
     assert client.get("/api/graph/range", params={"from": "not-a-date"}).status_code == 422
+    assert client.get("/api/graph/range", params={"to": "not-a-date"}).status_code == 422
+
+
+def test_range_filters_by_tags_and_domain(client, make_paper):
+    rlhf = make_paper("2401.00100", published="2099-03-01", tags=[("rlhf", 0.9)])
+    hacking = make_paper("2401.00101", published="2099-03-01", tags=[("reward hacking", 0.9)])
+    gov = make_paper("2401.00102", published="2099-03-01", domain_tag="gov", tags=[("rlhf", 0.9)])
+
+    def aids(**params):
+        res = client.get("/api/graph/range", params={"from": "2099-03-01", **params})
+        assert res.status_code == 200
+        return {node["aid"] for node in res.json()["nodes"]}
+
+    assert aids(tags=["rlhf"]) == {rlhf, gov}
+    assert aids(tags=["rlhf", "reward hacking"]) == {rlhf, hacking, gov}
+    assert aids(domain=["gov"]) == {gov}
+    assert aids(tags=["rlhf"], domain=["tech"]) == {rlhf}
+
+
+def test_range_without_dates_filters_by_tag_only(client, make_paper):
+    old = make_paper("2401.00103", published="1999-01-01", tags=[("zz-unique-tag", 0.9)])
+
+    res = client.get("/api/graph/range", params={"tags": ["zz-unique-tag"]})
+    assert res.status_code == 200
+    assert [node["aid"] for node in res.json()["nodes"]] == [old]
+
+
+def test_range_caps_nodes_and_reports_total(client, make_paper, monkeypatch):
+    from aisafety_pipeline.api.routes import graph
+
+    monkeypatch.setattr(graph, "_MAX_RANGE", 2)
+    newest = make_paper("2401.00104", published="2099-04-03")
+    middle = make_paper("2401.00105", published="2099-04-02")
+    make_paper("2401.00106", published="2099-04-01")
+
+    res = client.get("/api/graph/range", params={"from": "2099-04-01", "to": "2099-04-30"})
+    assert res.status_code == 200
+    body = res.json()
+    assert [node["aid"] for node in body["nodes"]] == [newest, middle]
+    assert body["meta"]["total"] == 3
+
+
+def test_range_coords_are_stable_across_filters(client, make_paper):
+    shared = make_paper(
+        "2401.00107", published="2099-05-01", graph_x=3.0, graph_y=4.0,
+        tags=[("rlhf", 0.9), ("reward hacking", 0.5)],
+    )
+    make_paper("2401.00108", published="2099-05-01", graph_x=-50.0, graph_y=60.0, tags=[("rlhf", 0.9)])
+    make_paper("2401.00109", published="2099-05-01", graph_x=80.0, graph_y=-70.0, tags=[("reward hacking", 0.9)])
+
+    def pos(tag):
+        res = client.get("/api/graph/range", params={"from": "2099-05-01", "tags": [tag]})
+        node = next(n for n in res.json()["nodes"] if n["aid"] == shared)
+        return node["x"], node["y"]
+
+    assert pos("rlhf") == pos("reward hacking")
+
+
+def test_subset_coords_match_range(client, make_paper):
+    shared = make_paper("2401.00110", published="2099-06-01", graph_x=5.0, graph_y=-6.0, tags=[("rlhf", 0.9)])
+    other = make_paper("2401.00111", published="2099-06-01", graph_x=90.0, graph_y=40.0, tags=[("rlhf", 0.9)])
+
+    def pos(nodes):
+        node = next(n for n in nodes if n["aid"] == shared)
+        return node["x"], node["y"]
+
+    ranged = client.get("/api/graph/range", params={"from": "2099-06-01", "tags": ["rlhf"]}).json()
+    subset = client.post("/api/graph/subset", json={"ids": [shared, other]}).json()
+    assert pos(subset["nodes"]) == pos(ranged["nodes"])
