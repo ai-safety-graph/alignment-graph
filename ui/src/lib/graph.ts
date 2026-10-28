@@ -71,6 +71,26 @@ export const clamp = (v: number, min: number, max: number) =>
   Math.max(min, Math.min(max, v))
 export const lc = (s?: string | null) => (s ?? '').toLowerCase()
 
+// Node fills: papers in the loaded subgraph vs. ghost nodes surfaced as
+// related papers or by search. Shared by the canvas and the legend.
+export const SUBGRAPH_NODE_COLOR = '#6A93B0'
+export const RELATED_GHOST_NODE_COLOR = '#F4A261'
+export const SEARCH_GHOST_NODE_COLOR = '#8BD17C'
+
+// Move an alpha linearly toward `target`, covering the full 0–1 range in
+// `fadeMs`, so a node fading after `dt` ms never overshoots its target.
+export function stepAlpha(
+  current: number,
+  target: number,
+  dt: number,
+  fadeMs: number,
+) {
+  const step = fadeMs > 0 ? dt / fadeMs : 1
+  return current < target
+    ? Math.min(target, current + step)
+    : Math.max(target, current - step)
+}
+
 export function buildAdjacency(nodes: NodeCompact[], links: LinkCompact[]) {
   const byId = new Map<number, NodeCompact>()
   nodes.forEach((n) => byId.set(n.id, n))

@@ -33,7 +33,11 @@ import {
   buildAdjacency,
   clamp,
   nodeMatchesFilters,
+  RELATED_GHOST_NODE_COLOR,
+  SEARCH_GHOST_NODE_COLOR,
   separatePoints,
+  stepAlpha,
+  SUBGRAPH_NODE_COLOR,
 } from '../lib/graph'
 import type {
   TagsLegend,
@@ -45,6 +49,7 @@ import type { RelatedPaper, SearchResult } from '../lib/api'
 import { listSavedGraphs, updateSavedGraph } from '../lib/storage'
 import type { SavedGraph } from '../lib/storage'
 
+import GraphLegend from './GraphLegend'
 import GraphPaperDetails from './GraphPaperDetails'
 import SearchResultsOverlay from './SearchResultsOverlay'
 import Dropdown from './Dropdown'
@@ -54,11 +59,11 @@ import LatestBatchBadge from './LatestBatchBadge'
 import { track } from '../lib/analytics'
 import { useCapabilities } from '../hooks/useCapabilities'
 
-// Node fills: papers in the loaded subgraph vs. ghost nodes surfaced as
-// related papers or by search.
-const SUBGRAPH_NODE_COLOR = '#6A93B0'
-const RELATED_GHOST_NODE_COLOR = '#F4A261'
-const SEARCH_GHOST_NODE_COLOR = '#8BD17C'
+// Alpha of nodes outside the active node's neighbourhood: softer while
+// hovering, stronger once a node is locked. Changes fade over FADE_MS.
+const DIM_ALPHA_HOVER = 0.3
+const DIM_ALPHA_LOCKED = 0.15
+const FADE_MS = 150
 
 // Node radius in graph units, and the minimum centre-to-centre spacing that
 // pinned nodes are separated to (2 × radius plus a small gap).
@@ -488,6 +493,23 @@ export default function ArxivGraph({ paperIds }: { paperIds?: string[] }) {
     return s
   }, [activeId, dimAnchorId, adj, ghostIds])
 
+  // Dimming fades instead of snapping: each node's last drawn alpha steps
+  // toward its target every frame. Redraw is normally paused while idle, so
+  // keep it running for the length of a fade after the dim set changes.
+  const alphaRef = useRef(new Map<number, number>())
+  const lastFrameTs = useRef<number | null>(null)
+  const frameDt = useRef(0)
+  const [fading, setFading] = useState(false)
+  useEffect(() => {
+    setFading(true)
+    const t = window.setTimeout(() => setFading(false), FADE_MS + 50)
+    return () => window.clearTimeout(t)
+  }, [neighborSet, lockedId])
+  // Ids are assigned per graph response, so alphas don't carry over.
+  useEffect(() => {
+    alphaRef.current.clear()
+  }, [data])
+
   // Interaction gating
   const isInteractive = useCallback(
     (id: number) => {
@@ -790,13 +812,20 @@ export default function ArxivGraph({ paperIds }: { paperIds?: string[] }) {
     const n = node as SimNode
     const r = NODE_RADIUS
     ctx.save()
-    let alpha = 1
+    let target = 1
     if (ghostIds.has(n.id)) {
       // ghosts (search + related) keep their own alpha, never dimmed by neighborSet
-      alpha = activeId === n.id ? 0.85 : 0.55
-    } else if (neighborSet) {
-      alpha = neighborSet.has(n.id) ? 1 : 0.08
+      target = activeId === n.id ? 0.85 : 0.55
+    } else if (neighborSet && !neighborSet.has(n.id)) {
+      target = lockedId != null ? DIM_ALPHA_LOCKED : DIM_ALPHA_HOVER
     }
+    const alpha = stepAlpha(
+      alphaRef.current.get(n.id) ?? target,
+      target,
+      frameDt.current,
+      FADE_MS,
+    )
+    alphaRef.current.set(n.id, alpha)
     ctx.globalAlpha = alpha
     ctx.beginPath()
     ctx.fillStyle = searchGhostIds.has(n.id)
@@ -880,7 +909,17 @@ export default function ArxivGraph({ paperIds }: { paperIds?: string[] }) {
           linkSource='s'
           linkTarget='t'
           cooldownTicks={data.meta.coords.included ? 0 : 90}
-          autoPauseRedraw={!relatedLoading}
+          autoPauseRedraw={!relatedLoading && !fading}
+          onRenderFramePre={() => {
+            // Capped: the first frame after an idle pause would otherwise see
+            // a gap of seconds and snap straight to the target alpha.
+            const now = performance.now()
+            frameDt.current =
+              lastFrameTs.current == null
+                ? 0
+                : Math.min(now - lastFrameTs.current, 32)
+            lastFrameTs.current = now
+          }}
           enableNodeDrag={false}
           nodeCanvasObject={nodeCanvasObject}
           nodeLabel={nodeLabel}
@@ -936,6 +975,9 @@ export default function ArxivGraph({ paperIds }: { paperIds?: string[] }) {
             />
           </div>
         )}
+        <div className='pointer-events-auto'>
+          <GraphLegend />
+        </div>
       </div>
 
       {selected && (
