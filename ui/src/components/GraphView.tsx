@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import ForceGraph2D from 'react-force-graph-2d'
 import type {
@@ -146,10 +146,12 @@ export default function ArxivGraph() {
     savedGraphs.length ? null : NEW_GRAPH_MODAL,
   )
   const [confirmingDelete, setConfirmingDelete] = useState(false)
-  // Saved graph picked while a draft is open, waiting on "discard the draft?"
-  const [pendingSavedGraph, setPendingSavedGraph] = useState<SavedGraph | null>(
+  // Where the user asked to go while a draft is open (a saved graph or the
+  // browse view), waiting on "discard the draft?"
+  const [pendingExit, setPendingExit] = useState<SavedGraph | 'browse' | null>(
     null,
   )
+  const navigate = useNavigate()
   const activeSavedGraph = source.kind === 'saved' ? source.graph : null
   const setActiveSavedGraph = (graph: SavedGraph) =>
     setSource({ kind: 'saved', graph })
@@ -630,9 +632,11 @@ export default function ArxivGraph() {
   // A lone node gets a fixed zoom: zoomToFit sizes the view to its tiny bbox,
   // which zooms in absurdly far, or (with padding > half the viewport) goes
   // negative and clamps to ~0, leaving nothing visible.
-  const fitStateRef = useRef<{ nodes: SimNode[]; width: number; height: number }>(
-    { nodes: [], width: 0, height: 0 },
-  )
+  const fitStateRef = useRef<{
+    nodes: SimNode[]
+    width: number
+    height: number
+  }>({ nodes: [], width: 0, height: 0 })
   function fitView(duration: number) {
     const fg = fgRef.current
     const { nodes, width: w, height: h } = fitStateRef.current
@@ -750,14 +754,21 @@ export default function ArxivGraph() {
   const showSource = (next: GraphSource) => {
     clearSelection()
     setConfirmingDelete(false)
-    setPendingSavedGraph(null)
+    setPendingExit(null)
     setSource(next)
   }
 
   // Opening a saved graph drops an open draft, so confirm that first
   const openSavedGraph = (graph: SavedGraph) => {
-    if (source.kind === 'draft') setPendingSavedGraph(graph)
+    if (source.kind === 'draft') setPendingExit(graph)
     else showSource({ kind: 'saved', graph })
+  }
+
+  const confirmExit = () => {
+    if (!pendingExit) return
+    track('graph_discard')
+    if (pendingExit === 'browse') navigate('/browse')
+    else showSource({ kind: 'saved', graph: pendingExit })
   }
 
   const onGenerate = (filters: GraphFilters) => {
@@ -946,8 +957,8 @@ export default function ArxivGraph() {
             Build a graph from the topics you care about
           </p>
           <p className='text-sm text-neutral-500 max-w-sm'>
-            Pick tags, domains and a date window, then explore how the
-            matching papers relate.
+            Pick tags, domains and a date window, then explore how the matching
+            papers relate.
           </p>
           <button
             type='button'
@@ -1107,6 +1118,14 @@ export default function ArxivGraph() {
           <Link
             to='/browse'
             aria-label='Browse papers'
+            onClick={(e) => {
+              // Leaving the graph view drops an open draft. Opening the link
+              // in a new tab (modifier click) leaves it alone.
+              const modified = e.metaKey || e.ctrlKey || e.shiftKey || e.altKey
+              if (source.kind !== 'draft' || modified) return
+              e.preventDefault()
+              setPendingExit('browse')
+            }}
             className='flex items-center gap-1.5 px-2.5 py-1 rounded-md cursor-pointer bg-neutral-950 border border-neutral-700 hover:border-neutral-500 text-[13px] text-neutral-300 hover:text-white transition-colors'
           >
             <Library size={14} />
@@ -1149,24 +1168,25 @@ export default function ArxivGraph() {
             ))}
           </Dropdown>
 
-          {pendingSavedGraph && (
+          {pendingExit && (
             <div className='flex items-center gap-1.5 text-[13px] text-neutral-300 whitespace-nowrap'>
               Discard unsaved graph?
               {/* Keep first, as with Delete below */}
               <button
                 type='button'
-                onClick={() => setPendingSavedGraph(null)}
+                onClick={() => setPendingExit(null)}
                 className='px-2 py-0.5 rounded-md border border-neutral-700 hover:border-neutral-500 hover:text-white cursor-pointer'
               >
                 Keep
               </button>
               <button
                 type='button'
-                onClick={() => {
-                  track('graph_discard')
-                  showSource({ kind: 'saved', graph: pendingSavedGraph })
-                }}
-                title={`Discard it and open “${pendingSavedGraph.name}”`}
+                onClick={confirmExit}
+                title={
+                  pendingExit === 'browse'
+                    ? 'Discard it and browse papers'
+                    : `Discard it and open “${pendingExit.name}”`
+                }
                 className='px-2 py-0.5 rounded-md border border-red-500/60 text-red-400 hover:text-red-300 hover:border-red-400 cursor-pointer'
               >
                 Discard
