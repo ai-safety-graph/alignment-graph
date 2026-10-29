@@ -103,7 +103,7 @@ Response shape: `{ meta, tags, nodes: NodeCompact[], links: LinkCompact[] }`
 Implementation:
 - Fetches only the requested papers (must be `llm_relevant = TRUE`), newest first
 - Builds a `tags` legend (`{tag: {size}}`) from each node's `llm_tags`
-- Re-normalises stored `graph_x/y` coordinates to fit the 1000×700 canvas (24 px padding) for the subset — only when **every** node has stored coords; otherwise all nodes get `x = y = 0` and `meta.coords.method = "none"`
+- Re-normalises stored `graph_x/y` coordinates to fit the 1000×700 canvas (24 px padding) against the raw bounds of the **whole relevant corpus** (`_corpus_bounds`, same as `/range`), so a saved snapshot of a filter-built graph keeps every node where it was — only when **every** node has stored coords; otherwise all nodes get `x = y = 0` and `meta.coords.method = "none"`
 - Assigns each node's numeric `id` by index (`_graph_from_rows`)
 - Returns no links (`links: []`); related papers are fetched on demand via `GET /api/papers/related`
 
@@ -111,19 +111,22 @@ Implementation:
 
 Coordinate fields (used by the UI to align ghost nodes — see `ui/ARCHITECTURE.md`):
 - Each node carries both the canvas-normalised `x`/`y` **and** the raw stored `rx`/`ry` (= `graph_x`/`graph_y`, nullable)
-- `meta.coords.bounds` carries the subset's raw min/max (`x_min`, `x_max`, `y_min`, `y_max`) when every node has coords, else `null`. This lets the frontend re-apply *this* subset's normalisation to papers fetched in later calls (search / related), so they land in the same coordinate space rather than each call's own normalisation
+- `meta.coords.bounds` carries those corpus raw min/max (`x_min`, `x_max`, `y_min`, `y_max`) when every node has coords, else `null`. This lets the frontend re-apply the graph's normalisation to papers fetched in later calls (search / related), so they land in the same coordinate space rather than each call's own normalisation
 
 ### `GET /api/graph/range`
 
-Returns a compact graph (same shape and coordinate semantics as `/subset`) for every relevant paper published in a date range. Used by the desktop UI's default "recent papers" graph so it loads in one request instead of paginating `/api/papers` and re-posting the IDs to `/subset`.
+Returns a compact graph (same shape as `/subset`) of the relevant papers matching a set of filters. Used by the desktop UI's "Generate graph" modal to build an unsaved draft graph from filters; saving stores the result's IDs, which are reloaded through `/subset`.
 
-Query params:
-- `from` (required, `YYYY-MM-DD`), `to` (optional, inclusive; open-ended if omitted). Malformed dates return 422.
+Query params (all optional; with none, every relevant paper matches):
+- `tags` — repeatable; papers matching any given tag (`llm_tags && %s`)
+- `domain` — repeatable; OR-ed (`domain_tag = ANY(%s)`)
+- `from` / `to` (`YYYY-MM-DD`, inclusive). Malformed dates return 422.
 
 Implementation:
 - `published` is TEXT (`YYYY-MM-DD`), so bounds are compared as ISO strings
-- Newest first (`ORDER BY published DESC, id`), capped at `_MAX_SUBSET` papers
-- Node/legend/coordinate building is shared with `/subset` (`_graph_from_rows`)
+- Newest first (`ORDER BY published DESC, id`), capped at `_MAX_RANGE` (500) papers; `meta.total` carries the full match count (`count(*) OVER ()`), so the UI can say when the graph is truncated
+- Coordinates are normalised against the raw bounds of the **whole relevant corpus** (`_corpus_bounds`), not the result's own extent, so a paper lands at the same canvas position whichever filters selected it. `meta.coords.bounds` reports those corpus bounds, so ghost placement (`ghostCoord` in the UI) works unchanged
+- Node/legend building is shared with `/subset` (`_graph_from_rows`)
 
 ### `GET /api/papers`
 

@@ -12,8 +12,12 @@ from ..ratelimit import expensive_limit, limiter
 
 router = APIRouter(prefix="/api/graph", tags=["graph"])
 
-# Large enough for a month of relevant papers (the UI's default graph).
+# Large enough for a month of relevant papers.
 _MAX_SUBSET = 5000
+
+# Filter-built graphs keep the newest papers up to this cap, so a broad
+# filter stays readable; `meta.total` reports the full match count.
+_MAX_RANGE = 500
 
 
 class SubsetRequest(BaseModel):
@@ -43,29 +47,66 @@ def _build_subgraph(conn, paper_ids: list[str]) -> dict:
         WHERE id = ANY(%s) AND llm_relevant = TRUE
         ORDER BY published DESC
     """, (paper_ids,)).fetchall()
-    return _graph_from_rows(rows)
+    # Corpus bounds, like /range, so a saved snapshot of a filter-built graph
+    # renders with every node where it was before saving.
+    return _graph_from_rows(rows, bounds=_corpus_bounds(conn))
 
 
 def _build_range_graph(
-    conn, from_date: dt.date, to_date: dt.date | None
+    conn,
+    from_date: dt.date | None,
+    to_date: dt.date | None,
+    tags: list[str],
+    domains: list[str],
 ) -> dict:
     # `published` is TEXT (YYYY-MM-DD), so compare as ISO strings.
-    where = ["llm_relevant = TRUE", "published >= %s"]
-    params: list = [from_date.isoformat()]
+    where = ["llm_relevant = TRUE"]
+    params: list = []
+    if tags:
+        where.append("llm_tags && %s")
+        params.append(tags)
+    if domains:
+        where.append("domain_tag = ANY(%s)")
+        params.append(domains)
+    if from_date:
+        where.append("published >= %s")
+        params.append(from_date.isoformat())
     if to_date:
         where.append("published <= %s")
         params.append(to_date.isoformat())
+    # count(*) OVER () reports the full match count alongside the capped rows.
     rows = conn.execute(f"""
-        SELECT {_GRAPH_COLUMNS}
+        SELECT {_GRAPH_COLUMNS}, count(*) OVER () AS total
         FROM papers
         WHERE {" AND ".join(where)}
         ORDER BY published DESC, id
         LIMIT %s
-    """, (*params, _MAX_SUBSET)).fetchall()
-    return _graph_from_rows(rows)
+    """, (*params, _MAX_RANGE)).fetchall()
+    graph = _graph_from_rows(rows, bounds=_corpus_bounds(conn))
+    graph["meta"]["total"] = rows[0][9] if rows else 0
+    return graph
 
 
-def _graph_from_rows(rows) -> dict:
+def _corpus_bounds(conn) -> dict | None:
+    """Raw layout bounds over every relevant paper. Normalising range graphs
+    against these (rather than each result's own extent) keeps a paper at the
+    same canvas position whichever filters selected it."""
+    row = conn.execute("""
+        SELECT min(graph_x), max(graph_x), min(graph_y), max(graph_y)
+        FROM papers
+        WHERE llm_relevant = TRUE AND graph_x IS NOT NULL AND graph_y IS NOT NULL
+    """).fetchone()
+    if not row or row[0] is None:
+        return None
+    return {
+        "x_min": float(row[0]), "x_max": float(row[1]),
+        "y_min": float(row[2]), "y_max": float(row[3]),
+    }
+
+
+def _graph_from_rows(rows, bounds: dict | None = None) -> dict:
+    """Compact graph for `rows`. Coords are normalised to the canvas using
+    `bounds` when given, else the rows' own min/max."""
     if not rows:
         return {
             "meta": {
@@ -112,8 +153,12 @@ def _graph_from_rows(rows) -> dict:
     has_coords = len(x_vals) == N
 
     if has_coords:
-        x_min, x_max = min(x_vals), max(x_vals)
-        y_min, y_max = min(y_vals), max(y_vals)
+        if bounds:
+            x_min, x_max = bounds["x_min"], bounds["x_max"]
+            y_min, y_max = bounds["y_min"], bounds["y_max"]
+        else:
+            x_min, x_max = min(x_vals), max(x_vals)
+            y_min, y_max = min(y_vals), max(y_vals)
         x_range = max(x_max - x_min, 1e-9)
         y_range = max(y_max - y_min, 1e-9)
         for p in papers:
@@ -173,10 +218,12 @@ def get_subgraph(request: Request, body: SubsetRequest, conn=Depends(get_conn)):
 @limiter.limit(expensive_limit)
 def get_range_graph(
     request: Request,
-    from_date: dt.date = Query(..., alias="from"),
+    from_date: dt.date | None = Query(None, alias="from"),
     to_date: dt.date | None = Query(None, alias="to"),
+    tags: list[str] = Query(default=[]),
+    domain: list[str] = Query(default=[]),
     conn=Depends(get_conn),
 ):
-    """Graph of relevant papers published in [from, to], newest first,
-    capped at the same size as a subset request."""
-    return _build_range_graph(conn, from_date, to_date)
+    """Graph of relevant papers matching the filters (any of `tags`, any of
+    `domain`, published in [from, to]), newest first, capped at _MAX_RANGE."""
+    return _build_range_graph(conn, from_date, to_date, tags, domain)
