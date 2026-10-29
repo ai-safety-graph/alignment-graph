@@ -146,6 +146,10 @@ export default function ArxivGraph() {
     savedGraphs.length ? null : NEW_GRAPH_MODAL,
   )
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  // Saved graph picked while a draft is open, waiting on "discard the draft?"
+  const [pendingSavedGraph, setPendingSavedGraph] = useState<SavedGraph | null>(
+    null,
+  )
   const activeSavedGraph = source.kind === 'saved' ? source.graph : null
   const setActiveSavedGraph = (graph: SavedGraph) =>
     setSource({ kind: 'saved', graph })
@@ -746,7 +750,14 @@ export default function ArxivGraph() {
   const showSource = (next: GraphSource) => {
     clearSelection()
     setConfirmingDelete(false)
+    setPendingSavedGraph(null)
     setSource(next)
+  }
+
+  // Opening a saved graph drops an open draft, so confirm that first
+  const openSavedGraph = (graph: SavedGraph) => {
+    if (source.kind === 'draft') setPendingSavedGraph(graph)
+    else showSource({ kind: 'saved', graph })
   }
 
   const onGenerate = (filters: GraphFilters) => {
@@ -1125,7 +1136,7 @@ export default function ArxivGraph() {
               <button
                 key={g.id}
                 type='button'
-                onClick={() => showSource({ kind: 'saved', graph: g })}
+                onClick={() => openSavedGraph(g)}
                 title={g.name}
                 className={`w-full truncate text-left px-4 py-2 text-sm hover:bg-[#333333] cursor-pointer transition-colors ${
                   activeSavedGraph?.id === g.id
@@ -1137,6 +1148,31 @@ export default function ArxivGraph() {
               </button>
             ))}
           </Dropdown>
+
+          {pendingSavedGraph && (
+            <div className='flex items-center gap-1.5 text-[13px] text-neutral-300 whitespace-nowrap'>
+              Discard unsaved graph?
+              {/* Keep first, as with Delete below */}
+              <button
+                type='button'
+                onClick={() => setPendingSavedGraph(null)}
+                className='px-2 py-0.5 rounded-md border border-neutral-700 hover:border-neutral-500 hover:text-white cursor-pointer'
+              >
+                Keep
+              </button>
+              <button
+                type='button'
+                onClick={() => {
+                  track('graph_discard')
+                  showSource({ kind: 'saved', graph: pendingSavedGraph })
+                }}
+                title={`Discard it and open “${pendingSavedGraph.name}”`}
+                className='px-2 py-0.5 rounded-md border border-red-500/60 text-red-400 hover:text-red-300 hover:border-red-400 cursor-pointer'
+              >
+                Discard
+              </button>
+            </div>
+          )}
 
           {activeSavedGraph &&
             (confirmingDelete ? (
