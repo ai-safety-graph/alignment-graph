@@ -31,6 +31,21 @@ npm run build   # also runs the TypeScript typecheck
 
 CI (`.github/workflows/ci.yml`) runs all of these on every push and PR against `main`.
 
+## Code review
+
+Every PR gets an AI-first review before merge. Run it in Claude Code:
+
+```
+/review-pr <PR number>
+```
+
+It reviews the diff in a fresh context against [`.claude/review-rules.md`](.claude/review-rules.md) and posts a single verdict comment on the PR (re-runs edit that comment in place):
+
+- **AI-CLEARED**: no risk paths touched and no serious findings. Green CI plus a skim is enough to merge.
+- **ESCALATE**: the PR touches a risk path (schema, migrations, CORS, route order, compact fields, pgvector SQL, infra, rate limiting) or has a high-severity or uncertain finding. Work through the "Human verification" checklist in the comment yourself and tick each item before merging.
+
+The rules file is the source of truth for what escalates. Update it, not the skill, when the invariants change.
+
 ### Running the Python tests locally
 
 The API tests and the pipeline `tests/pipeline/*_db.py` tests exercise real code against a real Postgres/pgvector database (no mocking — the code relies on raw SQL and pgvector's `<=>` operator). Most run inside a transaction that's rolled back afterward; a few pipeline tests (e.g. `test_incremental_stages_db.py`) need real commits and clean up their own rows instead. Either way they read whatever rows already exist in the database, so **don't point them at your working dev database** if it has real harvested papers in it; use a separate, empty database instead:
