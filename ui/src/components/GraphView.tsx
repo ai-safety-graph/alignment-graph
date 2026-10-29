@@ -434,9 +434,7 @@ export default function ArxivGraph() {
     return () => {
       if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current)
     }
-    // `data` re-runs the search when the graph changes, so ghosts never keep
-    // ids or positions from the previous graph
-  }, [query, searchMode, data])
+  }, [query, searchMode])
 
   // Search results for overlay
   const searchResults = useMemo(() => {
