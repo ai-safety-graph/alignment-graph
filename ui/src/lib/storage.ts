@@ -1,6 +1,9 @@
+import type { GraphFilters } from './graphFilters'
+
 const KEY_PREFIX = 'ais_graph_'
 const INDEX_KEY = 'ais_graphs'
 const MAX_GRAPHS = 50
+// Must stay >= the backend's _MAX_RANGE so a full generated graph can be saved.
 const MAX_PAPERS = 500
 export const MAX_GRAPH_NAME_LENGTH = 40
 
@@ -8,6 +11,9 @@ export type SavedGraph = {
   id: string
   name: string
   paperIds: string[]
+  // Recipe the graph was generated from; absent on graphs saved before
+  // graphs were built from filters.
+  filters?: GraphFilters
   createdAt: string
   updatedAt: string
 }
@@ -44,7 +50,11 @@ export function getSavedGraph(id: string): SavedGraph | null {
   }
 }
 
-export function createSavedGraph(name: string, paperIds: string[]): SavedGraph {
+export function createSavedGraph(
+  name: string,
+  paperIds: string[],
+  filters?: GraphFilters,
+): SavedGraph {
   const index = getIndex()
   if (index.length >= MAX_GRAPHS)
     throw new Error(`Maximum ${MAX_GRAPHS} saved graphs reached`)
@@ -52,7 +62,14 @@ export function createSavedGraph(name: string, paperIds: string[]): SavedGraph {
     throw new Error(`Maximum ${MAX_PAPERS} papers per graph`)
   const id = crypto.randomUUID()
   const now = new Date().toISOString()
-  const graph: SavedGraph = { id, name, paperIds, createdAt: now, updatedAt: now }
+  const graph: SavedGraph = {
+    id,
+    name,
+    paperIds,
+    ...(filters ? { filters } : {}),
+    createdAt: now,
+    updatedAt: now,
+  }
   localStorage.setItem(KEY_PREFIX + id, JSON.stringify(graph))
   setIndex([...index, id])
   return graph
@@ -60,7 +77,7 @@ export function createSavedGraph(name: string, paperIds: string[]): SavedGraph {
 
 export function updateSavedGraph(
   id: string,
-  updates: Partial<Pick<SavedGraph, 'name' | 'paperIds'>>,
+  updates: Partial<Pick<SavedGraph, 'name' | 'paperIds' | 'filters'>>,
 ): SavedGraph {
   const existing = getSavedGraph(id)
   if (!existing) throw new Error(`Graph ${id} not found`)

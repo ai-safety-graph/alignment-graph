@@ -64,7 +64,7 @@ export default function GraphLegend() {
       </ul>
       <p className='leading-snug'>
         Papers are placed near others on similar topics, so closer means more
-        alike. Use Filters to narrow by tag.
+        alike. Use Generate graph to choose which papers are shown.
       </p>
     </div>
   )

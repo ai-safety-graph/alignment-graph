@@ -7,7 +7,7 @@ import {
   useState,
 } from 'react'
 import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import ForceGraph2D from 'react-force-graph-2d'
 import type {
   ForceGraphMethods,
@@ -16,44 +16,49 @@ import type {
 } from 'react-force-graph-2d'
 import {
   Trash,
+  Trash2,
   Search,
   Library,
   Sparkles,
-  SlidersHorizontal,
+  Plus,
+  Pencil,
   Info,
 } from 'lucide-react'
 
 import { useForceConfig } from '../hooks/useForceConfig'
 import { useGraphShortcuts } from '../hooks/useGraphShortcuts'
 import {
-  availableDatePresets,
-  useServerFilters,
-} from '../hooks/useServerFilters'
-import {
   buildAdjacency,
   clamp,
-  nodeMatchesFilters,
   RELATED_GHOST_NODE_COLOR,
   SEARCH_GHOST_NODE_COLOR,
   separatePoints,
   stepAlpha,
   SUBGRAPH_NODE_COLOR,
 } from '../lib/graph'
-import type {
-  TagsLegend,
-  GraphDataCompact,
-  LinkCompact,
-  NodeCompact,
-} from '../lib/types'
+import type { GraphDataCompact, LinkCompact, NodeCompact } from '../lib/types'
 import type { RelatedPaper, SearchResult } from '../lib/api'
-import { listSavedGraphs, updateSavedGraph } from '../lib/storage'
+import {
+  createSavedGraph,
+  deleteSavedGraph,
+  listSavedGraphs,
+  MAX_GRAPH_NAME_LENGTH,
+  updateSavedGraph,
+} from '../lib/storage'
 import type { SavedGraph } from '../lib/storage'
+import {
+  defaultGraphName,
+  EMPTY_FILTERS,
+  toRangeParams,
+} from '../lib/graphFilters'
+import type { GraphFilters } from '../lib/graphFilters'
 
 import GraphLegend from './GraphLegend'
 import GraphPaperDetails from './GraphPaperDetails'
 import SearchResultsOverlay from './SearchResultsOverlay'
 import Dropdown from './Dropdown'
-import FilterBar from './FilterBar'
+import DraftGraphBar from './DraftGraphBar'
+import GenerateGraphModal from './GenerateGraphModal'
 import LoadingIndicator from './LoadingIndicator'
 import LatestBatchBadge from './LatestBatchBadge'
 import { track } from '../lib/analytics'
@@ -96,22 +101,60 @@ function ghostCoord(
   }
 }
 
-export default function ArxivGraph({ paperIds }: { paperIds?: string[] }) {
+// What the canvas shows: nothing yet, an unsaved graph generated from filters
+// (`basedOn` = the saved graph it was edited from), or a saved graph.
+type GraphSource =
+  | { kind: 'none' }
+  | { kind: 'draft'; filters: GraphFilters; basedOn: SavedGraph | null }
+  | { kind: 'saved'; graph: SavedGraph }
+
+type ModalState = {
+  mode: 'generate' | 'edit'
+  initialFilters: GraphFilters
+  basedOn: SavedGraph | null
+}
+
+const NEW_GRAPH_MODAL: ModalState = {
+  mode: 'generate',
+  initialFilters: EMPTY_FILTERS,
+  basedOn: null,
+}
+
+function byUpdatedDesc(a: SavedGraph, b: SavedGraph) {
+  return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+}
+
+export default function ArxivGraph() {
   const fgRef = useRef<ForceGraphMethods<NodeCompact, LinkCompact> | undefined>(
     undefined,
   )
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const { semanticSearch: semanticSearchEnabled } = useCapabilities()
+  const queryClient = useQueryClient()
 
   const [savedGraphs, setSavedGraphs] = useState<SavedGraph[]>(() =>
-    listSavedGraphs().sort(
-      (a, b) =>
-        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-    ),
+    listSavedGraphs().sort(byUpdatedDesc),
   )
-  const [activeSavedGraph, setActiveSavedGraph] = useState<SavedGraph | null>(
-    () => (paperIds?.length ? null : (savedGraphs[0] ?? null)),
+  // Returning visitors land on their most recently used saved graph; first
+  // visitors get the Generate graph modal.
+  const [source, setSource] = useState<GraphSource>(() =>
+    savedGraphs[0]
+      ? { kind: 'saved', graph: savedGraphs[0] }
+      : { kind: 'none' },
   )
+  const [modal, setModal] = useState<ModalState | null>(() =>
+    savedGraphs.length ? null : NEW_GRAPH_MODAL,
+  )
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const activeSavedGraph = source.kind === 'saved' ? source.graph : null
+  const setActiveSavedGraph = (graph: SavedGraph) =>
+    setSource({ kind: 'saved', graph })
+
+  // Last saved graph shown, so discarding a draft can go back to it.
+  const lastSavedIdRef = useRef<string | null>(activeSavedGraph?.id ?? null)
+  useEffect(() => {
+    if (activeSavedGraph) lastSavedIdRef.current = activeSavedGraph.id
+  }, [activeSavedGraph])
 
   const addToActiveSavedGraph = (aid: string) => {
     if (!activeSavedGraph) return
@@ -139,37 +182,26 @@ export default function ArxivGraph({ paperIds }: { paperIds?: string[] }) {
     setActiveSavedGraph(updated)
   }
 
-  const wantsRecentPapers = !paperIds?.length && !activeSavedGraph
-
-  // Fallback graph when nothing is explicitly selected: papers published in
-  // the last month, fetched as a graph in one request. Uses the app-wide
-  // infinite staleTime, so it is fetched once per page load.
+  // A draft is fetched straight from its filters in one request. Uses the
+  // app-wide infinite staleTime, so regenerating the same filters is free.
+  const draftFilters = source.kind === 'draft' ? source.filters : null
   const {
-    data: recentGraph,
-    isLoading: isRecentLoading,
-    error: recentError,
+    data: draftGraph,
+    isLoading: isDraftLoading,
+    error: draftError,
   } = useQuery({
-    queryKey: ['recentGraph'],
+    queryKey: ['graphRange', draftFilters],
     queryFn: async () => {
       const { fetchGraphRange } = await import('../lib/api')
-      const to = new Date()
-      const from = new Date(to)
-      from.setMonth(from.getMonth() - 1)
-      return fetchGraphRange({
-        from: from.toISOString().slice(0, 10),
-        to: to.toISOString().slice(0, 10),
-      })
+      return fetchGraphRange(toRangeParams(draftFilters!))
     },
-    enabled: wantsRecentPapers,
+    enabled: !!draftFilters,
   })
 
-  const ids = paperIds?.length ? paperIds : (activeSavedGraph?.paperIds ?? [])
+  const ids = activeSavedGraph?.paperIds ?? []
 
-  const isDemo = wantsRecentPapers
   const isEmptySavedGraph =
-    !paperIds?.length &&
-    !!activeSavedGraph &&
-    activeSavedGraph.paperIds.length === 0
+    !!activeSavedGraph && activeSavedGraph.paperIds.length === 0
 
   const [hoverId, setHoverId] = useState<number | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -220,13 +252,21 @@ export default function ArxivGraph({ paperIds }: { paperIds?: string[] }) {
     // empty ids list, so skip the request and show an empty-state instead.
     enabled: ids.length > 0,
   })
-  const data = wantsRecentPapers ? recentGraph : subgraph
-  const error = recentError
-    ? `Failed to load recent papers: ${recentError.message}`
-    : queryError
-      ? `Failed to load graph: ${queryError.message}`
-      : null
-  const showLoading = isRecentLoading || (isGraphLoading && ids.length > 0)
+  const data =
+    source.kind === 'draft'
+      ? draftGraph
+      : source.kind === 'saved'
+        ? subgraph
+        : undefined
+  const error =
+    source.kind === 'draft' && draftError
+      ? `Failed to generate graph: ${draftError.message}`
+      : source.kind === 'saved' && queryError
+        ? `Failed to load graph: ${queryError.message}`
+        : null
+  const showLoading =
+    (source.kind === 'draft' && isDraftLoading) ||
+    (source.kind === 'saved' && isGraphLoading && ids.length > 0)
 
   // Prepare simulation nodes (mutable x/y)
   // Stored coords are pinned, so the collide force never runs on them; resolve
@@ -287,98 +327,18 @@ export default function ArxivGraph({ paperIds }: { paperIds?: string[] }) {
     [searchGhostIds, relatedGhostNodes],
   )
 
-  const { byId, adj, tags } = useMemo(() => {
+  const { byId, adj } = useMemo(() => {
     if (!data) {
       return {
         byId: new Map<number, NodeCompact>(),
         adj: new Map<number, Array<{ id: number; w: number }>>(),
-        tags: {} as TagsLegend,
       }
     }
     const { byId, adj } = buildAdjacency(data.nodes, data.links)
     for (const n of ghostSimNodes) byId.set(n.id, n)
     for (const n of relatedGhostNodes) byId.set(n.id, n)
-    return { byId, adj, tags: data.tags }
+    return { byId, adj }
   }, [data, ghostSimNodes, relatedGhostNodes])
-
-  // Filters (client-side, over the loaded subgraph). Excluded subgraph nodes
-  // and their links are dropped from graphData; ghosts are always shown since
-  // they're results the user explicitly asked for.
-  const {
-    fromDate,
-    datePreset,
-    setDatePreset,
-    activeTags,
-    activeDomains,
-    tagEntries,
-    hasActiveFilters,
-    clearAllFilters,
-    toggleTag,
-    toggleDomain,
-  } = useServerFilters(tags)
-  const [filtersOpen, setFiltersOpen] = useState(false)
-  const filtersRef = useRef<HTMLDivElement | null>(null)
-  const activeFilterCount =
-    activeTags.size + activeDomains.size + (datePreset !== 'all' ? 1 : 0)
-
-  // Capture phase: d3-zoom on the graph canvas stops mousedown propagation,
-  // so a bubbling listener would never see clicks on the graph itself.
-  useEffect(() => {
-    if (!filtersOpen) return
-    const h = (e: PointerEvent) => {
-      if (filtersRef.current && !filtersRef.current.contains(e.target as Node))
-        setFiltersOpen(false)
-    }
-    document.addEventListener('pointerdown', h, true)
-    return () => document.removeEventListener('pointerdown', h, true)
-  }, [filtersOpen])
-
-  const availableDomains = useMemo(
-    () => [...new Set(simNodes.map((n) => n.dm))].sort(),
-    [simNodes],
-  )
-
-  // Only offer date windows that narrow the loaded graph
-  const datePresets = useMemo(() => {
-    let oldest: string | undefined
-    for (const n of simNodes) {
-      const pd = n.pd?.slice(0, 10)
-      if (pd && (oldest === undefined || pd < oldest)) oldest = pd
-    }
-    return availableDatePresets(oldest)
-  }, [simNodes])
-
-  // Tag counts over the papers matching the date and domain filters (tag
-  // filters are left out so selecting a tag doesn't zero the others)
-  const filteredTagEntries = useMemo(() => {
-    if (!fromDate && activeDomains.size === 0) return tagEntries
-    const f = { tags: new Set<string>(), domains: activeDomains, fromDate }
-    const counts = new Map<string, number>()
-    for (const n of simNodes) {
-      if (!nodeMatchesFilters(n, f)) continue
-      for (const t of n.tags) counts.set(t, (counts.get(t) ?? 0) + 1)
-    }
-    return tagEntries.map(
-      ([tag, meta]) =>
-        [tag, { ...meta, size: counts.get(tag) ?? 0 }] as [
-          string,
-          { size: number },
-        ],
-    )
-  }, [tagEntries, simNodes, fromDate, activeDomains])
-
-  // Reset a preset the reloaded graph no longer supports
-  useEffect(() => {
-    if (!datePresets.some((p) => p.value === datePreset)) setDatePreset('all')
-  }, [datePresets, datePreset, setDatePreset])
-
-  const visibleIds = useMemo(() => {
-    if (!hasActiveFilters) return null
-    const f = { tags: activeTags, domains: activeDomains, fromDate }
-    return new Set(
-      simNodes.filter((n) => nodeMatchesFilters(n, f)).map((n) => n.id),
-    )
-  }, [simNodes, hasActiveFilters, activeTags, activeDomains, fromDate])
 
   // Debounced backend search
   const searchTimerRef = useRef<number | null>(null)
@@ -631,13 +591,20 @@ export default function ArxivGraph({ paperIds }: { paperIds?: string[] }) {
   useForceConfig(fgRef, !!data)
 
   // Autofit once per graph source
+  const sourceKey =
+    source.kind === 'draft'
+      ? `draft:${JSON.stringify(source.filters)}`
+      : source.kind === 'saved'
+        ? `saved:${source.graph.id}`
+        : 'none'
   const didAutoFit = useRef(false)
   useEffect(() => {
     didAutoFit.current = false
-  }, [activeSavedGraph])
+  }, [sourceKey])
 
-  // ESC unlock (global)
+  // ESC unlock (global). Off while the modal is open, which handles its own Esc.
   useEffect(() => {
+    if (modal) return
     const h = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (hoverId != null && !ghostIds.has(hoverId))
@@ -652,7 +619,7 @@ export default function ArxivGraph({ paperIds }: { paperIds?: string[] }) {
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
-  }, [hoverId, lockedId, simById])
+  }, [hoverId, lockedId, simById, modal])
 
   // Fit the camera to the rendered nodes. Read through a ref so the ESC
   // handler's closure never fits against stale nodes or viewport size.
@@ -760,26 +727,113 @@ export default function ArxivGraph({ paperIds }: { paperIds?: string[] }) {
   }
 
   // Keyboard shortcuts
-  useGraphShortcuts({ query, setQuery, onBackgroundClick, searchInputRef })
+  useGraphShortcuts({
+    query,
+    setQuery,
+    onBackgroundClick,
+    searchInputRef,
+    enabled: !modal,
+  })
+
+  // Graph source actions. Switching source drops the selection, whose ids
+  // belong to the outgoing graph.
+  const clearSelection = () => {
+    setSelectedId(null)
+    setLockedId(null)
+    setHoverId(null)
+  }
+
+  const showSource = (next: GraphSource) => {
+    clearSelection()
+    setConfirmingDelete(false)
+    setSource(next)
+  }
+
+  const onGenerate = (filters: GraphFilters) => {
+    track('graph_generate', {
+      tags: filters.tags.length,
+      domains: filters.domains.length,
+      date: filters.datePreset,
+      mode: modal?.mode ?? 'generate',
+    })
+    showSource({ kind: 'draft', filters, basedOn: modal?.basedOn ?? null })
+    setModal(null)
+  }
+
+  const openEdit = () => {
+    if (source.kind === 'draft') {
+      setModal({
+        mode: 'edit',
+        initialFilters: source.filters,
+        basedOn: source.basedOn,
+      })
+    } else if (source.kind === 'saved') {
+      track('graph_edit')
+      setModal({
+        mode: 'edit',
+        initialFilters: source.graph.filters ?? EMPTY_FILTERS,
+        basedOn: source.graph,
+      })
+    }
+  }
+
+  // Stores the draft and switches to it as a saved graph. The draft's graph
+  // is seeded into the subset query, which would return the same nodes at
+  // the same (corpus-normalised) coords, so saving doesn't refetch.
+  const saveDraft = (target: SavedGraph | null, name?: string) => {
+    if (source.kind !== 'draft' || !draftGraph) return 'Graph not loaded yet'
+    const paperIds = draftGraph.nodes.map((n) => n.aid)
+    let saved: SavedGraph
+    try {
+      saved = target
+        ? updateSavedGraph(target.id, { paperIds, filters: source.filters })
+        : createSavedGraph(name!, paperIds, source.filters)
+    } catch (e) {
+      return e instanceof Error ? e.message : 'Could not save graph'
+    }
+    track('graph_save', { kind: target ? 'update' : 'new' })
+    queryClient.setQueryData(['subgraph', paperIds], draftGraph)
+    setSavedGraphs((prev) => [saved, ...prev.filter((s) => s.id !== saved.id)])
+    showSource({ kind: 'saved', graph: saved })
+    return null
+  }
+
+  const discardDraft = () => {
+    if (source.kind !== 'draft') return
+    track('graph_discard')
+    const back =
+      savedGraphs.find((s) => s.id === source.basedOn?.id) ??
+      savedGraphs.find((s) => s.id === lastSavedIdRef.current)
+    if (back) {
+      showSource({ kind: 'saved', graph: back })
+    } else {
+      showSource({ kind: 'none' })
+      setModal(NEW_GRAPH_MODAL)
+    }
+  }
+
+  const deleteActiveSavedGraph = () => {
+    if (!activeSavedGraph) return
+    deleteSavedGraph(activeSavedGraph.id)
+    const remaining = savedGraphs.filter((s) => s.id !== activeSavedGraph.id)
+    setSavedGraphs(remaining)
+    if (remaining[0]) {
+      showSource({ kind: 'saved', graph: remaining[0] })
+    } else {
+      showSource({ kind: 'none' })
+      setModal(NEW_GRAPH_MODAL)
+    }
+  }
 
   const allSimNodes = useMemo(
-    () => [
-      ...(visibleIds ? simNodes.filter((n) => visibleIds.has(n.id)) : simNodes),
-      ...ghostSimNodes,
-      ...relatedGhostNodes,
-    ],
-    [simNodes, visibleIds, ghostSimNodes, relatedGhostNodes],
+    () => [...simNodes, ...ghostSimNodes, ...relatedGhostNodes],
+    [simNodes, ghostSimNodes, relatedGhostNodes],
   )
 
-  const graphData = useMemo(() => {
-    const links = data?.links ?? []
-    return {
-      nodes: allSimNodes,
-      links: visibleIds
-        ? links.filter((l) => visibleIds.has(l.s) && visibleIds.has(l.t))
-        : links,
-    }
-  }, [allSimNodes, data, visibleIds])
+  const graphData = useMemo(
+    () => ({ nodes: allSimNodes, links: data?.links ?? [] }),
+    [allSimNodes, data],
+  )
   // Related ghosts are excluded: every fit (ESC / background click) also
   // deselects, which clears them right after, so fitting to them would frame
   // nodes that are about to vanish.
@@ -788,20 +842,6 @@ export default function ArxivGraph({ paperIds }: { paperIds?: string[] }) {
     width,
     height,
   }
-
-  // Drop the selection/hover when a filter hides the node it points at.
-  useEffect(() => {
-    if (!visibleIds) return
-    const isHidden = (id: number | null) =>
-      id != null && !ghostIds.has(id) && !visibleIds.has(id)
-    if (isHidden(selectedId) || isHidden(lockedId) || isHidden(hoverId)) {
-      setLockedId(null)
-      setHoverId(null)
-      setSelectedId(null)
-    }
-  }, [visibleIds, ghostIds, selectedId, lockedId, hoverId])
-
-  if (error) return <div className='text-red-600 p-4'>{error}</div>
 
   // Rendering helpers
   const nodeCanvasObject = (
@@ -884,19 +924,60 @@ export default function ArxivGraph({ paperIds }: { paperIds?: string[] }) {
           </p>
         </div>
       )}
-      {data && visibleIds?.size === 0 && (
-        <div className='absolute inset-0 z-[1] flex flex-col items-center justify-center gap-3 px-4 text-center pointer-events-none'>
+      {error && (
+        <div className='absolute inset-0 flex items-center justify-center px-4 text-center text-red-500'>
+          {error}
+        </div>
+      )}
+      {source.kind === 'none' && !modal && (
+        <div className='absolute inset-0 flex flex-col items-center justify-center gap-3 px-4 text-center'>
           <p className='text-lg text-neutral-300'>
-            No papers match these filters
+            Build a graph from the topics you care about
+          </p>
+          <p className='text-sm text-neutral-500 max-w-sm'>
+            Pick tags, domains and a date window, then explore how the
+            matching papers relate.
           </p>
           <button
             type='button'
-            onClick={clearAllFilters}
-            className='pointer-events-auto px-3 py-1 rounded-md border bg-neutral-950 border-neutral-700 text-sm text-neutral-400 hover:text-neutral-200 hover:border-neutral-500 cursor-pointer'
+            onClick={() => setModal(NEW_GRAPH_MODAL)}
+            className='mt-1 flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#4ea8de] text-sm font-medium text-neutral-950 hover:bg-[#6bb8e6] cursor-pointer'
           >
-            Clear filters
+            <Plus size={15} />
+            Generate graph
           </button>
         </div>
+      )}
+      {source.kind === 'draft' && draftGraph && (
+        <div className='fixed bottom-4 inset-x-0 z-10 flex justify-center pointer-events-none'>
+          <div className='pointer-events-auto'>
+            <DraftGraphBar
+              // Remount per draft so a half-typed name doesn't carry over
+              key={sourceKey}
+              shown={draftGraph.nodes.length}
+              total={draftGraph.meta.total ?? draftGraph.nodes.length}
+              defaultName={defaultGraphName(
+                source.filters,
+                MAX_GRAPH_NAME_LENGTH,
+              )}
+              basedOnName={source.basedOn?.name}
+              onSave={(name) => saveDraft(null, name)}
+              onUpdate={() => saveDraft(source.basedOn)}
+              onEdit={openEdit}
+              onDiscard={discardDraft}
+            />
+          </div>
+        </div>
+      )}
+      {modal && (
+        <GenerateGraphModal
+          // Remount per opening so the form re-seeds from initialFilters
+          key={JSON.stringify(modal)}
+          initialFilters={modal.initialFilters}
+          mode={modal.mode}
+          onGenerate={onGenerate}
+          onClose={() => setModal(null)}
+        />
       )}
       {data && width > 0 && height > 0 && (
         <ForceGraph2D<NodeCompact, LinkCompact>
@@ -1010,7 +1091,7 @@ export default function ArxivGraph({ paperIds }: { paperIds?: string[] }) {
           at narrower breakpoints. It stays one row tall, which the overlays'
           top offsets rely on. */}
       <div className='fixed top-3 inset-x-4 z-10 flex items-center gap-3 pointer-events-none'>
-        {/* Browse link + subgraph dropdown + filters */}
+        {/* Browse link + generate button + saved-graph controls */}
         <div className='shrink-0 flex items-center gap-2 pointer-events-auto'>
           <Link
             to='/browse'
@@ -1021,24 +1102,30 @@ export default function ArxivGraph({ paperIds }: { paperIds?: string[] }) {
             Browse
           </Link>
 
+          <button
+            type='button'
+            onClick={() => setModal(NEW_GRAPH_MODAL)}
+            aria-label='Generate graph'
+            className='flex items-center gap-1.5 px-2.5 py-1 rounded-md cursor-pointer bg-[#4ea8de] border border-[#4ea8de] text-[13px] font-medium text-neutral-950 hover:bg-[#6bb8e6] transition-colors'
+          >
+            <Plus size={14} />
+            <span className='hidden lg:inline'>Generate graph</span>
+          </button>
+
           <Dropdown
             className='max-w-[140px] lg:max-w-[240px]'
             label={
-              isDemo
-                ? 'Recent papers'
-                : (activeSavedGraph?.name ?? 'Custom subgraph')
+              source.kind === 'draft'
+                ? 'Unsaved graph'
+                : (activeSavedGraph?.name ??
+                  (savedGraphs.length ? 'Saved graphs' : 'No saved graphs'))
             }
           >
             {savedGraphs.map((g) => (
               <button
                 key={g.id}
                 type='button'
-                onClick={() => {
-                  setActiveSavedGraph(g)
-                  setSelectedId(null)
-                  setLockedId(null)
-                  setHoverId(null)
-                }}
+                onClick={() => showSource({ kind: 'saved', graph: g })}
                 title={g.name}
                 className={`w-full truncate text-left px-4 py-2 text-sm hover:bg-[#333333] cursor-pointer transition-colors ${
                   activeSavedGraph?.id === g.id
@@ -1049,71 +1136,51 @@ export default function ArxivGraph({ paperIds }: { paperIds?: string[] }) {
                 {g.name}
               </button>
             ))}
-            {savedGraphs.length > 0 && (
-              <button
-                type='button'
-                onClick={() => {
-                  setActiveSavedGraph(null)
-                  setSelectedId(null)
-                  setLockedId(null)
-                  setHoverId(null)
-                }}
-                className={`w-full text-left px-4 py-2 text-sm hover:bg-[#333333] cursor-pointer border-t border-[#333333] transition-colors ${
-                  isDemo ? 'text-[#4ea8de]' : 'text-neutral-400'
-                }`}
-              >
-                Recent papers
-              </button>
-            )}
           </Dropdown>
 
-          <div ref={filtersRef}>
-            <button
-              type='button'
-              onClick={() => setFiltersOpen((v) => !v)}
-              aria-label={filtersOpen ? 'Collapse filters' : 'Expand filters'}
-              aria-expanded={filtersOpen}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md cursor-pointer bg-neutral-950 border text-[13px] transition-colors ${
-                hasActiveFilters
-                  ? 'border-[#4ea8de] text-[#4ea8de]'
-                  : `hover:border-neutral-500 hover:text-white ${filtersOpen ? 'border-neutral-500 text-white' : 'border-neutral-700 text-neutral-300'}`
-              }`}
-            >
-              <SlidersHorizontal size={14} />
-              <span className='hidden lg:inline'>Filters</span>
-              {activeFilterCount > 0 && (
-                <span className='min-w-4 px-1 rounded-full bg-[#4ea8de] text-[11px] leading-4 text-neutral-950'>
-                  {activeFilterCount}
-                </span>
-              )}
-            </button>
-            {filtersOpen && (
-              <div className='fixed top-14 left-4 z-20 w-[min(900px,calc(100vw-2rem))] max-h-[80vh] overflow-auto shadow-lg rounded-lg'>
-                <FilterBar
-                  tagEntries={filteredTagEntries}
-                  availableDomains={availableDomains}
-                  activeTags={activeTags}
-                  activeDomains={activeDomains}
-                  datePreset={datePreset}
-                  datePresets={datePresets}
-                  hasActiveFilters={hasActiveFilters}
-                  onToggleTag={toggleTag}
-                  onToggleDomain={toggleDomain}
-                  onSetDatePreset={setDatePreset}
-                  onClearAll={clearAllFilters}
-                />
+          {activeSavedGraph &&
+            (confirmingDelete ? (
+              <div className='flex items-center gap-1.5 text-[13px] text-neutral-300 whitespace-nowrap'>
+                Delete?
+                {/* Keep comes first so it lands under the cursor that just
+                    clicked the trash icon, making a double click harmless. */}
+                <button
+                  type='button'
+                  onClick={() => setConfirmingDelete(false)}
+                  className='px-2 py-0.5 rounded-md border border-neutral-700 hover:border-neutral-500 hover:text-white cursor-pointer'
+                >
+                  Keep
+                </button>
+                <button
+                  type='button'
+                  onClick={deleteActiveSavedGraph}
+                  className='px-2 py-0.5 rounded-md border border-red-500/60 text-red-400 hover:text-red-300 hover:border-red-400 cursor-pointer'
+                >
+                  Delete
+                </button>
               </div>
-            )}
-          </div>
-
-          {/* <Link
-            to='/browse'
-            aria-label='Browse papers'
-            className='shrink-0 flex items-center gap-1.5 px-3 py-[7px] rounded-full bg-neutral-950 border border-[#333333] text-sm text-neutral-400 hover:text-neutral-200 whitespace-nowrap cursor-pointer'
-          >
-            New Graph
-            <Plus size={13} />
-          </Link> */}
+            ) : (
+              <>
+                <button
+                  type='button'
+                  onClick={openEdit}
+                  aria-label={`Edit “${activeSavedGraph.name}”`}
+                  title='Edit graph filters'
+                  className='p-1.5 rounded-md bg-neutral-950 border border-neutral-700 text-neutral-300 hover:text-white hover:border-neutral-500 cursor-pointer transition-colors'
+                >
+                  <Pencil size={14} />
+                </button>
+                <button
+                  type='button'
+                  onClick={() => setConfirmingDelete(true)}
+                  aria-label={`Delete “${activeSavedGraph.name}”`}
+                  title='Delete graph'
+                  className='p-1.5 rounded-md bg-neutral-950 border border-neutral-700 text-neutral-300 hover:text-red-400 hover:border-neutral-500 cursor-pointer transition-colors'
+                >
+                  <Trash2 size={14} />
+                </button>
+              </>
+            ))}
         </div>
 
         {/* Search bar */}

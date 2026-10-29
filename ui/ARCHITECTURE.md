@@ -21,14 +21,14 @@ All data comes from the FastAPI backend via `lib/api.ts`:
 - `fetchLatestBatch()` → `GET /api/batch/latest`: latest pipeline batch for the header badge
 - `fetchCoverage()` → `GET /api/batch/coverage`: collection size and date span for the About page
 - `fetchHealth()` → `GET /health`: backend capabilities (whether semantic search is enabled), via `useCapabilities`
-- `fetchPapers(params)` → `GET /api/papers`: paginated, server-side filtered listing (used by `BrowseView` via `usePaperBrowser`, and by `GraphView`'s keyword search)
+- `fetchPapers(params)` → `GET /api/papers`: paginated, server-side filtered listing (used by `BrowseView` via `usePaperBrowser`, by `GraphView`'s keyword search, and by `GenerateGraphModal`'s live match count with `limit: 1`)
 - `fetchSubgraph(ids)` → `POST /api/graph/subset`: graph data for a specific set of paper IDs (`GraphView` saved graphs and search ghosts, `BrowseView` saved-graph view via `useSubgraphManager`)
-- `fetchGraphRange({from, to})` → `GET /api/graph/range`: graph data for every relevant paper in a date range (desktop `GraphView`'s default recent-papers graph)
+- `fetchGraphRange({from, to, tags, domains})` → `GET /api/graph/range`: graph of the newest (≤500) relevant papers matching a filter recipe; `meta.total` is the full match count (desktop `GraphView`'s unsaved draft graphs)
 - `fetchRelated(arxivId)` → `GET /api/papers/related`: on-demand nearest-neighbor lookup for paper detail panels and graph ghost nodes
 - `fetchPaper(url)` → `GET /api/papers/{id}`: single paper detail including summary
 - `searchPapers(query, opts)` → `POST /api/search`: semantic search (used by `GraphView` and `BrowseView` in semantic mode)
 
-There is **no** full-graph load. The desktop graph works with either an ID subset (`fetchSubgraph`) or a date range (`fetchGraphRange`), and the list views paginate (`fetchPapers`).
+There is **no** full-graph load. The desktop graph works with either an ID subset (`fetchSubgraph`, saved graphs) or a filter recipe (`fetchGraphRange`, drafts), and the list views paginate (`fetchPapers`).
 
 ### Environment configuration
 
@@ -63,8 +63,11 @@ All three views are `lazy`-loaded. `useMediaQuery('(max-width: 768px)')` decides
 Uses `react-force-graph-2d`. (Exported as `ArxivGraph`; the file was renamed from `Graph.tsx`.)
 
 Responsibilities:
-- Fetch the graph: `fetchSubgraph(ids)` for explicit `paperIds` or the active saved graph (query key `['subgraph', ids]`). Otherwise (no `paperIds`, no saved graphs) it loads the last month of papers with a single `fetchGraphRange` call (`['recentGraph']`, `isDemo` flag, shown as "Recent papers")
-- Saved-graph dropdown (switch between saved graphs and "Recent papers"), plus add/remove of the selected paper to/from the active saved graph (`lib/storage.ts`). Shows empty states for an empty saved graph and for "no nodes match filters"
+- Track the **graph source**: `none` (nothing generated yet), `draft` (an unsaved graph built from a `GraphFilters` recipe, `lib/graphFilters.ts`, optionally `basedOn` the saved graph it was edited from) or `saved`. Returning visitors land on their most recently updated saved graph; first visitors get `none` with the Generate graph modal open
+- Fetch the graph: drafts via `fetchGraphRange(toRangeParams(filters))` (`['graphRange', filters]`), saved graphs via `fetchSubgraph(paperIds)` (`['subgraph', ids]`). Both normalise coordinates against corpus bounds, so saving a draft seeds its data into the subset query and the layout doesn't move
+- **Generate graph** header button opens `GenerateGraphModal` (`FilterBar` over the corpus-wide `useTagCatalog` legend, seeded `useServerFilters`, debounced live match count via `['graphCount', filters]`). Generating creates a draft. While the modal is open, the graph's own Esc handler and `useGraphShortcuts` are disabled
+- `DraftGraphBar` (bottom centre) on a draft: Save (name prefilled by `defaultGraphName`), or Update "<name>" / Save as new when the draft was edited from a saved graph; Edit reopens the modal with the draft's filters; Discard returns to the saved graph it came from (or the last one shown), else to `none` with the modal open
+- Saved-graph dropdown, plus Edit (reopens the modal with the saved recipe, empty for graphs saved before recipes existed) and Delete (inline confirm) for the active saved graph. Add/remove of the selected paper to/from the active saved graph (`lib/storage.ts`); not offered on drafts. Empty states for `none` (Generate graph call to action) and an empty saved graph
 - Build adjacency from subset links for neighbor highlighting
 - Canvas rendering with hover/select/lock state. Overlapping nodes are spread apart with `separatePoints()` (`lib/graph.ts`)
 - Neighborhood-only edge visibility
@@ -72,7 +75,6 @@ Responsibilities:
   - **keyword** (default): `fetchPapers({ q, limit: 50 })`
   - **semantic**: `searchPapers`. The toggle is shown only when `useCapabilities().semanticSearch` is true (`GET /health`)
 - On-demand related papers per selection via `fetchRelated`
-- Client-side tag / domain / date-preset filters (`FilterBar` + `useServerFilters`, predicate `nodeMatchesFilters` in `lib/graph.ts`). Here `useServerFilters` only holds state and nothing is re-fetched. Excluded subgraph nodes and their links are hidden; ghosts are never filtered
 - Keyboard shortcuts via `useGraphShortcuts` (Ctrl/Cmd+K or `/` focuses search; Esc or Ctrl/Cmd+Backspace clears it). Force parameters via `useForceConfig`
 - Side-panel paper details (`GraphPaperDetails`). Search results list in `SearchResultsOverlay`. Header has the `LatestBatchBadge` and an About link
 
@@ -137,9 +139,9 @@ Summaries: graph nodes carry no `sm`, so `GraphPaperDetails` loads it lazily via
 
 ## Client State and Caching
 
-- **React Query** (`lib/queryClient.ts`): a single `QueryClient` with `staleTime: Infinity`. Data only changes when the pipeline runs, so a page reload is the only refresh. Query keys: `['recentGraph']`, `['subgraph', ids]`, `['papers', q, from, tags, domains]`, `['paper', aid]`, `['related', aid]`, `['tag-catalog']`, `['health']`, `['latest-batch']`, `['coverage']`.
-- **Saved graphs** (`lib/storage.ts`): stored in `localStorage` with an id index under `ais_graphs` and each graph under `ais_graph_<id>`. Limits: 50 graphs, 500 papers per graph, 40-character names. Shared by `GraphView` and `useSubgraphManager`.
-- **Analytics** (`lib/analytics.ts`): `initAnalytics()` injects the Umami Cloud script only in production builds with `VITE_UMAMI_WEBSITE_ID` set (`data-domains=alignmentgraph.com`). `track(event, data)` is a no-throw wrapper around `window.umami.track`. Events: `paper_open` (`view`, `source`), `search_mode` (`mode`), `filter_change` (`kind`, `value`). Server-side search logging is separate (see `api/ARCHITECTURE.md`).
+- **React Query** (`lib/queryClient.ts`): a single `QueryClient` with `staleTime: Infinity`. Data only changes when the pipeline runs, so a page reload is the only refresh. Query keys: `['graphRange', filters]`, `['graphCount', filters]`, `['subgraph', ids]`, `['papers', q, from, tags, domains]`, `['paper', aid]`, `['related', aid]`, `['tag-catalog']`, `['health']`, `['latest-batch']`, `['coverage']`.
+- **Saved graphs** (`lib/storage.ts`): stored in `localStorage` with an id index under `ais_graphs` and each graph under `ais_graph_<id>`. Limits: 50 graphs, 500 papers per graph (≥ the backend's `_MAX_RANGE`, so a full generated graph fits), 40-character names. Graphs generated in `GraphView` also store their `filters` recipe (`GraphFilters`: tags, domains, relative `datePreset`); it's optional, so older graphs still load. Shared by `GraphView` and `useSubgraphManager`.
+- **Analytics** (`lib/analytics.ts`): `initAnalytics()` injects the Umami Cloud script only in production builds with `VITE_UMAMI_WEBSITE_ID` set (`data-domains=alignmentgraph.com`). `track(event, data)` is a no-throw wrapper around `window.umami.track`. Events: `paper_open` (`view`, `source`), `search_mode` (`mode`), `filter_change` (`kind`, `value`), `graph_generate` (`tags`, `domains` counts, `date`, `mode`), `graph_save` (`kind`: `new` | `update`), `graph_edit`, `graph_discard`. Server-side search logging is separate (see `api/ARCHITECTURE.md`).
 
 ---
 
@@ -188,7 +190,7 @@ Exports:
 - `fetchPapers(params)`: `GET /api/papers` with optional `q`, `from`, `to`, `tags: string[]`, `domains: string[]` (sent as repeated `domain` params), `page`, `limit`; returns `PaginatedPapers`
 - `fetchHealth()`, `fetchLatestBatch()`, `fetchCoverage()`
 
-Other `lib/` modules: `graph.ts` (`buildAdjacency`, `nodeMatchesFilters`, `separatePoints`, `clamp`, `lc`), `tags.ts` (`tagIcon()`, lucide icons keyed by taxonomy names, which must match `taxonomy.py`), `domain.ts` (`domainLabel()`), `summaries.ts`, `storage.ts`, `analytics.ts`, `queryClient.ts`.
+Other `lib/` modules: `graph.ts` (`buildAdjacency`, `separatePoints`, `stepAlpha`, `clamp`, `lc`), `graphFilters.ts` (`GraphFilters`, `toRangeParams`, `defaultGraphName`), `tags.ts` (`tagIcon()`, lucide icons keyed by taxonomy names, which must match `taxonomy.py`), `domain.ts` (`domainLabel()`), `summaries.ts`, `storage.ts`, `analytics.ts`, `queryClient.ts`.
 
 ---
 
