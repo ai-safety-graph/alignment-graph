@@ -44,3 +44,7 @@ See the ARCHITECTURE.md files for full detail. Short version:
 - pgvector operator syntax (`<=>`)
 - CORS origins (defined in `config.py` / `CORS_ORIGINS` env, applied in `main.py`)
 - Route registration order in `papers.py`
+
+## Code Review
+
+PRs are reviewed with `/review-pr` (`.claude/skills/review-pr/SKILL.md`). The risk paths and invariants it escalates on live in `.claude/review-rules.md`; keep that file in sync when the invariants or safe-edit zones above change.
