@@ -146,15 +146,18 @@ export default function AboutView() {
 
           <Section title='How to use'>
             <p>
-              <span className='text-white'>Graph view</span> (desktop): each dot
-              is a paper, and papers on similar topics are placed near each
+              <span className='text-white'>Graph view</span> (desktop): start
+              with <span className='text-white'>Generate graph</span> and pick
+              topic tags, research domains and a date window. Each dot is a
+              matching paper, and papers on similar topics are placed near each
               other. Click a paper to open its details, summary and related
               papers. Press <Kbd>/</Kbd> or <Kbd>⌘/Ctrl</Kbd>+<Kbd>K</Kbd> to
               search and <Kbd>Esc</Kbd> to clear the search.
             </p>
             <p>
-              <span className='text-white'>Filters</span>: narrow the papers by
-              topic tag, research domain or publication date.
+              <span className='text-white'>Filters</span>: in the list view,
+              narrow the papers by topic tag, research domain or publication
+              date. In the graph view the same filters build the graph.
             </p>
             <p>
               <span className='text-white'>List view</span>: the library button
@@ -169,10 +172,12 @@ export default function AboutView() {
               saved graphs work the same way as on desktop.
             </p>
             <p>
-              <span className='text-white'>Saved graphs</span>: use{' '}
-              <span className='text-white'>New Graph</span> to start a named
-              collection, then add papers to it from their detail panel. Pick a
-              saved graph from the dropdown to see only those papers. You can
+              <span className='text-white'>Saved graphs</span>: save a generated
+              graph to keep it, edit its filters later, and add papers to it
+              from their detail panel. In the list view,{' '}
+              <span className='text-white'>New Graph</span> starts an empty
+              named collection. Pick a saved graph from the dropdown to see only
+              those papers. You can
               keep up to 50 graphs of up to 500 papers each.
             </p>
             <p className='text-sm text-neutral-400'>
