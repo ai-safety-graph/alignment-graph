@@ -43,6 +43,7 @@ import {
   deleteSavedGraph,
   listSavedGraphs,
   MAX_GRAPH_NAME_LENGTH,
+  MAX_PAPERS,
   updateSavedGraph,
 } from '../lib/storage'
 import type { SavedGraph } from '../lib/storage'
@@ -114,6 +115,14 @@ type ModalState = {
   basedOn: SavedGraph | null
 }
 
+// Routes the header links leave the graph view for, with the "Discard"
+// tooltip shown when that drops an open draft
+const EXIT_ROUTES = {
+  '/browse': 'Discard it and browse papers',
+  '/about': 'Discard it and open About',
+} as const
+type ExitRoute = keyof typeof EXIT_ROUTES
+
 const NEW_GRAPH_MODAL: ModalState = {
   mode: 'generate',
   initialFilters: EMPTY_FILTERS,
@@ -146,11 +155,11 @@ export default function ArxivGraph() {
     savedGraphs.length ? null : NEW_GRAPH_MODAL,
   )
   const [confirmingDelete, setConfirmingDelete] = useState(false)
-  // Where the user asked to go while a draft is open (a saved graph or the
-  // browse view), waiting on "discard the draft?"
-  const [pendingExit, setPendingExit] = useState<SavedGraph | 'browse' | null>(
-    null,
-  )
+  // Where the user asked to go while a draft is open (a saved graph or
+  // another route), waiting on "discard the draft?"
+  const [pendingExit, setPendingExit] = useState<
+    SavedGraph | ExitRoute | null
+  >(null)
   const navigate = useNavigate()
   const activeSavedGraph = source.kind === 'saved' ? source.graph : null
   const setActiveSavedGraph = (graph: SavedGraph) =>
@@ -162,13 +171,23 @@ export default function ArxivGraph() {
     if (activeSavedGraph) lastSavedIdRef.current = activeSavedGraph.id
   }, [activeSavedGraph])
 
+  // The add buttons are disabled at MAX_PAPERS; the catch is a backstop so
+  // a failed save never surfaces as an uncaught error
+  const subgraphFull =
+    (activeSavedGraph?.paperIds.length ?? 0) >= MAX_PAPERS
+
   const addToActiveSavedGraph = (aid: string) => {
     if (!activeSavedGraph) return
     const current = savedGraphs.find((s) => s.id === activeSavedGraph.id)
     if (!current || current.paperIds.includes(aid)) return
-    const updated = updateSavedGraph(activeSavedGraph.id, {
-      paperIds: [...current.paperIds, aid],
-    })
+    let updated: SavedGraph
+    try {
+      updated = updateSavedGraph(activeSavedGraph.id, {
+        paperIds: [...current.paperIds, aid],
+      })
+    } catch {
+      return
+    }
     setSavedGraphs((prev) =>
       prev.map((s) => (s.id === updated.id ? updated : s)),
     )
@@ -767,8 +786,17 @@ export default function ArxivGraph() {
   const confirmExit = () => {
     if (!pendingExit) return
     track('graph_discard')
-    if (pendingExit === 'browse') navigate('/browse')
+    if (typeof pendingExit === 'string') navigate(pendingExit)
     else showSource({ kind: 'saved', graph: pendingExit })
+  }
+
+  // Leaving the graph view drops an open draft, so a header link confirms
+  // first. Opening the link in a new tab (modifier click) leaves it alone.
+  const confirmLeaveTo = (to: ExitRoute) => (e: React.MouseEvent) => {
+    const modified = e.metaKey || e.ctrlKey || e.shiftKey || e.altKey
+    if (source.kind !== 'draft' || modified) return
+    e.preventDefault()
+    setPendingExit(to)
   }
 
   const onGenerate = (filters: GraphFilters) => {
@@ -1075,6 +1103,7 @@ export default function ArxivGraph() {
                   : undefined
               }
               subgraphName={activeSavedGraph?.name}
+              subgraphFull={subgraphFull}
             />
           </div>
         )}
@@ -1097,6 +1126,7 @@ export default function ArxivGraph() {
             activeSavedGraph ? new Set(activeSavedGraph.paperIds) : undefined
           }
           subgraphName={activeSavedGraph?.name}
+          subgraphFull={subgraphFull}
           onSelectPaper={(aid) => {
             const id = aidToId.get(aid)
             if (id == null) return
@@ -1118,14 +1148,7 @@ export default function ArxivGraph() {
           <Link
             to='/browse'
             aria-label='Browse papers'
-            onClick={(e) => {
-              // Leaving the graph view drops an open draft. Opening the link
-              // in a new tab (modifier click) leaves it alone.
-              const modified = e.metaKey || e.ctrlKey || e.shiftKey || e.altKey
-              if (source.kind !== 'draft' || modified) return
-              e.preventDefault()
-              setPendingExit('browse')
-            }}
+            onClick={confirmLeaveTo('/browse')}
             className='flex items-center gap-1.5 px-2.5 py-1 rounded-md cursor-pointer bg-neutral-950 border border-neutral-700 hover:border-neutral-500 text-[13px] text-neutral-300 hover:text-white transition-colors'
           >
             <Library size={14} />
@@ -1183,8 +1206,8 @@ export default function ArxivGraph() {
                 type='button'
                 onClick={confirmExit}
                 title={
-                  pendingExit === 'browse'
-                    ? 'Discard it and browse papers'
+                  typeof pendingExit === 'string'
+                    ? EXIT_ROUTES[pendingExit]
                     : `Discard it and open “${pendingExit.name}”`
                 }
                 className='px-2 py-0.5 rounded-md border border-red-500/60 text-red-400 hover:text-red-300 hover:border-red-400 cursor-pointer'
@@ -1326,6 +1349,7 @@ export default function ArxivGraph() {
         <div className='shrink-0 flex items-center gap-4 xl:gap-10 pointer-events-auto'>
           <Link
             to='/about'
+            onClick={confirmLeaveTo('/about')}
             className='flex items-center gap-1.5 cursor-pointer text-[13px] text-neutral-300 hover:text-white underline underline-offset-2 transition-colors'
           >
             <Info size={14} />

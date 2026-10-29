@@ -7,6 +7,7 @@ import { usePaperSummary } from '../hooks/usePaperSummary'
 import { useRef, useLayoutEffect } from 'react'
 import type { RelatedPaper } from '../lib/api'
 import TagChips from './TagChips'
+import { MAX_PAPERS } from '../lib/storage'
 
 interface Props {
   paper: NodeCompact
@@ -18,6 +19,7 @@ interface Props {
   onRemoveFromSubgraph?: (aid: string) => void
   subgraphPaperIds?: Set<string>
   subgraphName?: string
+  subgraphFull?: boolean
 }
 
 export default function GraphPaperDetails({
@@ -30,9 +32,11 @@ export default function GraphPaperDetails({
   onRemoveFromSubgraph,
   subgraphPaperIds,
   subgraphName,
+  subgraphFull,
 }: Props) {
   const isPaperInSubgraph = subgraphPaperIds?.has(paper.aid) ?? false
   const subgraphLabel = subgraphName ?? 'Subgraph'
+  const fullTitle = `${subgraphLabel} is full (${MAX_PAPERS} papers)`
   const urlKey = paper.ln || paper.aid
   const { data: lazy, loading, error } = usePaperSummary(urlKey)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
@@ -81,7 +85,9 @@ export default function GraphPaperDetails({
                   ? onRemoveFromSubgraph?.(paper.aid)
                   : onAddToSubgraph?.(paper.aid)
               }
-              className='group flex items-center gap-1.5 max-w-full text-[13px] text-neutral-300 hover:text-white bg-neutral-950 border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 mb-2 cursor-pointer transition-colors'
+              disabled={!isPaperInSubgraph && subgraphFull}
+              title={!isPaperInSubgraph && subgraphFull ? fullTitle : undefined}
+              className='group flex items-center gap-1.5 max-w-full text-[13px] text-neutral-300 hover:text-white bg-neutral-950 border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 mb-2 cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-neutral-300 disabled:hover:border-neutral-700'
             >
               {isPaperInSubgraph ? (
                 <>
@@ -212,12 +218,16 @@ export default function GraphPaperDetails({
                             if (inSubgraph) onRemoveFromSubgraph?.(r.aid)
                             else onAddToSubgraph?.(r.aid)
                           }}
+                          disabled={!inSubgraph && subgraphFull}
+                          title={
+                            !inSubgraph && subgraphFull ? fullTitle : undefined
+                          }
                           aria-label={
                             inSubgraph
                               ? `Remove from ${subgraphLabel}`
                               : `Add to ${subgraphLabel}`
                           }
-                          className='group shrink-0 self-start p-1 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200 transition-colors'
+                          className='group shrink-0 self-start p-1 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
                         >
                           {inSubgraph ? (
                             <ShareMinusIcon
