@@ -1,4 +1,9 @@
-import type { TagsLegend, GraphDataCompact, NodeCompact } from './types'
+import type {
+  TagsLegend,
+  GraphCursor,
+  GraphDataCompact,
+  NodeCompact,
+} from './types'
 
 const BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
 
@@ -42,15 +47,18 @@ export async function fetchSubgraph(
   return { ...data, nodes: data.nodes.map(withTags) }
 }
 
-// Graph of the relevant papers matching the filters (any of `tags`, any of
-// `domains`, published in [from, to] as YYYY-MM-DD; every bound optional),
-// newest first and capped server-side; `meta.total` is the full match count.
+// One page of the relevant papers matching the filters (any of `tags`, any of
+// `domains`, published in [from, to] as YYYY-MM-DD, not in `exclude`; every
+// bound optional), newest first. `meta.total` is the full match count and
+// `meta.next` the cursor for the following page, passed back as `before`.
 export async function fetchGraphRange(
   params: {
     from?: string
     to?: string
     tags?: string[]
     domains?: string[]
+    exclude?: string[]
+    before?: GraphCursor | null
   } = {},
 ): Promise<GraphDataCompact> {
   const qs = new URLSearchParams()
@@ -58,6 +66,11 @@ export async function fetchGraphRange(
   if (params.to) qs.set('to', params.to)
   params.tags?.forEach((t) => qs.append('tags', t))
   params.domains?.forEach((d) => qs.append('domain', d))
+  params.exclude?.forEach((aid) => qs.append('exclude', aid))
+  if (params.before) {
+    qs.set('before_date', params.before.before_date)
+    qs.set('before_id', params.before.before_id)
+  }
   const data = await apiFetch<GraphDataCompact>(`/api/graph/range?${qs}`)
   return { ...data, nodes: data.nodes.map(withTags) }
 }

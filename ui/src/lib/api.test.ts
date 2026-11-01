@@ -103,6 +103,20 @@ describe('fetchGraphRange', () => {
     expect(url.searchParams.getAll('domain')).toEqual(['gov'])
     expect(url.searchParams.has('from')).toBe(false)
   })
+
+  it('sends exclusions and the page cursor', async () => {
+    mockFetchOnce({ meta: {}, tags: {}, nodes: [], links: [] })
+
+    await fetchGraphRange({
+      exclude: ['x', 'y'],
+      before: { before_date: '2024-01-15', before_id: 'z' },
+    })
+
+    const url = new URL(vi.mocked(fetch).mock.calls[0][0] as string, 'http://localhost')
+    expect(url.searchParams.getAll('exclude')).toEqual(['x', 'y'])
+    expect(url.searchParams.get('before_date')).toBe('2024-01-15')
+    expect(url.searchParams.get('before_id')).toBe('z')
+  })
 })
 describe('fetchPaper', () => {
   beforeEach(() => {
