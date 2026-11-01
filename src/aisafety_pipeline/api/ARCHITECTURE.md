@@ -115,16 +115,19 @@ Coordinate fields (used by the UI to align ghost nodes — see `ui/ARCHITECTURE.
 
 ### `GET /api/graph/range`
 
-Returns a compact graph (same shape as `/subset`) of the relevant papers matching a set of filters. Used by the desktop UI's "Generate graph" modal to build an unsaved draft graph from filters; saving stores the result's IDs, which are reloaded through `/subset`.
+Returns one page of a compact graph (same shape as `/subset`) of the relevant papers matching a set of filters. The UI loads every graph built from filters through it (drafts and saved graphs alike), page by page; a saved graph stores the filter recipe, not the result's IDs. Papers added by hand ("pins") are loaded separately through `/subset`, and papers removed by hand are sent back as `exclude`.
 
 Query params (all optional; with none, every relevant paper matches):
 - `tags` — repeatable; papers matching any given tag (`llm_tags && %s`)
 - `domain` — repeatable; OR-ed (`domain_tag = ANY(%s)`)
 - `from` / `to` (`YYYY-MM-DD`, inclusive). Malformed dates return 422.
+- `exclude` — repeatable paper IDs left out of both the page and `meta.total` (at most `_MAX_EXCLUDE` = 500, else 422)
+- `before_date` + `before_id` — keyset cursor: return rows after this one in page order. Pass the previous response's `meta.next` back as-is. Giving only one of them returns 422.
 
 Implementation:
 - `published` is TEXT (`YYYY-MM-DD`), so bounds are compared as ISO strings
-- Newest first (`ORDER BY published DESC, id`), capped at `_MAX_RANGE` (500) papers; `meta.total` carries the full match count (`count(*) OVER ()`), so the UI can say when the graph is truncated
+- Newest first (`ORDER BY published DESC, id DESC`), `_MAX_RANGE` (500) papers per page, backed by the partial index `idx_papers_relevant_published`. Paging is keyset (`(published, id) < (before_date, before_id)`), not offset, so pages don't shift when the pipeline adds newer papers
+- `meta.total` is the full match count across every page (a separate `count(*)`), `meta.next` the cursor for the next page (`{before_date, before_id}`, or `null` on the last page; found by fetching one extra row), and `meta.span` the page's `{newest, oldest}` published dates (`null` when empty)
 - Coordinates are normalised against the raw bounds of the **whole relevant corpus** (`_corpus_bounds`), not the result's own extent, so a paper lands at the same canvas position whichever filters selected it. `meta.coords.bounds` reports those corpus bounds, so ghost placement (`ghostCoord` in the UI) works unchanged
 - Node/legend building is shared with `/subset` (`_graph_from_rows`)
 

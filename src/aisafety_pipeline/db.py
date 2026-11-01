@@ -393,6 +393,10 @@ def init_db(db_arg: str | None = None) -> PgConnection:
         # compute-layout (incremental)
         "CREATE INDEX IF NOT EXISTS idx_papers_unplaced ON papers (id) "
         "WHERE llm_relevant AND graph_x IS NULL",
+        # /api/graph/range keyset pages (`ORDER BY published DESC, id DESC`);
+        # without it every page sorted all relevant rows.
+        "CREATE INDEX IF NOT EXISTS idx_papers_relevant_published ON papers "
+        "(published DESC, id DESC) WHERE llm_relevant",
     ):
         cur.execute(stmt)
     conn.commit()

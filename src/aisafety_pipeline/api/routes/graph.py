@@ -15,9 +15,13 @@ router = APIRouter(prefix="/api/graph", tags=["graph"])
 # Large enough for a month of relevant papers.
 _MAX_SUBSET = 5000
 
-# Filter-built graphs keep the newest papers up to this cap, so a broad
-# filter stays readable; `meta.total` reports the full match count.
+# Filter-built graphs show the newest papers a page at a time, so a broad
+# filter stays readable; `meta.total` reports the full match count and
+# `meta.next` is the cursor for the following page.
 _MAX_RANGE = 500
+
+# Papers a user hid from a saved graph, sent back so they don't take page slots.
+_MAX_EXCLUDE = 500
 
 
 class SubsetRequest(BaseModel):
@@ -58,6 +62,8 @@ def _build_range_graph(
     to_date: dt.date | None,
     tags: list[str],
     domains: list[str],
+    exclude: list[str] | None = None,
+    before: tuple[dt.date, str] | None = None,
 ) -> dict:
     # `published` is TEXT (YYYY-MM-DD), so compare as ISO strings.
     where = ["llm_relevant = TRUE"]
@@ -74,16 +80,40 @@ def _build_range_graph(
     if to_date:
         where.append("published <= %s")
         params.append(to_date.isoformat())
-    # count(*) OVER () reports the full match count alongside the capped rows.
+    if exclude:
+        where.append("id <> ALL(%s)")
+        params.append(exclude)
+    match = " AND ".join(where)
+    total = conn.execute(
+        f"SELECT count(*) FROM papers WHERE {match}", params
+    ).fetchone()[0]
+
+    # Keyset paging: rows strictly after the cursor in (published, id) DESC
+    # order. Offsets would shift whenever the pipeline adds newer papers.
+    page_where, page_params = match, list(params)
+    if before:
+        page_where += " AND (published, id) < (%s, %s)"
+        page_params += [before[0].isoformat(), before[1]]
+    # One extra row tells us whether another page follows.
     rows = conn.execute(f"""
-        SELECT {_GRAPH_COLUMNS}, count(*) OVER () AS total
+        SELECT {_GRAPH_COLUMNS}
         FROM papers
-        WHERE {" AND ".join(where)}
-        ORDER BY published DESC, id
+        WHERE {page_where}
+        ORDER BY published DESC, id DESC
         LIMIT %s
-    """, (*params, _MAX_RANGE)).fetchall()
+    """, (*page_params, _MAX_RANGE + 1)).fetchall()
+    has_more = len(rows) > _MAX_RANGE
+    rows = rows[:_MAX_RANGE]
+
     graph = _graph_from_rows(rows, bounds=_corpus_bounds(conn))
-    graph["meta"]["total"] = rows[0][9] if rows else 0
+    graph["meta"]["total"] = total
+    last = rows[-1] if rows else None
+    graph["meta"]["next"] = (
+        {"before_date": str(last[3]), "before_id": last[0]} if has_more else None
+    )
+    graph["meta"]["span"] = (
+        {"newest": str(rows[0][3]), "oldest": str(last[3])} if rows else None
+    )
     return graph
 
 
@@ -222,8 +252,24 @@ def get_range_graph(
     to_date: dt.date | None = Query(None, alias="to"),
     tags: list[str] = Query(default=[]),
     domain: list[str] = Query(default=[]),
+    exclude: list[str] = Query(default=[]),
+    before_date: dt.date | None = Query(None),
+    before_id: str | None = Query(None),
     conn=Depends(get_conn),
 ):
     """Graph of relevant papers matching the filters (any of `tags`, any of
-    `domain`, published in [from, to]), newest first, capped at _MAX_RANGE."""
-    return _build_range_graph(conn, from_date, to_date, tags, domain)
+    `domain`, published in [from, to], not in `exclude`), newest first, one
+    page of _MAX_RANGE. Pass `meta.next` back as `before_date`/`before_id`
+    for the following page."""
+    if (before_date is None) != (before_id is None):
+        raise HTTPException(
+            status_code=422,
+            detail="before_date and before_id must be given together",
+        )
+    if len(exclude) > _MAX_EXCLUDE:
+        raise HTTPException(
+            status_code=422,
+            detail=f"exclude must contain at most {_MAX_EXCLUDE} items",
+        )
+    before = (before_date, before_id) if before_date and before_id else None
+    return _build_range_graph(conn, from_date, to_date, tags, domain, exclude, before)
