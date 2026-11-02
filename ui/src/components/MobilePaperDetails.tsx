@@ -1,10 +1,9 @@
-import { CircleX } from 'lucide-react'
+import { CircleX, Pin, PinOff } from 'lucide-react'
 import { domainLabel } from '../lib/domain'
 import type { NodeCompact } from '../lib/types'
 import { useRef, useLayoutEffect, useEffect, useState } from 'react'
 import TagChips from './TagChips'
-import SharePlusIcon from './icons/SharePlusIcon'
-import ShareMinusIcon from './icons/ShareMinusIcon'
+import { MAX_PINNED } from '../lib/storage'
 
 type NeighborEntry = { n: NodeCompact; w: number }
 
@@ -21,6 +20,8 @@ interface Props {
   onRemoveFromSubgraph?: (aid: string) => void
   subgraphPaperIds?: Set<string>
   subgraphName?: string
+  // At MAX_PINNED: Add is disabled
+  subgraphFull?: boolean
 }
 
 export default function MobilePaperDetails({
@@ -35,9 +36,11 @@ export default function MobilePaperDetails({
   onRemoveFromSubgraph,
   subgraphPaperIds,
   subgraphName,
+  subgraphFull,
 }: Props) {
   const isPaperInSubgraph = subgraphPaperIds?.has(paper.aid) ?? false
   const subgraphLabel = subgraphName ?? 'Subgraph'
+  const fullTitle = `${subgraphLabel} already has ${MAX_PINNED} pinned papers`
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const barRef = useRef<HTMLDivElement | null>(null)
   const titleRef = useRef<HTMLHeadingElement | null>(null)
@@ -144,22 +147,24 @@ export default function MobilePaperDetails({
                     ? onRemoveFromSubgraph?.(paper.aid)
                     : onAddToSubgraph?.(paper.aid)
                 }
-                className='group flex items-center gap-1.5 max-w-full text-[13px] text-neutral-300 hover:text-white bg-neutral-950 border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 cursor-pointer transition-colors'
+                disabled={!isPaperInSubgraph && subgraphFull}
+                title={!isPaperInSubgraph && subgraphFull ? fullTitle : undefined}
+                className='group flex items-center gap-1.5 max-w-full text-[13px] text-neutral-300 hover:text-white bg-neutral-950 border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-neutral-300 disabled:hover:border-neutral-700'
               >
                 {isPaperInSubgraph ? (
                   <>
                     <span className='truncate'>
-                      Remove from {subgraphLabel}
+                      Unpin from {subgraphLabel}
                     </span>
-                    <ShareMinusIcon
+                    <PinOff
                       size={14}
                       className='shrink-0 text-red-800 group-hover:text-red-500 transition-colors'
                     />
                   </>
                 ) : (
                   <>
-                    <span className='truncate'>Add to {subgraphLabel}</span>
-                    <SharePlusIcon
+                    <span className='truncate'>Pin to {subgraphLabel}</span>
+                    <Pin
                       size={14}
                       className='shrink-0 text-green-800 group-hover:text-green-500 transition-colors'
                     />

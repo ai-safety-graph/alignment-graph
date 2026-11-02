@@ -1,8 +1,8 @@
+import { Pin, PinOff } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import SharePlusIcon from './icons/SharePlusIcon'
-import ShareMinusIcon from './icons/ShareMinusIcon'
 import type { NodeCompact } from '../lib/types'
 import TagChips from './TagChips'
+import { MAX_PINNED } from '../lib/storage'
 
 interface PaperListProps {
   items: Array<{ n: NodeCompact }>
@@ -16,6 +16,8 @@ interface PaperListProps {
   onRemoveFromSubgraph?: (aid: string) => void
   subgraphPaperIds?: Set<string>
   subgraphName?: string
+  // At MAX_PINNED: Add is disabled
+  subgraphFull?: boolean
 }
 
 export default function PaperList({
@@ -30,6 +32,7 @@ export default function PaperList({
   onRemoveFromSubgraph,
   subgraphPaperIds,
   subgraphName,
+  subgraphFull,
 }: PaperListProps) {
   const [limit, setLimit] = useState(40)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
@@ -66,6 +69,7 @@ export default function PaperList({
       <ul>
         {slice.map(({ n }) => {
           const inSubgraph = subgraphPaperIds?.has(n.aid) ?? false
+          const addBlocked = !inSubgraph && !!subgraphFull
           return (
           <li
             key={n.aid}
@@ -92,14 +96,20 @@ export default function PaperList({
                   if (inSubgraph) onRemoveFromSubgraph?.(n.aid)
                   else onAddToSubgraph?.(n.aid)
                 }}
+                disabled={addBlocked}
+                title={
+                  addBlocked
+                    ? `${subgraphName ?? 'Subgraph'} already has ${MAX_PINNED} pinned papers`
+                    : undefined
+                }
                 aria-label={
                   inSubgraph
-                    ? `Remove from ${subgraphName ?? 'subgraph'}`
-                    : `Add to ${subgraphName ?? 'subgraph'}`
+                    ? `Unpin from ${subgraphName ?? 'subgraph'}`
+                    : `Pin to ${subgraphName ?? 'subgraph'}`
                 }
-                className='group shrink-0 mr-2 p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200'
+                className='group shrink-0 mr-2 p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200 disabled:opacity-40 disabled:cursor-not-allowed'
               >
-                {inSubgraph ? <ShareMinusIcon size={14} className='text-red-800 group-hover:text-red-500 transition-colors' /> : <SharePlusIcon size={14} className='text-green-800 group-hover:text-green-500 transition-colors' />}
+                {inSubgraph ? <PinOff size={14} className='text-red-800 group-hover:text-red-500 transition-colors' /> : <Pin size={14} className='text-green-800 group-hover:text-green-500 transition-colors' />}
               </button>
             )}
           </li>

@@ -1,5 +1,4 @@
-import SharePlusIcon from './icons/SharePlusIcon'
-import ShareMinusIcon from './icons/ShareMinusIcon'
+import { Pin, PinOff } from 'lucide-react'
 import type { NodeCompact } from '../lib/types'
 import { MAX_PINNED } from '../lib/storage'
 import TagChips from './TagChips'
@@ -79,11 +78,11 @@ export default function SearchResultsOverlay({
                       else onAddToSubgraph?.(n.aid)
                     }}
                     disabled={addBlocked}
-                    title={addBlocked ? `${subgraphLabel} already has ${MAX_PINNED} added papers` : undefined}
-                    aria-label={inSubgraph ? `Remove from ${subgraphLabel}` : `Add to ${subgraphLabel}`}
+                    title={addBlocked ? `${subgraphLabel} already has ${MAX_PINNED} pinned papers` : undefined}
+                    aria-label={inSubgraph ? `Unpin from ${subgraphLabel}` : `Pin to ${subgraphLabel}`}
                     className='group p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed'
                   >
-                    {inSubgraph ? <ShareMinusIcon size={14} className='text-red-800 group-hover:text-red-500 transition-colors' /> : <SharePlusIcon size={14} className='text-green-800 group-hover:text-green-500 transition-colors' />}
+                    {inSubgraph ? <PinOff size={14} className='text-red-800 group-hover:text-red-500 transition-colors' /> : <Pin size={14} className='text-green-800 group-hover:text-green-500 transition-colors' />}
                   </button>
                 )}
               </div>

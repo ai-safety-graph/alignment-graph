@@ -105,6 +105,40 @@ describe('GenerateGraphModal', () => {
     expect(screen.getByRole('button', { name: 'Generate graph' })).toBeDisabled()
   })
 
+  it('saves under a name that follows the filters until typed over', async () => {
+    mockApi(() => 5)
+    const onSave = vi.fn<(f: GraphFilters, name: string) => string | null>(() => null)
+    const { onGenerate } = renderModal({ onSave })
+
+    const name = screen.getByLabelText('Name')
+    expect(name).toHaveValue('All papers')
+    await userEvent.click(await screen.findByRole('button', { name: /rlhf/ }))
+    expect(name).toHaveValue('Rlhf')
+
+    await userEvent.clear(name)
+    await userEvent.type(name, 'Mine')
+    const create = screen.getByRole('button', { name: 'Create graph' })
+    await waitFor(() => expect(create).toBeEnabled())
+    await userEvent.click(create)
+
+    expect(onSave).toHaveBeenCalledWith(
+      { tags: ['rlhf'], domains: [], datePreset: 'all' },
+      'Mine',
+    )
+    expect(onGenerate).not.toHaveBeenCalled()
+  })
+
+  it('shows the error when saving fails', async () => {
+    mockApi(() => 5)
+    renderModal({ onSave: () => 'Maximum 50 saved graphs reached' })
+
+    const create = screen.getByRole('button', { name: 'Create graph' })
+    await waitFor(() => expect(create).toBeEnabled())
+    await userEvent.click(create)
+
+    expect(screen.getByText('Maximum 50 saved graphs reached')).toBeInTheDocument()
+  })
+
   it('closes on Escape', async () => {
     mockApi(() => 1)
     const { onClose } = renderModal()
