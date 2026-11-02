@@ -79,8 +79,8 @@ export function useGraphContent(spec: GraphContentSpec | null) {
   const isEmpty = !!spec && !filters && pinned.length === 0
   return {
     data,
-    // Ids of the papers the recipe matched on this page, so removing one
-    // knows to hide it rather than only unpin it
+    // Ids of the papers the recipe matched on this page, to tell them apart
+    // from pins shown off the page
     pageAids: useMemo(
       () => new Set(pageData?.nodes.map((n) => n.aid)),
       [pageData],

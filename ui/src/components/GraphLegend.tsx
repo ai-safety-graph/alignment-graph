@@ -14,7 +14,7 @@ const SWATCHES: { color: string; label: string; ring?: string }[] = [
   {
     color: SUBGRAPH_NODE_COLOR,
     ring: PINNED_RING_COLOR,
-    label: 'Papers you added by hand',
+    label: 'Pinned papers',
   },
   { color: SEARCH_GHOST_NODE_COLOR, label: 'Search results outside this graph' },
   { color: RELATED_GHOST_NODE_COLOR, label: 'Papers related to the selected one' },

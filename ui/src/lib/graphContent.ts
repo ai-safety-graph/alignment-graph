@@ -62,7 +62,7 @@ function shortDate(iso: string): string {
   })
 }
 
-// "Papers 501–1,000 of 3,214 · Aug 12 – Sep 30 · 3 added" with Newer/Older
+// "Papers 501–1,000 of 3,214 · Aug 12 – Sep 30 · 3 pinned" with Newer/Older
 // arrows when the recipe has more than one page. `pageIndex` counts from 0.
 export function pageLabel({
   pageIndex,
@@ -70,14 +70,15 @@ export function pageLabel({
   shown,
   total,
   span,
-  pinnedOffPage,
+  pinned,
 }: {
   pageIndex: number
   pageSize: number
   shown: number
   total: number
   span?: { newest: string; oldest: string } | null
-  pinnedOffPage: number
+  // Pinned papers shown, whether or not the recipe matched them
+  pinned: number
 }): string {
   const parts: string[] = []
   if (total > shown || pageIndex > 0) {
@@ -95,6 +96,6 @@ export function pageLabel({
         ? shortDate(span.newest)
         : `${shortDate(span.oldest)} – ${shortDate(span.newest)}`,
     )
-  if (pinnedOffPage > 0) parts.push(`${pinnedOffPage} added`)
+  if (pinned > 0) parts.push(`${pinned.toLocaleString()} pinned`)
   return parts.join(' · ')
 }

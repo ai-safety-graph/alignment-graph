@@ -2,9 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { memoryStorage } from '../test/memoryStorage'
 import {
   createSavedGraph,
+  deleteSavedGraph,
+  getActiveGraphId,
   getSavedGraph,
   listSavedGraphs,
   MAX_PINNED,
+  setActiveGraphId,
   updateSavedGraph,
   withAdded,
   withRemoved,
@@ -71,6 +74,27 @@ describe('saved graphs', () => {
   })
 })
 
+describe('active graph', () => {
+  it('remembers the graph opened last, and forgets it when cleared', () => {
+    expect(getActiveGraphId()).toBeNull()
+    setActiveGraphId('g1')
+    expect(getActiveGraphId()).toBe('g1')
+    setActiveGraphId(null)
+    expect(getActiveGraphId()).toBeNull()
+  })
+
+  it('is cleared when its graph is deleted, and kept for others', () => {
+    const a = createSavedGraph('A')
+    const b = createSavedGraph('B')
+    setActiveGraphId(a.id)
+
+    deleteSavedGraph(b.id)
+    expect(getActiveGraphId()).toBe(a.id)
+    deleteSavedGraph(a.id)
+    expect(getActiveGraphId()).toBeNull()
+  })
+})
+
 describe('membership edits', () => {
   it('adding pins once and un-hides', () => {
     const m = { pinned: ['a'], hidden: ['b'] }
@@ -78,13 +102,9 @@ describe('membership edits', () => {
     expect(withAdded(m, 'b')).toEqual({ pinned: ['a', 'b'], hidden: [] })
   })
 
-  it('removing unpins, and hides only recipe matches', () => {
-    const m = { pinned: ['a'], hidden: [] }
-    expect(withRemoved(m, 'a', false)).toEqual({ pinned: [], hidden: [] })
-    expect(withRemoved(m, 'r', true)).toEqual({ pinned: ['a'], hidden: ['r'] })
-    expect(withRemoved({ pinned: ['r'], hidden: [] }, 'r', true)).toEqual({
-      pinned: [],
-      hidden: ['r'],
-    })
+  it('removing only unpins, keeping existing hides', () => {
+    const m = { pinned: ['a', 'b'], hidden: ['h'] }
+    expect(withRemoved(m, 'a')).toEqual({ pinned: ['b'], hidden: ['h'] })
+    expect(withRemoved(m, 'x')).toEqual(m)
   })
 })

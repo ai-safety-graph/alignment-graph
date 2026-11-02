@@ -1,6 +1,4 @@
-import { CircleX } from 'lucide-react'
-import SharePlusIcon from './icons/SharePlusIcon'
-import ShareMinusIcon from './icons/ShareMinusIcon'
+import { CircleX, Pin, PinOff } from 'lucide-react'
 import { domainLabel } from '../lib/domain'
 import type { NodeCompact } from '../lib/types'
 import { usePaperSummary } from '../hooks/usePaperSummary'
@@ -36,7 +34,7 @@ export default function GraphPaperDetails({
 }: Props) {
   const isPaperInSubgraph = subgraphPaperIds?.has(paper.aid) ?? false
   const subgraphLabel = subgraphName ?? 'Subgraph'
-  const fullTitle = `${subgraphLabel} already has ${MAX_PINNED} added papers`
+  const fullTitle = `${subgraphLabel} already has ${MAX_PINNED} pinned papers`
   const urlKey = paper.ln || paper.aid
   const { data: lazy, loading, error } = usePaperSummary(urlKey)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
@@ -91,16 +89,16 @@ export default function GraphPaperDetails({
             >
               {isPaperInSubgraph ? (
                 <>
-                  <span className='truncate'>Remove from {subgraphLabel}</span>
-                  <ShareMinusIcon
+                  <span className='truncate'>Unpin from {subgraphLabel}</span>
+                  <PinOff
                     size={14}
                     className='shrink-0 text-red-800 group-hover:text-red-500 transition-colors'
                   />
                 </>
               ) : (
                 <>
-                  <span className='truncate'>Add to {subgraphLabel}</span>
-                  <SharePlusIcon
+                  <span className='truncate'>Pin to {subgraphLabel}</span>
+                  <Pin
                     size={14}
                     className='shrink-0 text-green-800 group-hover:text-green-500 transition-colors'
                   />
@@ -224,18 +222,18 @@ export default function GraphPaperDetails({
                           }
                           aria-label={
                             inSubgraph
-                              ? `Remove from ${subgraphLabel}`
-                              : `Add to ${subgraphLabel}`
+                              ? `Unpin from ${subgraphLabel}`
+                              : `Pin to ${subgraphLabel}`
                           }
                           className='group shrink-0 self-start p-1 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
                         >
                           {inSubgraph ? (
-                            <ShareMinusIcon
+                            <PinOff
                               size={14}
                               className='text-red-800 group-hover:text-red-500 transition-colors'
                             />
                           ) : (
-                            <SharePlusIcon
+                            <Pin
                               size={14}
                               className='text-green-800 group-hover:text-green-500 transition-colors'
                             />

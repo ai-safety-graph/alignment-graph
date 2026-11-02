@@ -39,13 +39,13 @@ describe('SearchResultsOverlay', () => {
       />,
     )
 
-    const add = screen.getByLabelText('Add to Mine')
+    const add = screen.getByLabelText('Pin to Mine')
     expect(add).toBeDisabled()
-    expect(add).toHaveAttribute('title', 'Mine already has 500 added papers')
+    expect(add).toHaveAttribute('title', 'Mine already has 500 pinned papers')
     await userEvent.click(add)
     expect(onAdd).not.toHaveBeenCalled()
 
-    await userEvent.click(screen.getByLabelText('Remove from Mine'))
+    await userEvent.click(screen.getByLabelText('Unpin from Mine'))
     expect(onRemove).toHaveBeenCalledWith('a')
   })
 })

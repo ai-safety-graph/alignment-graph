@@ -1,33 +1,45 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  byUpdatedDesc,
   createSavedGraph,
   deleteSavedGraph,
+  getActiveGraphId,
   listSavedGraphs,
-  MAX_GRAPH_NAME_LENGTH,
+  MAX_PINNED,
+  setActiveGraphId,
   updateSavedGraph,
   withAdded,
   withRemoved,
   type GraphMembership,
   type SavedGraph,
 } from '../lib/storage'
+import type { GraphFilters } from '../lib/graphFilters'
 import { useDebouncedValue } from './useDebouncedValue'
 import { useGraphContent } from './useGraphContent'
 
+// What Browse lists for a selected graph: the papers its recipe matches, its
+// pins, or all papers to pin from
+export type GraphListMode = 'matches' | 'pinned' | 'all'
+
+// A graph opens on its matches; one without a recipe has only pins
+function defaultMode(graph: SavedGraph | undefined): GraphListMode {
+  return graph && !graph.filters ? 'pinned' : 'matches'
+}
+
+// Browse's side of saved graphs. A graph is selected (shared with the graph
+// view through the active-graph key) or not ("All papers").
 export function useSubgraphManager() {
   const [subgraphs, setSubgraphs] = useState<SavedGraph[]>(() =>
-    listSavedGraphs(),
+    listSavedGraphs().sort(byUpdatedDesc),
   )
-  const [selectedSubgraphId, setSelectedSubgraphId] = useState<string | null>(
-    () =>
-      subgraphs.reduce(
-        (latest, s) => (!latest || s.createdAt > latest.createdAt ? s : latest),
-        null as SavedGraph | null,
-      )?.id ?? null,
-  )
-  const [isCreatingSubgraph, setIsCreatingSubgraph] = useState(false)
+  const [selectedSubgraphId, setSelectedId] = useState<string | null>(() => {
+    const active = getActiveGraphId()
+    return subgraphs.some((s) => s.id === active) ? active : null
+  })
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
-  const [newSubgraphName, setNewSubgraphName] = useState('')
-  const [viewMode, setViewMode] = useState<'browse' | 'subgraph'>('browse')
+  const [viewMode, setViewMode] = useState<GraphListMode>(() =>
+    defaultMode(subgraphs.find((s) => s.id === selectedSubgraphId)),
+  )
   const [subgraphQuery, setSubgraphQuery] = useState('')
   const debouncedSubgraphQuery = useDebouncedValue(subgraphQuery, 300)
   const [subgraphActiveTags, setSubgraphActiveTags] = useState<Set<string>>(
@@ -37,64 +49,76 @@ export function useSubgraphManager() {
     Set<string>
   >(new Set())
 
-  const createSubgraph = (name: string) => {
-    const subgraph = createSavedGraph(name)
-    setSubgraphs((prev) => [...prev, subgraph])
-    setSelectedSubgraphId(subgraph.id)
+  // Selecting a graph (or "All papers", null) also makes it the graph view's
+  const setSelectedSubgraphId = (id: string | null, graph?: SavedGraph) => {
+    setSelectedId(id)
+    setActiveGraphId(id)
+    setViewMode(defaultMode(graph ?? subgraphs.find((s) => s.id === id)))
   }
 
-  const startCreatingSubgraph = () => {
-    setNewSubgraphName('')
-    setIsCreatingSubgraph(true)
-  }
-
-  const cancelCreatingSubgraph = () => {
-    setIsCreatingSubgraph(false)
-    setNewSubgraphName('')
-  }
-
-  const confirmCreateSubgraph = () => {
-    const name = newSubgraphName.trim().slice(0, MAX_GRAPH_NAME_LENGTH)
-    if (!name) return
-    createSubgraph(name)
-    setIsCreatingSubgraph(false)
-    setNewSubgraphName('')
+  // Saves a graph generated from filters and selects it. Returns an error
+  // message when it can't be saved (e.g. the saved-graph cap).
+  const createGraph = (filters: GraphFilters, name: string) => {
+    let graph: SavedGraph
+    try {
+      graph = createSavedGraph(name, { filters })
+    } catch (e) {
+      return e instanceof Error ? e.message : 'Could not save graph'
+    }
+    setSubgraphs((prev) => [graph, ...prev])
+    setSelectedSubgraphId(graph.id, graph)
+    return null
   }
 
   const selectedSubgraph = subgraphs.find(
     (subgraph) => subgraph.id === selectedSubgraphId,
   )
 
-  // The first page of the graph's recipe plus its pins, as on the graph view
-  // (same query keys, so each view reuses what the other loaded). Loaded in
-  // browse mode too, so the list can mark papers already in the graph.
+  // Changing the recipe keeps the papers pinned and hidden by hand
+  const editGraphFilters = (filters: GraphFilters) => {
+    if (!selectedSubgraphId) return
+    const updated = updateSavedGraph(selectedSubgraphId, { filters })
+    setSubgraphs((prev) => [
+      updated,
+      ...prev.filter((s) => s.id !== updated.id),
+    ])
+  }
+
+  // Only the graph's pins: Browse lists papers added by hand, while the
+  // recipe's matches live on the graph view. Same query key as the graph
+  // view's pins, so each view reuses what the other loaded.
+  const pinned = selectedSubgraph?.pinned
   const content = useGraphContent(
     selectedSubgraph
       ? {
           graphKey: selectedSubgraph.id,
-          filters: selectedSubgraph.filters ?? null,
+          filters: null,
           pinned: selectedSubgraph.pinned,
-          hidden: selectedSubgraph.hidden,
+          hidden: [],
           cursor: null,
         }
       : null,
   )
+  const selectedSubgraphPaperIds = useMemo(
+    () => new Set(pinned ?? []),
+    [pinned],
+  )
+  const pinnedFull = (pinned?.length ?? 0) >= MAX_PINNED
+
+  // The previous pins stay on screen while the new set loads, so drop an
+  // unpinned paper locally to show the removal straight away
   const subgraphNodes = useMemo(
-    () => (content.isEmpty ? [] : (content.data?.nodes ?? null)),
-    [content.isEmpty, content.data],
+    () =>
+      content.isEmpty
+        ? []
+        : (content.data?.nodes.filter((n) =>
+            selectedSubgraphPaperIds.has(n.aid),
+          ) ?? null),
+    [content.isEmpty, content.data, selectedSubgraphPaperIds],
   )
   const subgraphError = content.error
     ? `Failed to load graph: ${content.error.message}`
     : null
-
-  const selectedSubgraphPaperIds = useMemo(
-    () =>
-      new Set([
-        ...(selectedSubgraph?.pinned ?? []),
-        ...(content.data?.nodes.map((n) => n.aid) ?? []),
-      ]),
-    [selectedSubgraph, content.data],
-  )
 
   const setMembership = (next: GraphMembership) => {
     if (!selectedSubgraphId) return
@@ -111,16 +135,11 @@ export function useSubgraphManager() {
     if (selectedSubgraph) setMembership(withAdded(selectedSubgraph, aid))
   }
 
+  // Unpins only: a paper the recipe matches stays in the graph, as the user
+  // removed the pin rather than the paper
   const removeFromSelectedSubgraph = (aid: string) => {
     if (selectedSubgraph)
-      setMembership(
-        withRemoved(selectedSubgraph, aid, content.pageAids.has(aid)),
-      )
-  }
-
-  const toggleViewMode = () => {
-    if (!selectedSubgraphId) return
-    setViewMode((m) => (m === 'subgraph' ? 'browse' : 'subgraph'))
+      setMembership(withRemoved(selectedSubgraph, aid))
   }
 
   const confirmDeleteSubgraph = () => {
@@ -128,18 +147,9 @@ export function useSubgraphManager() {
     deleteSavedGraph(selectedSubgraphId)
     const remaining = subgraphs.filter((s) => s.id !== selectedSubgraphId)
     setSubgraphs(remaining)
-    setSelectedSubgraphId(
-      remaining.reduce(
-        (latest, s) => (!latest || s.createdAt > latest.createdAt ? s : latest),
-        null as SavedGraph | null,
-      )?.id ?? null,
-    )
-    setViewMode('browse')
+    setSelectedSubgraphId(remaining[0]?.id ?? null)
     setIsConfirmingDelete(false)
   }
-
-  // Removal shows straight away: the hidden paper is filtered out locally
-  const removeFromSubgraphView = removeFromSelectedSubgraph
 
   useEffect(() => {
     setSubgraphQuery('')
@@ -234,22 +244,18 @@ export function useSubgraphManager() {
     setSelectedSubgraphId,
     selectedSubgraph,
     selectedSubgraphPaperIds,
-    isCreatingSubgraph,
-    newSubgraphName,
-    setNewSubgraphName,
-    startCreatingSubgraph,
-    cancelCreatingSubgraph,
-    confirmCreateSubgraph,
+    pinnedFull,
+    createGraph,
+    editGraphFilters,
     isConfirmingDelete,
     setIsConfirmingDelete,
     confirmDeleteSubgraph,
     viewMode,
-    toggleViewMode,
+    setViewMode,
     subgraphNodes,
     subgraphError,
     addToSelectedSubgraph,
     removeFromSelectedSubgraph,
-    removeFromSubgraphView,
     subgraphQuery,
     setSubgraphQuery,
     debouncedSubgraphQuery,

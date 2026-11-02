@@ -45,11 +45,14 @@ import type {
 } from '../lib/types'
 import type { RelatedPaper, SearchResult } from '../lib/api'
 import {
+  byUpdatedDesc,
   createSavedGraph,
   deleteSavedGraph,
+  getActiveGraphId,
   listSavedGraphs,
   MAX_GRAPH_NAME_LENGTH,
   MAX_PINNED,
+  setActiveGraphId,
   updateSavedGraph,
   withAdded,
   withRemoved,
@@ -149,10 +152,6 @@ const NEW_GRAPH_MODAL: ModalState = {
   basedOn: null,
 }
 
-function byUpdatedDesc(a: SavedGraph, b: SavedGraph) {
-  return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-}
-
 export default function ArxivGraph() {
   const fgRef = useRef<ForceGraphMethods<NodeCompact, LinkCompact> | undefined>(
     undefined,
@@ -164,13 +163,13 @@ export default function ArxivGraph() {
   const [savedGraphs, setSavedGraphs] = useState<SavedGraph[]>(() =>
     listSavedGraphs().sort(byUpdatedDesc),
   )
-  // Returning visitors land on their most recently used saved graph; first
-  // visitors get the Generate graph modal.
-  const [source, setSource] = useState<GraphSource>(() =>
-    savedGraphs[0]
-      ? { kind: 'saved', graph: savedGraphs[0] }
-      : { kind: 'none' },
-  )
+  // Returning visitors land on the graph last opened in either view (else the
+  // most recently updated one); first visitors get the Generate graph modal.
+  const [source, setSource] = useState<GraphSource>(() => {
+    const active = getActiveGraphId()
+    const graph = savedGraphs.find((g) => g.id === active) ?? savedGraphs[0]
+    return graph ? { kind: 'saved', graph } : { kind: 'none' }
+  })
   const [modal, setModal] = useState<ModalState | null>(() =>
     savedGraphs.length ? null : NEW_GRAPH_MODAL,
   )
@@ -186,9 +185,12 @@ export default function ArxivGraph() {
     setSource({ kind: 'saved', graph })
 
   // Last saved graph shown, so discarding a draft can go back to it.
+  // It's also the graph Browse opens on.
   const lastSavedIdRef = useRef<string | null>(activeSavedGraph?.id ?? null)
   useEffect(() => {
-    if (activeSavedGraph) lastSavedIdRef.current = activeSavedGraph.id
+    if (!activeSavedGraph) return
+    lastSavedIdRef.current = activeSavedGraph.id
+    setActiveGraphId(activeSavedGraph.id)
   }, [activeSavedGraph])
 
   const membership: GraphMembership | null =
@@ -260,8 +262,7 @@ export default function ArxivGraph() {
   }
 
   const removeFromGraph = (aid: string) => {
-    if (membership)
-      setMembership(withRemoved(membership, aid, pageAids.has(aid)))
+    if (membership) setMembership(withRemoved(membership, aid))
   }
 
   const error = content.error
@@ -974,6 +975,13 @@ export default function ArxivGraph() {
     height,
   }
 
+  // Pinned papers get a ring and an Unpin button; the recipe's own matches
+  // can be pinned too
+  const pinnedAids = useMemo(
+    () => new Set(membership?.pinned ?? []),
+    [membership?.pinned],
+  )
+
   // Count, date span and Newer/Older for the bottom bar. Without a recipe
   // every node is a pin, and there's one page.
   const hasRecipe = source.kind === 'draft' || !!activeSavedGraph?.filters
@@ -990,22 +998,17 @@ export default function ArxivGraph() {
         shown: recipeShown,
         total: hasRecipe ? (data.meta.total ?? recipeShown) : recipeShown,
         span: data.meta.span,
-        pinnedOffPage: data.nodes.length - recipeShown,
+        // Every pin on screen, on this page of the recipe or not. A graph
+        // without a recipe is all pins, which the count already says.
+        pinned: hasRecipe
+          ? data.nodes.filter((n) => pinnedAids.has(n.aid)).length
+          : 0,
       })}
       canNewer={pageIndex > 0}
       canOlder={!!data.meta.next}
       onNewer={goNewer}
       onOlder={goOlder}
     />
-  )
-  const pinnedAids = useMemo(
-    () => new Set(membership?.pinned ?? []),
-    [membership?.pinned],
-  )
-  // Papers in the shown graph, for the add/remove buttons
-  const graphAids = useMemo(
-    () => new Set(simNodes.map((n) => n.aid)),
-    [simNodes],
   )
   const graphName = activeSavedGraph?.name ?? 'Unsaved graph'
 
@@ -1092,7 +1095,7 @@ export default function ArxivGraph() {
             &ldquo;{activeSavedGraph?.name}&rdquo; is empty
           </p>
           <p className='text-sm text-neutral-500 max-w-sm'>
-            Search for papers above and use &ldquo;Add to subgraph&rdquo; to
+            Search for papers above and use &ldquo;Pin to graph&rdquo; to
             start building it out.
           </p>
         </div>
@@ -1223,7 +1226,7 @@ export default function ArxivGraph() {
               isLoading={isSearching}
               onAddToSubgraph={membership ? addToGraph : undefined}
               onRemoveFromSubgraph={membership ? removeFromGraph : undefined}
-              subgraphPaperIds={membership ? graphAids : undefined}
+              subgraphPaperIds={membership ? pinnedAids : undefined}
               subgraphName={graphName}
               subgraphFull={pinnedFull}
             />
@@ -1242,7 +1245,7 @@ export default function ArxivGraph() {
           onClose={onBackgroundClick}
           onAddToSubgraph={membership ? addToGraph : undefined}
           onRemoveFromSubgraph={membership ? removeFromGraph : undefined}
-          subgraphPaperIds={membership ? graphAids : undefined}
+          subgraphPaperIds={membership ? pinnedAids : undefined}
           subgraphName={graphName}
           subgraphFull={pinnedFull}
           onSelectPaper={(aid) => {

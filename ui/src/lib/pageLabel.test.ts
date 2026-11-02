@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { pageLabel } from './graphContent'
 
-const base = { pageIndex: 0, pageSize: 500, pinnedOffPage: 0 }
+const base = { pageIndex: 0, pageSize: 500, pinned: 0 }
 
 describe('pageLabel', () => {
   it('gives a plain count when everything fits on one page', () => {
@@ -22,9 +22,9 @@ describe('pageLabel', () => {
     expect(label).toContain('Sep')
   })
 
-  it('counts added papers that are off the page', () => {
-    expect(pageLabel({ ...base, shown: 3, total: 3, pinnedOffPage: 2 })).toBe(
-      '3 papers · 2 added',
+  it('counts pinned papers', () => {
+    expect(pageLabel({ ...base, shown: 3, total: 3, pinned: 2 })).toBe(
+      '3 papers · 2 pinned',
     )
   })
 })

@@ -1,26 +1,32 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { X } from 'lucide-react'
 
 import FilterBar from './FilterBar'
 import { fetchPapers } from '../lib/api'
-import { toRangeParams } from '../lib/graphFilters'
+import { defaultGraphName, toRangeParams } from '../lib/graphFilters'
 import type { GraphFilters } from '../lib/graphFilters'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useServerFilters } from '../hooks/useServerFilters'
 import { useTagCatalog } from '../hooks/useTagCatalog'
 import { GRAPH_PAGE_SIZE } from '../lib/graphContent'
+import { MAX_GRAPH_NAME_LENGTH } from '../lib/storage'
 
 
 export default function GenerateGraphModal({
   initialFilters,
   mode,
   onGenerate,
+  onSave,
   onClose,
 }: {
   initialFilters: GraphFilters
   mode: 'generate' | 'edit'
-  onGenerate: (filters: GraphFilters) => void
+  onGenerate?: (filters: GraphFilters) => void
+  // Saves straight away under a name typed in the footer, instead of handing
+  // the filters back for a draft (Browse, which has no canvas to preview on).
+  // Returns an error message when the graph can't be saved.
+  onSave?: (filters: GraphFilters, name: string) => string | null
   onClose: () => void
 }) {
   const { tags, availableDomains, isLoading } = useTagCatalog()
@@ -56,7 +62,15 @@ export default function GenerateGraphModal({
     placeholderData: keepPreviousData,
   })
   const isPending = isCounting || debouncedFilters !== filters
-  const canGenerate = total !== undefined && total > 0 && !isPending
+  // The name follows the filters until the user types their own
+  const [typedName, setTypedName] = useState<string | null>(null)
+  const name = typedName ?? defaultGraphName(filters, MAX_GRAPH_NAME_LENGTH)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const canGenerate =
+    total !== undefined &&
+    total > 0 &&
+    !isPending &&
+    (!onSave || !!name.trim())
 
   const panelRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
@@ -64,7 +78,10 @@ export default function GenerateGraphModal({
   }, [])
 
   const generate = () => {
-    if (canGenerate) onGenerate(filters)
+    if (!canGenerate) return
+    if (onSave)
+      setSaveError(onSave(filters, name.trim().slice(0, MAX_GRAPH_NAME_LENGTH)))
+    else onGenerate?.(filters)
   }
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -144,7 +161,27 @@ export default function GenerateGraphModal({
           />
         </div>
 
-        <div className='flex items-center justify-between gap-4 px-5 py-3 border-t border-neutral-800'>
+        {onSave && (
+          <div className='flex items-center gap-3 px-5 pt-3 border-t border-neutral-800'>
+            <label
+              htmlFor='generate-graph-name'
+              className='shrink-0 text-sm text-neutral-400'
+            >
+              Name
+            </label>
+            <input
+              id='generate-graph-name'
+              value={name}
+              maxLength={MAX_GRAPH_NAME_LENGTH}
+              onChange={(e) => setTypedName(e.target.value)}
+              className='flex-1 min-w-0 px-2 py-1 rounded-md bg-neutral-900 border border-[#333333] text-sm text-[#e5e5e5] outline-none focus:ring-2 focus:ring-[#4ea8de]'
+            />
+          </div>
+        )}
+
+        <div
+          className={`flex items-center justify-between gap-4 px-5 py-3 ${onSave ? '' : 'border-t border-neutral-800'}`}
+        >
           <span
             aria-live='polite'
             className={`text-sm transition-opacity ${isPending ? 'opacity-60' : ''} ${total === 0 ? 'text-amber-400' : 'text-neutral-400'}`}
@@ -165,10 +202,17 @@ export default function GenerateGraphModal({
               disabled={!canGenerate}
               className='px-3 py-1 rounded-md bg-[#4ea8de] text-sm font-medium text-neutral-950 hover:bg-[#6bb8e6] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
             >
-              {mode === 'edit' ? 'Regenerate graph' : 'Generate graph'}
+              {onSave
+                ? 'Create graph'
+                : mode === 'edit'
+                  ? 'Regenerate graph'
+                  : 'Generate graph'}
             </button>
           </div>
         </div>
+        {saveError && (
+          <p className='px-5 pb-3 -mt-1 text-xs text-red-400'>{saveError}</p>
+        )}
       </div>
     </div>
   )

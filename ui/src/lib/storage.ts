@@ -118,10 +118,38 @@ export function updateSavedGraph(
 export function deleteSavedGraph(id: string): void {
   localStorage.removeItem(KEY_PREFIX + id)
   setIndex(getIndex().filter((i) => i !== id))
+  if (getActiveGraphId() === id) setActiveGraphId(null)
 }
 
-// Adding a paper pins it (and un-hides it). Removing one unpins it, and hides
-// it when the recipe would otherwise bring it back.
+export function byUpdatedDesc(a: SavedGraph, b: SavedGraph): number {
+  return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+}
+
+const ACTIVE_GRAPH_KEY = 'ais_active_graph'
+
+// The saved graph last opened in either view, so switching between the graph
+// and Browse keeps it. Unset (null) means none: GraphView then opens the most
+// recently updated graph and Browse shows all papers.
+export function getActiveGraphId(): string | null {
+  try {
+    return localStorage.getItem(ACTIVE_GRAPH_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function setActiveGraphId(id: string | null): void {
+  try {
+    if (id) localStorage.setItem(ACTIVE_GRAPH_KEY, id)
+    else localStorage.removeItem(ACTIVE_GRAPH_KEY)
+  } catch {
+    // ignore
+  }
+}
+
+// Adding a paper pins it (and un-hides it). Removing one only unpins it: a
+// paper the recipe matches stays in the graph. `hidden` is no longer added to
+// by the UI, but graphs that hide papers keep doing so.
 export function withAdded(m: GraphMembership, aid: string): GraphMembership {
   return {
     pinned: m.pinned.includes(aid) ? m.pinned : [...m.pinned, aid],
@@ -129,16 +157,8 @@ export function withAdded(m: GraphMembership, aid: string): GraphMembership {
   }
 }
 
-export function withRemoved(
-  m: GraphMembership,
-  aid: string,
-  matchedByRecipe: boolean,
-): GraphMembership {
-  return {
-    pinned: m.pinned.filter((id) => id !== aid),
-    hidden:
-      matchedByRecipe && !m.hidden.includes(aid) ? [...m.hidden, aid] : m.hidden,
-  }
+export function withRemoved(m: GraphMembership, aid: string): GraphMembership {
+  return { pinned: m.pinned.filter((id) => id !== aid), hidden: m.hidden }
 }
 
 const LEGEND_COLLAPSED_KEY = 'ais_legend_collapsed'
