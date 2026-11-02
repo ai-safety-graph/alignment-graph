@@ -142,10 +142,13 @@ export default function BrowseView() {
   // Recipe matches the user hid (on older builds) aren't in the graph
   const hidden = selectedSubgraph?.hidden
   const papers = useMemo(() => {
+    // A pins-only graph has no matches. The disabled query would still hand
+    // back the All papers list cached under the same key.
+    if (isMatches && !recipe) return null
     if (!isMatches || !listedPapers || !hidden?.length) return listedPapers
     const skip = new Set(hidden)
     return listedPapers.filter((n) => !skip.has(n.aid))
-  }, [isMatches, listedPapers, hidden])
+  }, [isMatches, recipe, listedPapers, hidden])
 
   const {
     selectedId,

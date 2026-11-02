@@ -184,14 +184,21 @@ export default function ArxivGraph() {
   const setActiveSavedGraph = (graph: SavedGraph) =>
     setSource({ kind: 'saved', graph })
 
+  // The opening source when no active graph was stored and the view fell back
+  // to the most recent one. That fallback isn't a choice, so it isn't stored:
+  // Browse keeps showing all papers until the user picks a graph.
+  const [fallbackSource] = useState(() =>
+    savedGraphs.some((g) => g.id === getActiveGraphId()) ? null : source,
+  )
+
   // Last saved graph shown, so discarding a draft can go back to it.
   // It's also the graph Browse opens on.
   const lastSavedIdRef = useRef<string | null>(activeSavedGraph?.id ?? null)
   useEffect(() => {
-    if (!activeSavedGraph) return
-    lastSavedIdRef.current = activeSavedGraph.id
-    setActiveGraphId(activeSavedGraph.id)
-  }, [activeSavedGraph])
+    if (source.kind !== 'saved') return
+    lastSavedIdRef.current = source.graph.id
+    if (source !== fallbackSource) setActiveGraphId(source.graph.id)
+  }, [source, fallbackSource])
 
   const membership: GraphMembership | null =
     source.kind === 'draft'
