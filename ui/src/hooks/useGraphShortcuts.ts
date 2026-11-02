@@ -13,10 +13,19 @@ export function useGraphShortcuts(opts: {
   setQuery: (s: string) => void
   onBackgroundClick: () => void
   searchInputRef: React.RefObject<HTMLInputElement | null>
+  // Off while a modal owns the keyboard
+  enabled?: boolean
 }) {
-  const { query, setQuery, onBackgroundClick, searchInputRef } = opts
+  const {
+    query,
+    setQuery,
+    onBackgroundClick,
+    searchInputRef,
+    enabled = true,
+  } = opts
 
   useEffect(() => {
+    if (!enabled) return
     const onKey = (e: KeyboardEvent) => {
       const typing = isTypingInField(e)
       if (
@@ -54,5 +63,5 @@ export function useGraphShortcuts(opts: {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [query, setQuery, onBackgroundClick, searchInputRef])
+  }, [query, setQuery, onBackgroundClick, searchInputRef, enabled])
 }

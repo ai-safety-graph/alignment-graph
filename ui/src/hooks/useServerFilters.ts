@@ -43,27 +43,25 @@ export function presetToFromDate(preset: DatePreset): string | undefined {
   return d.toISOString().split('T')[0]
 }
 
-// Presets that actually narrow data whose oldest publish date is `oldestPd`
-// (ISO YYYY-MM-DD), plus 'all'. Windows reaching past the oldest paper are
-// indistinguishable from 'all', so they're dropped, and 'all' takes the label
-// of the narrowest dropped window (e.g. "Past month" for the recent graph)
-// rather than claiming "Any time".
-export function availableDatePresets(oldestPd: string | undefined) {
-  const kept: typeof DATE_PRESETS = []
-  let allLabel: string | undefined
-  for (const p of DATE_PRESETS) {
-    if (p.value === 'all') continue
-    if (oldestPd !== undefined && presetToFromDate(p.value)! > oldestPd)
-      kept.push(p)
-    else if (oldestPd !== undefined) allLabel ??= p.label
-  }
-  return [...kept, { value: 'all' as const, label: allLabel ?? 'Any time' }]
-}
-
-export function useServerFilters(tags: TagsLegend) {
-  const [activeTags, setActiveTags] = useState<Set<string>>(new Set())
-  const [activeDomains, setActiveDomains] = useState<Set<string>>(new Set())
-  const [datePreset, setDatePreset] = useState<DatePreset>('all')
+// `initial` seeds the state once (e.g. the Edit graph modal reopening a
+// saved recipe); later changes to it are ignored.
+export function useServerFilters(
+  tags: TagsLegend,
+  initial?: {
+    tags: string[]
+    domains: string[]
+    datePreset: DatePreset
+  },
+) {
+  const [activeTags, setActiveTags] = useState<Set<string>>(
+    () => new Set(initial?.tags),
+  )
+  const [activeDomains, setActiveDomains] = useState<Set<string>>(
+    () => new Set(initial?.domains),
+  )
+  const [datePreset, setDatePreset] = useState<DatePreset>(
+    initial?.datePreset ?? 'all',
+  )
 
   const tagEntries = useMemo(
     () => Object.entries(tags) as Array<[string, { size: number }]>,

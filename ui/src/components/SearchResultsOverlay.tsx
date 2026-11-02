@@ -1,6 +1,7 @@
 import SharePlusIcon from './icons/SharePlusIcon'
 import ShareMinusIcon from './icons/ShareMinusIcon'
 import type { NodeCompact } from '../lib/types'
+import { MAX_PAPERS } from '../lib/storage'
 import TagChips from './TagChips'
 
 const truncate = (s: string, n: number) =>
@@ -14,6 +15,7 @@ export default function SearchResultsOverlay({
   onRemoveFromSubgraph,
   subgraphPaperIds,
   subgraphName,
+  subgraphFull,
 }: {
   results: Array<{ n: NodeCompact; score: number; deg: number }>
   onSelect: (aid: string) => void
@@ -22,6 +24,7 @@ export default function SearchResultsOverlay({
   onRemoveFromSubgraph?: (aid: string) => void
   subgraphPaperIds?: Set<string>
   subgraphName?: string
+  subgraphFull?: boolean
 }) {
   const subgraphLabel = subgraphName ?? 'Subgraph'
   if (!isLoading && !results?.length) return null
@@ -45,6 +48,7 @@ export default function SearchResultsOverlay({
       <ul className='list-none p-0 m-0'>
         {results.map(({ n }) => {
           const inSubgraph = subgraphPaperIds?.has(n.aid) ?? false
+          const addBlocked = !inSubgraph && !!subgraphFull
           return (
             <li key={n.aid} className='py-2 border-b border-neutral-800'>
               <div className='flex items-start gap-2'>
@@ -74,8 +78,10 @@ export default function SearchResultsOverlay({
                       if (inSubgraph) onRemoveFromSubgraph?.(n.aid)
                       else onAddToSubgraph?.(n.aid)
                     }}
+                    disabled={addBlocked}
+                    title={addBlocked ? `${subgraphLabel} is full (${MAX_PAPERS} papers)` : undefined}
                     aria-label={inSubgraph ? `Remove from ${subgraphLabel}` : `Add to ${subgraphLabel}`}
-                    className='group p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200 shrink-0'
+                    className='group p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed'
                   >
                     {inSubgraph ? <ShareMinusIcon size={14} className='text-red-800 group-hover:text-red-500 transition-colors' /> : <SharePlusIcon size={14} className='text-green-800 group-hover:text-green-500 transition-colors' />}
                   </button>

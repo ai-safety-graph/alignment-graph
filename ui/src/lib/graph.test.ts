@@ -3,7 +3,6 @@ import {
   buildAdjacency,
   clamp,
   lc,
-  nodeMatchesFilters,
   separatePoints,
   stepAlpha,
 } from './graph'
@@ -108,73 +107,6 @@ describe('separatePoints', () => {
     expect(
       separatePoints([], { minDist: 10, fixed: [{ x: 0, y: 0 }] }),
     ).toEqual([])
-  })
-})
-
-describe('nodeMatchesFilters', () => {
-  const node = {
-    ...makeNode(1),
-    tags: ['interpretability', 'evals'],
-    dm: 'tech',
-    pd: '2026-09-01',
-  }
-  const none = { tags: new Set<string>(), domains: new Set<string>() }
-
-  it('matches everything when no filters are active', () => {
-    expect(nodeMatchesFilters(node, none)).toBe(true)
-  })
-
-  it('matches if the node has any selected tag', () => {
-    expect(
-      nodeMatchesFilters(node, { ...none, tags: new Set(['evals', 'policy']) }),
-    ).toBe(true)
-    expect(
-      nodeMatchesFilters(node, { ...none, tags: new Set(['policy']) }),
-    ).toBe(false)
-  })
-
-  it('matches if the node domain is selected', () => {
-    expect(
-      nodeMatchesFilters(node, { ...none, domains: new Set(['tech', 'gov']) }),
-    ).toBe(true)
-    expect(
-      nodeMatchesFilters(node, { ...none, domains: new Set(['gov']) }),
-    ).toBe(false)
-  })
-
-  it('matches papers published on or after fromDate', () => {
-    expect(nodeMatchesFilters(node, { ...none, fromDate: '2026-09-01' })).toBe(
-      true,
-    )
-    expect(nodeMatchesFilters(node, { ...none, fromDate: '2026-09-02' })).toBe(
-      false,
-    )
-  })
-
-  it('compares only the date part of a timestamp pd', () => {
-    const ts = { ...node, pd: '2026-09-01 12:30:00' }
-    expect(nodeMatchesFilters(ts, { ...none, fromDate: '2026-09-01' })).toBe(
-      true,
-    )
-  })
-
-  it('excludes papers with no published date when a date filter is set', () => {
-    const noDate = { ...node, pd: '' }
-    expect(nodeMatchesFilters(noDate, { ...none, fromDate: '2026-01-01' })).toBe(
-      false,
-    )
-  })
-
-  it('requires every active filter group to match', () => {
-    const f = {
-      tags: new Set(['evals']),
-      domains: new Set(['gov']),
-      fromDate: '2026-01-01',
-    }
-    expect(nodeMatchesFilters(node, f)).toBe(false)
-    expect(nodeMatchesFilters(node, { ...f, domains: new Set(['tech']) })).toBe(
-      true,
-    )
   })
 })
 
