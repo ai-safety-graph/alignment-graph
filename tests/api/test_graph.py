@@ -51,12 +51,14 @@ def test_subset_unknown_ids_returns_empty_graph(client):
 
 
 def test_range_returns_only_papers_in_range(client, make_paper):
-    before = make_paper("2401.00090", published="2023-12-31")
-    first = make_paper("2401.00091", published="2024-01-01", tags=[("rlhf", 0.9)])
-    last = make_paper("2401.00092", published="2024-01-31")
-    after = make_paper("2401.00093", published="2024-02-01")
+    # Pre-arXiv dates, so real papers in a local DB can't fill the newest-first
+    # cap ahead of the fixtures.
+    before = make_paper("2401.00090", published="1989-12-31")
+    first = make_paper("2401.00091", published="1990-01-01", tags=[("rlhf", 0.9)])
+    last = make_paper("2401.00092", published="1990-01-31")
+    after = make_paper("2401.00093", published="1990-02-01")
 
-    res = client.get("/api/graph/range", params={"from": "2024-01-01", "to": "2024-01-31"})
+    res = client.get("/api/graph/range", params={"from": "1990-01-01", "to": "1990-01-31"})
     assert res.status_code == 200
     body = res.json()
 
