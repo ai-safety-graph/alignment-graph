@@ -1011,6 +1011,7 @@ export default function ArxivGraph() {
           ? data.nodes.filter((n) => pinnedAids.has(n.aid)).length
           : 0,
       })}
+      paged={pageIndex > 0 || !!data.meta.next}
       canNewer={pageIndex > 0}
       canOlder={!!data.meta.next && !content.isPaging}
       onNewer={goNewer}
