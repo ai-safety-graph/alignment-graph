@@ -916,7 +916,7 @@ export default function ArxivGraph() {
   // Paging drops the selection: its paper may not be on the next page
   const goOlder = () => {
     const next = data?.meta.next
-    if (!next) return
+    if (!next || content.isPaging) return
     track('graph_page', { direction: 'older' })
     clearSelection()
     setPaging({ key: sourceKey, cursors: [...cursors, next] })
@@ -993,7 +993,7 @@ export default function ArxivGraph() {
         pinnedOffPage: data.nodes.length - recipeShown,
       })}
       canNewer={pageIndex > 0}
-      canOlder={!!data.meta.next}
+      canOlder={!!data.meta.next && !content.isPaging}
       onNewer={goNewer}
       onOlder={goOlder}
     />
