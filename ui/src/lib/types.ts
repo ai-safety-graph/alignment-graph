@@ -42,6 +42,8 @@ export type GraphDataCompact = {
       } | null
     }
     compact: boolean
+    // /api/graph/range only: full match count before the node cap
+    total?: number
   }
   tags: TagsLegend
   nodes: NodeCompact[]

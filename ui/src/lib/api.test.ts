@@ -92,6 +92,17 @@ describe('fetchGraphRange', () => {
     expect(url.searchParams.has('to')).toBe(false)
     expect(graph.nodes[0].tags).toEqual([])
   })
+
+  it('encodes tags and domains as repeated params and omits an unset `from`', async () => {
+    mockFetchOnce({ meta: {}, tags: {}, nodes: [], links: [] })
+
+    await fetchGraphRange({ tags: ['rlhf', 'interpretability'], domains: ['gov'] })
+
+    const url = new URL(vi.mocked(fetch).mock.calls[0][0] as string, 'http://localhost')
+    expect(url.searchParams.getAll('tags')).toEqual(['rlhf', 'interpretability'])
+    expect(url.searchParams.getAll('domain')).toEqual(['gov'])
+    expect(url.searchParams.has('from')).toBe(false)
+  })
 })
 describe('fetchPaper', () => {
   beforeEach(() => {

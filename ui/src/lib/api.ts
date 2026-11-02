@@ -42,14 +42,22 @@ export async function fetchSubgraph(
   return { ...data, nodes: data.nodes.map(withTags) }
 }
 
-// Graph of every relevant paper published in [from, to] (dates as
-// YYYY-MM-DD; `to` defaults to open-ended), in one request.
-export async function fetchGraphRange(params: {
-  from: string
-  to?: string
-}): Promise<GraphDataCompact> {
-  const qs = new URLSearchParams({ from: params.from })
+// Graph of the relevant papers matching the filters (any of `tags`, any of
+// `domains`, published in [from, to] as YYYY-MM-DD; every bound optional),
+// newest first and capped server-side; `meta.total` is the full match count.
+export async function fetchGraphRange(
+  params: {
+    from?: string
+    to?: string
+    tags?: string[]
+    domains?: string[]
+  } = {},
+): Promise<GraphDataCompact> {
+  const qs = new URLSearchParams()
+  if (params.from) qs.set('from', params.from)
   if (params.to) qs.set('to', params.to)
+  params.tags?.forEach((t) => qs.append('tags', t))
+  params.domains?.forEach((d) => qs.append('domain', d))
   const data = await apiFetch<GraphDataCompact>(`/api/graph/range?${qs}`)
   return { ...data, nodes: data.nodes.map(withTags) }
 }
