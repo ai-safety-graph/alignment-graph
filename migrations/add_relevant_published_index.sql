@@ -3,6 +3,11 @@
 -- CONCURRENTLY so the live API keeps reading and writing; run outside a
 -- transaction.
 --
+-- Run with `psql -f` on the direct DSN (not the transaction-mode pooler).
+-- The SQL editor or `psql -c` sends the file as one multi-statement query,
+-- which runs in an implicit transaction where CONCURRENTLY fails, and the
+-- pooler may run the SET and the CREATE on different backends.
+--
 -- No lock_timeout: the concurrent build only takes a lock that doesn't block
 -- reads or writes, but it waits out open transactions, and if that wait is
 -- cut short Postgres leaves an INVALID index behind. IF NOT EXISTS (here and
