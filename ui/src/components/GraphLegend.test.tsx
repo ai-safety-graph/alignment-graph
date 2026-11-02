@@ -20,6 +20,7 @@ describe('GraphLegend', () => {
   it('renders expanded with every swatch label', () => {
     render(<GraphLegend />)
     expect(screen.getByText('Papers in this graph')).toBeInTheDocument()
+    expect(screen.getByText('Papers you added by hand')).toBeInTheDocument()
     expect(
       screen.getByText('Search results outside this graph'),
     ).toBeInTheDocument()

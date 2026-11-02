@@ -7,7 +7,7 @@ import { usePaperSummary } from '../hooks/usePaperSummary'
 import { useRef, useLayoutEffect } from 'react'
 import type { RelatedPaper } from '../lib/api'
 import TagChips from './TagChips'
-import { MAX_PAPERS } from '../lib/storage'
+import { MAX_PINNED } from '../lib/storage'
 
 interface Props {
   paper: NodeCompact
@@ -36,7 +36,7 @@ export default function GraphPaperDetails({
 }: Props) {
   const isPaperInSubgraph = subgraphPaperIds?.has(paper.aid) ?? false
   const subgraphLabel = subgraphName ?? 'Subgraph'
-  const fullTitle = `${subgraphLabel} is full (${MAX_PAPERS} papers)`
+  const fullTitle = `${subgraphLabel} already has ${MAX_PINNED} added papers`
   const urlKey = paper.ln || paper.aid
   const { data: lazy, loading, error } = usePaperSummary(urlKey)
   const scrollerRef = useRef<HTMLDivElement | null>(null)

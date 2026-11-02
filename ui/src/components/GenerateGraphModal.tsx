@@ -9,9 +9,8 @@ import type { GraphFilters } from '../lib/graphFilters'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useServerFilters } from '../hooks/useServerFilters'
 import { useTagCatalog } from '../hooks/useTagCatalog'
+import { GRAPH_PAGE_SIZE } from '../lib/graphContent'
 
-// Mirrors the backend's _MAX_RANGE: generated graphs keep the newest papers.
-const MAX_GRAPH_PAPERS = 500
 
 export default function GenerateGraphModal({
   initialFilters,
@@ -84,8 +83,8 @@ export default function GenerateGraphModal({
   let countLabel = 'Counting papers…'
   if (total !== undefined) {
     countLabel =
-      total > MAX_GRAPH_PAPERS
-        ? `${total.toLocaleString()} papers match · the graph shows the newest ${MAX_GRAPH_PAPERS}`
+      total > GRAPH_PAGE_SIZE
+        ? `${total.toLocaleString()} papers match · shown ${GRAPH_PAGE_SIZE} at a time, newest first`
         : `${total.toLocaleString()} ${total === 1 ? 'paper matches' : 'papers match'}`
   }
 

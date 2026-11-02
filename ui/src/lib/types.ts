@@ -17,6 +17,9 @@ export type NodeCompact = {
   ry?: number | null
 }
 
+// Keyset cursor for /api/graph/range: the last row of the previous page.
+export type GraphCursor = { before_date: string; before_id: string }
+
 export type LinkCompact = { s: number; t: number; w: number }
 
 export type TagsLegend = Record<
@@ -42,8 +45,12 @@ export type GraphDataCompact = {
       } | null
     }
     compact: boolean
-    // /api/graph/range only: full match count before the node cap
+    // /api/graph/range only: full match count across every page, the
+    // cursor for the next page (null on the last one), and this page's
+    // published-date span (null when empty)
     total?: number
+    next?: GraphCursor | null
+    span?: { newest: string; oldest: string } | null
   }
   tags: TagsLegend
   nodes: NodeCompact[]

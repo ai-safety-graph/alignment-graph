@@ -5,10 +5,13 @@ import {
   listSavedGraphs,
   MAX_GRAPH_NAME_LENGTH,
   updateSavedGraph,
+  withAdded,
+  withRemoved,
+  type GraphMembership,
   type SavedGraph,
 } from '../lib/storage'
-import type { NodeCompact } from '../lib/types'
 import { useDebouncedValue } from './useDebouncedValue'
+import { useGraphContent } from './useGraphContent'
 
 export function useSubgraphManager() {
   const [subgraphs, setSubgraphs] = useState<SavedGraph[]>(() =>
@@ -25,10 +28,6 @@ export function useSubgraphManager() {
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
   const [newSubgraphName, setNewSubgraphName] = useState('')
   const [viewMode, setViewMode] = useState<'browse' | 'subgraph'>('browse')
-  const [subgraphNodes, setSubgraphNodes] = useState<NodeCompact[] | null>(
-    null,
-  )
-  const [subgraphError, setSubgraphError] = useState<string | null>(null)
   const [subgraphQuery, setSubgraphQuery] = useState('')
   const debouncedSubgraphQuery = useDebouncedValue(subgraphQuery, 300)
   const [subgraphActiveTags, setSubgraphActiveTags] = useState<Set<string>>(
@@ -39,29 +38,9 @@ export function useSubgraphManager() {
   >(new Set())
 
   const createSubgraph = (name: string) => {
-    const subgraph = createSavedGraph(name, [])
+    const subgraph = createSavedGraph(name)
     setSubgraphs((prev) => [...prev, subgraph])
     setSelectedSubgraphId(subgraph.id)
-  }
-
-  const addToSelectedSubgraph = (aid: string) => {
-    if (!selectedSubgraphId) return
-    const current = subgraphs.find((s) => s.id === selectedSubgraphId)
-    if (!current || current.paperIds.includes(aid)) return
-    const updated = updateSavedGraph(selectedSubgraphId, {
-      paperIds: [...current.paperIds, aid],
-    })
-    setSubgraphs((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
-  }
-
-  const removeFromSelectedSubgraph = (aid: string) => {
-    if (!selectedSubgraphId) return
-    const current = subgraphs.find((s) => s.id === selectedSubgraphId)
-    if (!current) return
-    const updated = updateSavedGraph(selectedSubgraphId, {
-      paperIds: current.paperIds.filter((id) => id !== aid),
-    })
-    setSubgraphs((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
   }
 
   const startCreatingSubgraph = () => {
@@ -86,38 +65,58 @@ export function useSubgraphManager() {
     (subgraph) => subgraph.id === selectedSubgraphId,
   )
 
+  // The first page of the graph's recipe plus its pins, as on the graph view
+  // (same query keys, so each view reuses what the other loaded). Loaded in
+  // browse mode too, so the list can mark papers already in the graph.
+  const content = useGraphContent(
+    selectedSubgraph
+      ? {
+          graphKey: selectedSubgraph.id,
+          filters: selectedSubgraph.filters ?? null,
+          pinned: selectedSubgraph.pinned,
+          hidden: selectedSubgraph.hidden,
+          cursor: null,
+        }
+      : null,
+  )
+  const subgraphNodes = useMemo(
+    () => (content.isEmpty ? [] : (content.data?.nodes ?? null)),
+    [content.isEmpty, content.data],
+  )
+  const subgraphError = content.error
+    ? `Failed to load graph: ${content.error.message}`
+    : null
+
   const selectedSubgraphPaperIds = useMemo(
-    () => new Set(selectedSubgraph?.paperIds ?? []),
-    [selectedSubgraph],
+    () =>
+      new Set([
+        ...(selectedSubgraph?.pinned ?? []),
+        ...(content.data?.nodes.map((n) => n.aid) ?? []),
+      ]),
+    [selectedSubgraph, content.data],
   )
 
-  useEffect(() => {
-    if (viewMode !== 'subgraph' || !selectedSubgraphId) return
-    const paperIds = selectedSubgraph?.paperIds ?? []
-    if (paperIds.length === 0) {
-      setSubgraphNodes([])
+  const setMembership = (next: GraphMembership) => {
+    if (!selectedSubgraphId) return
+    let updated: SavedGraph
+    try {
+      updated = updateSavedGraph(selectedSubgraphId, next)
+    } catch {
       return
     }
-    let alive = true
-    setSubgraphNodes(null)
-    setSubgraphError(null)
-    ;(async () => {
-      try {
-        const { fetchSubgraph } = await import('../lib/api')
-        const data = await fetchSubgraph(paperIds)
-        if (alive) setSubgraphNodes(data.nodes)
-      } catch (e: unknown) {
-        if (alive)
-          setSubgraphError(
-            e instanceof Error ? e.message : 'Failed to load graph',
-          )
-      }
-    })()
-    return () => {
-      alive = false
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewMode, selectedSubgraphId])
+    setSubgraphs((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
+  }
+
+  const addToSelectedSubgraph = (aid: string) => {
+    if (selectedSubgraph) setMembership(withAdded(selectedSubgraph, aid))
+  }
+
+  const removeFromSelectedSubgraph = (aid: string) => {
+    if (selectedSubgraph)
+      setMembership(
+        withRemoved(selectedSubgraph, aid, content.pageAids.has(aid)),
+      )
+  }
 
   const toggleViewMode = () => {
     if (!selectedSubgraphId) return
@@ -135,21 +134,17 @@ export function useSubgraphManager() {
         null as SavedGraph | null,
       )?.id ?? null,
     )
-    setSubgraphNodes(null)
     setViewMode('browse')
     setIsConfirmingDelete(false)
   }
 
-  const removeFromSubgraphView = (aid: string) => {
-    removeFromSelectedSubgraph(aid)
-    setSubgraphNodes((prev) => (prev ?? []).filter((n) => n.aid !== aid))
-  }
+  // Removal shows straight away: the hidden paper is filtered out locally
+  const removeFromSubgraphView = removeFromSelectedSubgraph
 
   useEffect(() => {
     setSubgraphQuery('')
     setSubgraphActiveTags(new Set())
     setSubgraphActiveDomains(new Set())
-    setSubgraphError(null)
   }, [selectedSubgraphId])
 
   // Counts every tag a node holds (any rank, not just primary), matching

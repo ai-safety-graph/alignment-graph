@@ -7,7 +7,7 @@ import {
   useState,
 } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import ForceGraph2D from 'react-force-graph-2d'
 import type {
   ForceGraphMethods,
@@ -30,35 +30,42 @@ import { useGraphShortcuts } from '../hooks/useGraphShortcuts'
 import {
   buildAdjacency,
   clamp,
+  PINNED_RING_COLOR,
   RELATED_GHOST_NODE_COLOR,
   SEARCH_GHOST_NODE_COLOR,
   separatePoints,
   stepAlpha,
   SUBGRAPH_NODE_COLOR,
 } from '../lib/graph'
-import type { GraphDataCompact, LinkCompact, NodeCompact } from '../lib/types'
+import type {
+  GraphCursor,
+  GraphDataCompact,
+  LinkCompact,
+  NodeCompact,
+} from '../lib/types'
 import type { RelatedPaper, SearchResult } from '../lib/api'
 import {
   createSavedGraph,
   deleteSavedGraph,
   listSavedGraphs,
   MAX_GRAPH_NAME_LENGTH,
-  MAX_PAPERS,
+  MAX_PINNED,
   updateSavedGraph,
+  withAdded,
+  withRemoved,
 } from '../lib/storage'
-import type { SavedGraph } from '../lib/storage'
-import {
-  defaultGraphName,
-  EMPTY_FILTERS,
-  toRangeParams,
-} from '../lib/graphFilters'
+import type { GraphMembership, SavedGraph } from '../lib/storage'
+import { defaultGraphName, EMPTY_FILTERS } from '../lib/graphFilters'
 import type { GraphFilters } from '../lib/graphFilters'
+import { GRAPH_PAGE_SIZE, pageLabel } from '../lib/graphContent'
+import { graphPinsKey, useGraphContent } from '../hooks/useGraphContent'
 
 import GraphLegend from './GraphLegend'
 import GraphPaperDetails from './GraphPaperDetails'
 import SearchResultsOverlay from './SearchResultsOverlay'
 import Dropdown from './Dropdown'
 import DraftGraphBar from './DraftGraphBar'
+import GraphPager from './GraphPager'
 import GenerateGraphModal from './GenerateGraphModal'
 import LoadingIndicator from './LoadingIndicator'
 import LatestBatchBadge from './LatestBatchBadge'
@@ -76,6 +83,12 @@ const FADE_MS = 150
 const NODE_RADIUS = 4
 const NODE_MIN_DIST = 2 * NODE_RADIUS + 2
 const SINGLE_NODE_ZOOM = 3
+
+// Ghost ids live in their own ranges, above any graph node's id (graphs have
+// at most a page plus MAX_PINNED nodes), so they never collide with the
+// nodes of whichever graph or page is shown next.
+const SEARCH_GHOST_ID_BASE = 1_000_000
+const RELATED_GHOST_ID_BASE = 2_000_000
 
 // A node once it's in the force simulation: always has a live x/y position,
 // and fx/fy when pinned (dragged, hovered while locked, or coordinate-pinned).
@@ -103,11 +116,18 @@ function ghostCoord(
 }
 
 // What the canvas shows: nothing yet, an unsaved graph generated from filters
-// (`basedOn` = the saved graph it was edited from), or a saved graph.
+// (`basedOn` = the saved graph it was edited from), or a saved graph. Drafts
+// carry their own pins and hides, which saving stores with the recipe.
 type GraphSource =
   | { kind: 'none' }
-  | { kind: 'draft'; filters: GraphFilters; basedOn: SavedGraph | null }
+  | ({
+      kind: 'draft'
+      filters: GraphFilters
+      basedOn: SavedGraph | null
+    } & GraphMembership)
   | { kind: 'saved'; graph: SavedGraph }
+
+const NO_MEMBERSHIP: GraphMembership = { pinned: [], hidden: [] }
 
 type ModalState = {
   mode: 'generate' | 'edit'
@@ -171,20 +191,63 @@ export default function ArxivGraph() {
     if (activeSavedGraph) lastSavedIdRef.current = activeSavedGraph.id
   }, [activeSavedGraph])
 
-  // The add buttons are disabled at MAX_PAPERS; the catch is a backstop so
-  // a failed save never surfaces as an uncaught error
-  const subgraphFull =
-    (activeSavedGraph?.paperIds.length ?? 0) >= MAX_PAPERS
+  const membership: GraphMembership | null =
+    source.kind === 'draft'
+      ? { pinned: source.pinned, hidden: source.hidden }
+      : source.kind === 'saved'
+        ? { pinned: source.graph.pinned, hidden: source.graph.hidden }
+        : null
+  const pinnedFull = (membership?.pinned.length ?? 0) >= MAX_PINNED
 
-  const addToActiveSavedGraph = (aid: string) => {
-    if (!activeSavedGraph) return
-    const current = savedGraphs.find((s) => s.id === activeSavedGraph.id)
-    if (!current || current.paperIds.includes(aid)) return
+  // Identifies the graph being shown, and with the page, the camera framing
+  const sourceKey =
+    source.kind === 'draft'
+      ? `draft:${JSON.stringify(source.filters)}`
+      : source.kind === 'saved'
+        ? `saved:${source.graph.id}`
+        : 'none'
+
+  // Cursors for the pages after the first, newest first. Tied to the source
+  // they were collected on, and cleared by showSource, so switching graphs
+  // (or coming back to one whose filters were updated) starts at page 1.
+  // Pins and hides on the graph shown keep the page.
+  const [paging, setPaging] = useState<{
+    key: string
+    cursors: GraphCursor[]
+  }>({ key: sourceKey, cursors: [] })
+  const cursors = paging.key === sourceKey ? paging.cursors : []
+  const pageIndex = cursors.length
+
+  // The graph's papers: a page of its recipe plus its pins, minus hides.
+  // Queries use the app-wide infinite staleTime, so revisiting a graph or
+  // page (e.g. navigating to /browse and back) doesn't refetch.
+  const content = useGraphContent(
+    source.kind === 'none' || !membership
+      ? null
+      : {
+          graphKey: source.kind === 'saved' ? source.graph.id : 'draft',
+          filters:
+            source.kind === 'draft'
+              ? source.filters
+              : (source.graph.filters ?? null),
+          ...membership,
+          cursor: cursors[cursors.length - 1] ?? null,
+        },
+  )
+  const data = content.data
+  const pageAids = content.pageAids
+
+  const setMembership = (next: GraphMembership) => {
+    if (source.kind === 'draft') {
+      setSource({ ...source, ...next })
+      return
+    }
+    if (source.kind !== 'saved') return
+    // Add buttons are disabled at MAX_PINNED; the catch is a backstop so a
+    // failed save never surfaces as an uncaught error
     let updated: SavedGraph
     try {
-      updated = updateSavedGraph(activeSavedGraph.id, {
-        paperIds: [...current.paperIds, aid],
-      })
+      updated = updateSavedGraph(source.graph.id, next)
     } catch {
       return
     }
@@ -194,39 +257,20 @@ export default function ArxivGraph() {
     setActiveSavedGraph(updated)
   }
 
-  const removeFromActiveSavedGraph = (aid: string) => {
-    if (!activeSavedGraph) return
-    const current = savedGraphs.find((s) => s.id === activeSavedGraph.id)
-    if (!current) return
-    const updated = updateSavedGraph(activeSavedGraph.id, {
-      paperIds: current.paperIds.filter((id) => id !== aid),
-    })
-    setSavedGraphs((prev) =>
-      prev.map((s) => (s.id === updated.id ? updated : s)),
-    )
-    setActiveSavedGraph(updated)
+  const addToGraph = (aid: string) => {
+    if (membership) setMembership(withAdded(membership, aid))
   }
 
-  // A draft is fetched straight from its filters in one request. Uses the
-  // app-wide infinite staleTime, so regenerating the same filters is free.
-  const draftFilters = source.kind === 'draft' ? source.filters : null
-  const {
-    data: draftGraph,
-    isLoading: isDraftLoading,
-    error: draftError,
-  } = useQuery({
-    queryKey: ['graphRange', draftFilters],
-    queryFn: async () => {
-      const { fetchGraphRange } = await import('../lib/api')
-      return fetchGraphRange(toRangeParams(draftFilters!))
-    },
-    enabled: !!draftFilters,
-  })
+  const removeFromGraph = (aid: string) => {
+    if (membership)
+      setMembership(withRemoved(membership, aid, pageAids.has(aid)))
+  }
 
-  const ids = activeSavedGraph?.paperIds ?? []
-
-  const isEmptySavedGraph =
-    !!activeSavedGraph && activeSavedGraph.paperIds.length === 0
+  const error = content.error
+    ? `Failed to ${source.kind === 'draft' ? 'generate' : 'load'} graph: ${content.error.message}`
+    : null
+  const showLoading = content.isLoading
+  const isEmptySavedGraph = source.kind === 'saved' && content.isEmpty
 
   const [hoverId, setHoverId] = useState<number | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -260,38 +304,6 @@ export default function ArxivGraph() {
       window.removeEventListener('orientationchange', measure)
     }
   }, [])
-
-  // Data fetch. Cached by ids so revisiting the same graph (e.g. navigating
-  // away to /browse and back) doesn't refire /api/graph/subset.
-  const {
-    data: subgraph,
-    error: queryError,
-    isLoading: isGraphLoading,
-  } = useQuery({
-    queryKey: ['subgraph', ids],
-    queryFn: async () => {
-      const { fetchSubgraph } = await import('../lib/api')
-      return fetchSubgraph(ids)
-    },
-    // An empty saved graph has no papers to fetch; the backend rejects an
-    // empty ids list, so skip the request and show an empty-state instead.
-    enabled: ids.length > 0,
-  })
-  const data =
-    source.kind === 'draft'
-      ? draftGraph
-      : source.kind === 'saved'
-        ? subgraph
-        : undefined
-  const error =
-    source.kind === 'draft' && draftError
-      ? `Failed to generate graph: ${draftError.message}`
-      : source.kind === 'saved' && queryError
-        ? `Failed to load graph: ${queryError.message}`
-        : null
-  const showLoading =
-    (source.kind === 'draft' && isDraftLoading) ||
-    (source.kind === 'saved' && isGraphLoading && ids.length > 0)
 
   // Prepare simulation nodes (mutable x/y)
   // Stored coords are pinned, so the collide force never runs on them; resolve
@@ -365,11 +377,11 @@ export default function ArxivGraph() {
     return { byId, adj }
   }, [data, ghostSimNodes, relatedGhostNodes])
 
-  // Debounced backend search
+  // Debounced backend search. Only fetches results; ghosts are built from
+  // them below, against whichever graph is showing.
   const searchTimerRef = useRef<number | null>(null)
   useEffect(() => {
     if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current)
-    setGhostSimNodes([])
 
     if (!query.trim()) {
       setApiResults([])
@@ -379,8 +391,7 @@ export default function ArxivGraph() {
     setIsSearching(true)
     searchTimerRef.current = window.setTimeout(async () => {
       try {
-        const { searchPapers, fetchPapers, fetchSubgraph } =
-          await import('../lib/api')
+        const { searchPapers, fetchPapers } = await import('../lib/api')
         let results: SearchResult[]
         if (searchMode === 'semantic') {
           const res = await searchPapers(query, { limit: 50 })
@@ -390,41 +401,6 @@ export default function ArxivGraph() {
           results = res.items.map((item, i) => ({ ...item, id: i, sim: null }))
         }
         setApiResults(results)
-
-        const existingAids = new Set(simNodesRef.current.map((n) => n.aid))
-        const ghostAids = results
-          .map((r) => r.aid)
-          .filter((aid) => !existingAids.has(aid))
-        if (ghostAids.length > 0) {
-          const ghostData = await fetchSubgraph(ghostAids)
-          const maxId =
-            simNodesRef.current.reduce((m, n) => Math.max(m, n.id), 0) + 1
-          let nextId = maxId
-          const coords = dataRef.current?.meta.coords
-          const pin = !!coords?.included
-          const rawPos = ghostData.nodes.map((n) =>
-            coords?.bounds && n.rx != null && n.ry != null
-              ? ghostCoord(n.rx, n.ry, coords)
-              : { x: n.x ?? 0, y: n.y ?? 0 },
-          )
-          const positions = pin
-            ? separatePoints(rawPos, {
-                minDist: NODE_MIN_DIST,
-                fixed: simNodesRef.current,
-              })
-            : rawPos
-          const ghosts = ghostData.nodes.map((n, i) => {
-            const pos = positions[i]
-            return {
-              ...n,
-              id: nextId++,
-              x: pos.x,
-              y: pos.y,
-              ...(pin ? { fx: pos.x, fy: pos.y } : {}),
-            }
-          })
-          setGhostSimNodes(ghosts)
-        }
       } catch {
         setApiResults([])
       } finally {
@@ -435,6 +411,62 @@ export default function ArxivGraph() {
       if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current)
     }
   }, [query, searchMode])
+
+  // Search ghosts: results that aren't nodes of the shown graph. Rebuilt when
+  // the results or the graph change (switch, page, pin, hide). Ghosts already
+  // built keep their id, results that became real nodes drop out, and only
+  // results with no ghost yet are fetched, so a pin costs no request.
+  const nextSearchGhostId = useRef(SEARCH_GHOST_ID_BASE)
+  useEffect(() => {
+    // Wait for the graph, so ghosts aren't placed against an empty one
+    if (!data) return
+    const coords = data.meta.coords
+    const pin = coords.included
+    const place = (nodes: (NodeCompact & { id: number })[]): SimNode[] => {
+      const rawPos = nodes.map((n) =>
+        coords.bounds && n.rx != null && n.ry != null
+          ? ghostCoord(n.rx, n.ry, coords)
+          : { x: n.x ?? 0, y: n.y ?? 0 },
+      )
+      const positions = pin
+        ? separatePoints(rawPos, { minDist: NODE_MIN_DIST, fixed: simNodes })
+        : rawPos
+      return nodes.map((n, i) => ({
+        ...n,
+        x: positions[i].x,
+        y: positions[i].y,
+        ...(pin ? { fx: positions[i].x, fy: positions[i].y } : {}),
+      }))
+    }
+
+    const inGraph = new Set(simNodes.map((n) => n.aid))
+    const wanted = new Set(
+      apiResults.map((r) => r.aid).filter((aid) => !inGraph.has(aid)),
+    )
+    const kept = ghostSimNodesRef.current.filter((g) => wanted.has(g.aid))
+    for (const g of kept) wanted.delete(g.aid)
+    setGhostSimNodes(place(kept))
+    if (wanted.size === 0) return
+
+    let alive = true
+    ;(async () => {
+      try {
+        const { fetchSubgraph } = await import('../lib/api')
+        const fetched = await fetchSubgraph([...wanted])
+        if (!alive) return
+        const fresh = fetched.nodes.map((n) => ({
+          ...n,
+          id: nextSearchGhostId.current++,
+        }))
+        setGhostSimNodes(place([...kept, ...fresh]))
+      } catch {
+        // Keep the ghosts we have
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [apiResults, simNodes, data])
 
   // Search results for overlay
   const searchResults = useMemo(() => {
@@ -513,9 +545,36 @@ export default function ArxivGraph() {
     [selectedId, byId],
   )
 
+  // Node ids are positions in the current response, so a pin, hide or ghost
+  // rebuild can renumber the selected paper. Follow it by aid: remember the
+  // aid when the selection changes, and re-find it when the nodes change.
+  const selectedAidRef = useRef<string | null>(null)
+  useEffect(() => {
+    selectedAidRef.current =
+      selectedId != null ? (byId.get(selectedId)?.aid ?? null) : null
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId])
+  useEffect(() => {
+    const aid = selectedAidRef.current
+    if (aid == null || selectedId == null) return
+    const id = aidToId.get(aid)
+    if (id === selectedId) return
+    if (id === undefined) {
+      // Gone, e.g. the user just removed it from the graph
+      setSelectedId(null)
+      setLockedId(null)
+      setHoverId(null)
+      return
+    }
+    setSelectedId(id)
+    setLockedId((locked) => (locked == null ? null : id))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aidToId])
+
   // Build ghost nodes for a selected paper's related papers, positioned in the
   // main graph's coordinate space. Replaces the previous related-ghost set,
   // retaining the selected node itself if it is already a related ghost.
+  const nextRelatedGhostId = useRef(RELATED_GHOST_ID_BASE)
   const buildRelatedGhosts = useCallback(
     (sel: NodeCompact, results: RelatedPaper[]) => {
       const coords = data?.meta.coords
@@ -533,13 +592,6 @@ export default function ArxivGraph() {
       setRelatedGhostNodes((prev) => {
         const retained = prev.filter((n) => n.id === sel.id)
         const seenAids = new Set(retained.map((n) => n.aid))
-        let nextId =
-          Math.max(
-            0,
-            ...sims.map((n) => n.id),
-            ...searchGhosts.map((n) => n.id),
-            ...retained.map((n) => n.id),
-          ) + 1
         const fresh: RelatedPaper[] = []
         for (const r of results) {
           if (r.rx == null || r.ry == null) continue
@@ -559,7 +611,7 @@ export default function ArxivGraph() {
         fresh.forEach((r, i) => {
           const { x, y } = positions[i]
           built.push({
-            id: nextId++,
+            id: nextRelatedGhostId.current++,
             aid: r.aid,
             t: r.t,
             au: r.au,
@@ -615,17 +667,12 @@ export default function ArxivGraph() {
   // Force configuration
   useForceConfig(fgRef, !!data)
 
-  // Autofit once per graph source
-  const sourceKey =
-    source.kind === 'draft'
-      ? `draft:${JSON.stringify(source.filters)}`
-      : source.kind === 'saved'
-        ? `saved:${source.graph.id}`
-        : 'none'
+  // Autofit once per graph source and page: pages of a broad recipe can sit
+  // in different parts of the map
   const didAutoFit = useRef(false)
   useEffect(() => {
     didAutoFit.current = false
-  }, [sourceKey])
+  }, [sourceKey, pageIndex])
 
   // ESC unlock (global). Off while the modal is open, which handles its own Esc.
   useEffect(() => {
@@ -774,6 +821,7 @@ export default function ArxivGraph() {
     clearSelection()
     setConfirmingDelete(false)
     setPendingExit(null)
+    setPaging({ key: '', cursors: [] })
     setSource(next)
   }
 
@@ -806,7 +854,22 @@ export default function ArxivGraph() {
       date: filters.datePreset,
       mode: modal?.mode ?? 'generate',
     })
-    showSource({ kind: 'draft', filters, basedOn: modal?.basedOn ?? null })
+    // Editing keeps the papers added or removed by hand: the draft's own, or
+    // those of the saved graph being edited
+    const kept: GraphMembership =
+      modal?.mode !== 'edit'
+        ? NO_MEMBERSHIP
+        : source.kind === 'draft'
+          ? { pinned: source.pinned, hidden: source.hidden }
+          : modal.basedOn
+            ? { pinned: modal.basedOn.pinned, hidden: modal.basedOn.hidden }
+            : NO_MEMBERSHIP
+    showSource({
+      kind: 'draft',
+      filters,
+      basedOn: modal?.basedOn ?? null,
+      ...kept,
+    })
     setModal(null)
   }
 
@@ -827,25 +890,46 @@ export default function ArxivGraph() {
     }
   }
 
-  // Stores the draft and switches to it as a saved graph. The draft's graph
-  // is seeded into the subset query, which would return the same nodes at
-  // the same (corpus-normalised) coords, so saving doesn't refetch.
+  // Stores the draft (recipe, pins and hides) and switches to it as a saved
+  // graph. Its recipe page is cached under the same key either way, and its
+  // pins are seeded under the saved graph's key, so saving doesn't refetch.
   const saveDraft = (target: SavedGraph | null, name?: string) => {
-    if (source.kind !== 'draft' || !draftGraph) return 'Graph not loaded yet'
-    const paperIds = draftGraph.nodes.map((n) => n.aid)
+    if (source.kind !== 'draft' || !data) return 'Graph not loaded yet'
+    const stored = {
+      filters: source.filters,
+      pinned: source.pinned,
+      hidden: source.hidden,
+    }
     let saved: SavedGraph
     try {
       saved = target
-        ? updateSavedGraph(target.id, { paperIds, filters: source.filters })
-        : createSavedGraph(name!, paperIds, source.filters)
+        ? updateSavedGraph(target.id, stored)
+        : createSavedGraph(name!, stored)
     } catch (e) {
       return e instanceof Error ? e.message : 'Could not save graph'
     }
     track('graph_save', { kind: target ? 'update' : 'new' })
-    queryClient.setQueryData(['subgraph', paperIds], draftGraph)
+    const pins = queryClient.getQueryData(graphPinsKey('draft', source.pinned))
+    if (pins) queryClient.setQueryData(graphPinsKey(saved.id, saved.pinned), pins)
     setSavedGraphs((prev) => [saved, ...prev.filter((s) => s.id !== saved.id)])
     showSource({ kind: 'saved', graph: saved })
     return null
+  }
+
+  // Paging drops the selection: its paper may not be on the next page
+  const goOlder = () => {
+    const next = data?.meta.next
+    if (!next || content.isPaging) return
+    track('graph_page', { direction: 'older' })
+    clearSelection()
+    setPaging({ key: sourceKey, cursors: [...cursors, next] })
+  }
+
+  const goNewer = () => {
+    if (pageIndex === 0) return
+    track('graph_page', { direction: 'newer' })
+    clearSelection()
+    setPaging({ key: sourceKey, cursors: cursors.slice(0, -1) })
   }
 
   const discardDraft = () => {
@@ -893,6 +977,42 @@ export default function ArxivGraph() {
     height,
   }
 
+  // Count, date span and Newer/Older for the bottom bar. Without a recipe
+  // every node is a pin, and there's one page.
+  const hasRecipe = source.kind === 'draft' || !!activeSavedGraph?.filters
+  const recipeShown = data
+    ? hasRecipe
+      ? data.nodes.filter((n) => pageAids.has(n.aid)).length
+      : data.nodes.length
+    : 0
+  const pager = data && (
+    <GraphPager
+      label={pageLabel({
+        pageIndex,
+        pageSize: GRAPH_PAGE_SIZE,
+        shown: recipeShown,
+        total: hasRecipe ? (data.meta.total ?? recipeShown) : recipeShown,
+        span: data.meta.span,
+        pinnedOffPage: data.nodes.length - recipeShown,
+      })}
+      paged={pageIndex > 0 || !!data.meta.next}
+      canNewer={pageIndex > 0}
+      canOlder={!!data.meta.next && !content.isPaging}
+      onNewer={goNewer}
+      onOlder={goOlder}
+    />
+  )
+  const pinnedAids = useMemo(
+    () => new Set(membership?.pinned ?? []),
+    [membership?.pinned],
+  )
+  // Papers in the shown graph, for the add/remove buttons
+  const graphAids = useMemo(
+    () => new Set(simNodes.map((n) => n.aid)),
+    [simNodes],
+  )
+  const graphName = activeSavedGraph?.name ?? 'Unsaved graph'
+
   // Rendering helpers
   const nodeCanvasObject = (
     node: NodeObject<NodeCompact>,
@@ -928,6 +1048,13 @@ export default function ArxivGraph() {
     ctx.lineWidth = 0.5
     ctx.strokeStyle = 'rgba(255,255,255,0.7)'
     ctx.stroke()
+    if (!ghostIds.has(n.id) && pinnedAids.has(n.aid)) {
+      ctx.beginPath()
+      ctx.lineWidth = 1.5
+      ctx.strokeStyle = PINNED_RING_COLOR
+      ctx.arc(n.x, n.y, r + 2, 0, 2 * Math.PI, false)
+      ctx.stroke()
+    }
     if (relatedLoading && selectedId === n.id) {
       const angle = (Date.now() / 300) % (Math.PI * 2)
       ctx.save()
@@ -998,14 +1125,14 @@ export default function ArxivGraph() {
           </button>
         </div>
       )}
-      {source.kind === 'draft' && draftGraph && (
+      {source.kind === 'draft' && data && (
         <div className='fixed bottom-4 inset-x-0 z-10 flex justify-center pointer-events-none'>
           <div className='pointer-events-auto'>
             <DraftGraphBar
               // Remount per draft so a half-typed name doesn't carry over
               key={sourceKey}
-              shown={draftGraph.nodes.length}
-              total={draftGraph.meta.total ?? draftGraph.nodes.length}
+              pager={pager}
+              empty={data.nodes.length === 0}
               defaultName={defaultGraphName(
                 source.filters,
                 MAX_GRAPH_NAME_LENGTH,
@@ -1016,6 +1143,13 @@ export default function ArxivGraph() {
               onEdit={openEdit}
               onDiscard={discardDraft}
             />
+          </div>
+        </div>
+      )}
+      {source.kind === 'saved' && data && (
+        <div className='fixed bottom-4 inset-x-0 z-10 flex justify-center pointer-events-none'>
+          <div className='pointer-events-auto flex items-center px-3 py-1.5 rounded-lg border border-neutral-700 bg-neutral-950/95 shadow-lg'>
+            {pager}
           </div>
         </div>
       )}
@@ -1091,19 +1225,11 @@ export default function ArxivGraph() {
               results={searchResults}
               onSelect={onSearchPick}
               isLoading={isSearching}
-              onAddToSubgraph={
-                activeSavedGraph ? addToActiveSavedGraph : undefined
-              }
-              onRemoveFromSubgraph={
-                activeSavedGraph ? removeFromActiveSavedGraph : undefined
-              }
-              subgraphPaperIds={
-                activeSavedGraph
-                  ? new Set(activeSavedGraph.paperIds)
-                  : undefined
-              }
-              subgraphName={activeSavedGraph?.name}
-              subgraphFull={subgraphFull}
+              onAddToSubgraph={membership ? addToGraph : undefined}
+              onRemoveFromSubgraph={membership ? removeFromGraph : undefined}
+              subgraphPaperIds={membership ? graphAids : undefined}
+              subgraphName={graphName}
+              subgraphFull={pinnedFull}
             />
           </div>
         )}
@@ -1118,15 +1244,11 @@ export default function ArxivGraph() {
           related={related}
           relatedLoading={relatedLoading}
           onClose={onBackgroundClick}
-          onAddToSubgraph={activeSavedGraph ? addToActiveSavedGraph : undefined}
-          onRemoveFromSubgraph={
-            activeSavedGraph ? removeFromActiveSavedGraph : undefined
-          }
-          subgraphPaperIds={
-            activeSavedGraph ? new Set(activeSavedGraph.paperIds) : undefined
-          }
-          subgraphName={activeSavedGraph?.name}
-          subgraphFull={subgraphFull}
+          onAddToSubgraph={membership ? addToGraph : undefined}
+          onRemoveFromSubgraph={membership ? removeFromGraph : undefined}
+          subgraphPaperIds={membership ? graphAids : undefined}
+          subgraphName={graphName}
+          subgraphFull={pinnedFull}
           onSelectPaper={(aid) => {
             const id = aidToId.get(aid)
             if (id == null) return

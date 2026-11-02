@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { MAX_GRAPH_NAME_LENGTH } from '../lib/storage'
 
 const BUTTON =
@@ -9,8 +10,8 @@ const PRIMARY_BUTTON =
 // Action bar for an unsaved, filter-generated graph: save it (as new, or over
 // the saved graph it was edited from), edit its filters, or discard it.
 export default function DraftGraphBar({
-  shown,
-  total,
+  pager,
+  empty,
   defaultName,
   basedOnName,
   onSave,
@@ -18,8 +19,10 @@ export default function DraftGraphBar({
   onEdit,
   onDiscard,
 }: {
-  shown: number
-  total: number
+  // Paper count and Newer/Older controls (GraphPager)
+  pager: ReactNode
+  // Nothing to save: the recipe matched no papers and none were added
+  empty: boolean
   defaultName: string
   // Name of the saved graph this draft was edited from, if any
   basedOnName?: string
@@ -46,11 +49,6 @@ export default function DraftGraphBar({
     setError(err)
     if (!err) setNaming(false)
   }
-
-  const countLabel =
-    total > shown
-      ? `newest ${shown.toLocaleString()} of ${total.toLocaleString()} papers`
-      : `${shown.toLocaleString()} ${shown === 1 ? 'paper' : 'papers'}`
 
   return (
     <div className='flex flex-col-reverse items-center gap-1'>
@@ -93,14 +91,14 @@ export default function DraftGraphBar({
           <>
             <span className='text-[13px] text-neutral-300 whitespace-nowrap'>
               Unsaved graph
-              <span className='text-neutral-500'> · {countLabel}</span>
             </span>
+            {pager}
             {basedOnName ? (
               <>
                 <button
                   type='button'
                   onClick={() => setError(onUpdate())}
-                  disabled={shown === 0}
+                  disabled={empty}
                   title={`Replace “${basedOnName}” with this graph`}
                   className={`${PRIMARY_BUTTON} max-w-[200px] truncate`}
                 >
@@ -109,7 +107,7 @@ export default function DraftGraphBar({
                 <button
                   type='button'
                   onClick={startNaming}
-                  disabled={shown === 0}
+                  disabled={empty}
                   className={BUTTON}
                 >
                   Save as new
@@ -119,7 +117,7 @@ export default function DraftGraphBar({
               <button
                 type='button'
                 onClick={startNaming}
-                disabled={shown === 0}
+                disabled={empty}
                 className={PRIMARY_BUTTON}
               >
                 Save

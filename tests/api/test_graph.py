@@ -160,3 +160,68 @@ def test_subset_coords_match_range(client, make_paper):
     ranged = client.get("/api/graph/range", params={"from": "2099-06-01", "tags": ["rlhf"]}).json()
     subset = client.post("/api/graph/subset", json={"ids": [shared, other]}).json()
     assert pos(subset["nodes"]) == pos(ranged["nodes"])
+
+
+def test_range_pages_with_cursor(client, make_paper, monkeypatch):
+    from aisafety_pipeline.api.routes import graph
+
+    monkeypatch.setattr(graph, "_MAX_RANGE", 2)
+    # Two papers share a date, so the cursor has to break ties on id.
+    aids = [
+        make_paper("2401.00120", published="2099-07-03"),
+        make_paper("2401.00122", published="2099-07-02"),
+        make_paper("2401.00121", published="2099-07-02"),
+        make_paper("2401.00123", published="2099-07-01"),
+        make_paper("2401.00124", published="2099-06-30"),
+    ]
+    params = {"from": "2099-06-30", "to": "2099-07-31"}
+
+    seen, spans, cursor = [], [], {}
+    while True:
+        body = client.get("/api/graph/range", params={**params, **cursor}).json()
+        assert body["meta"]["total"] == 5
+        seen += [node["aid"] for node in body["nodes"]]
+        spans.append(body["meta"]["span"])
+        if body["meta"]["next"] is None:
+            break
+        cursor = body["meta"]["next"]
+
+    assert seen == aids
+    assert spans == [
+        {"newest": "2099-07-03", "oldest": "2099-07-02"},
+        {"newest": "2099-07-02", "oldest": "2099-07-01"},
+        {"newest": "2099-06-30", "oldest": "2099-06-30"},
+    ]
+
+
+def test_range_cursor_params_must_come_together(client):
+    res = client.get("/api/graph/range", params={"before_date": "2099-01-01"})
+    assert res.status_code == 422
+
+
+def test_range_exclude_refills_the_page(client, make_paper, monkeypatch):
+    from aisafety_pipeline.api.routes import graph
+
+    monkeypatch.setattr(graph, "_MAX_RANGE", 2)
+    newest = make_paper("2401.00130", published="2099-08-03")
+    hidden = make_paper("2401.00131", published="2099-08-02")
+    oldest = make_paper("2401.00132", published="2099-08-01")
+
+    res = client.get(
+        "/api/graph/range",
+        params={"from": "2099-08-01", "to": "2099-08-31", "exclude": [hidden]},
+    )
+    body = res.json()
+    assert [node["aid"] for node in body["nodes"]] == [newest, oldest]
+    assert body["meta"]["total"] == 2
+    assert body["meta"]["next"] is None
+
+
+def test_range_rejects_too_many_excludes(client):
+    from aisafety_pipeline.api.routes.graph import _MAX_EXCLUDE
+
+    res = client.get(
+        "/api/graph/range",
+        params={"exclude": [f"id-{i}" for i in range(_MAX_EXCLUDE + 1)]},
+    )
+    assert res.status_code == 422

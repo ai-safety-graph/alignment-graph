@@ -76,6 +76,8 @@ export const lc = (s?: string | null) => (s ?? '').toLowerCase()
 export const SUBGRAPH_NODE_COLOR = '#6A93B0'
 export const RELATED_GHOST_NODE_COLOR = '#F4A261'
 export const SEARCH_GHOST_NODE_COLOR = '#8BD17C'
+// Ring around papers added to a graph by hand
+export const PINNED_RING_COLOR = '#4ea8de'
 
 // Move an alpha linearly toward `target`, covering the full 0–1 range in
 // `fadeMs`, so a node fading after `dt` ms never overshoots its target.

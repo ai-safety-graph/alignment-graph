@@ -1,7 +1,7 @@
 import SharePlusIcon from './icons/SharePlusIcon'
 import ShareMinusIcon from './icons/ShareMinusIcon'
 import type { NodeCompact } from '../lib/types'
-import { MAX_PAPERS } from '../lib/storage'
+import { MAX_PINNED } from '../lib/storage'
 import TagChips from './TagChips'
 
 const truncate = (s: string, n: number) =>
@@ -79,7 +79,7 @@ export default function SearchResultsOverlay({
                       else onAddToSubgraph?.(n.aid)
                     }}
                     disabled={addBlocked}
-                    title={addBlocked ? `${subgraphLabel} is full (${MAX_PAPERS} papers)` : undefined}
+                    title={addBlocked ? `${subgraphLabel} already has ${MAX_PINNED} added papers` : undefined}
                     aria-label={inSubgraph ? `Remove from ${subgraphLabel}` : `Add to ${subgraphLabel}`}
                     className='group p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed'
                   >

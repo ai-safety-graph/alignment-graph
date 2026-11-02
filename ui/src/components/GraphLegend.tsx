@@ -2,14 +2,20 @@ import { useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 
 import {
+  PINNED_RING_COLOR,
   RELATED_GHOST_NODE_COLOR,
   SEARCH_GHOST_NODE_COLOR,
   SUBGRAPH_NODE_COLOR,
 } from '../lib/graph'
 import { getLegendCollapsed, setLegendCollapsed } from '../lib/storage'
 
-const SWATCHES = [
+const SWATCHES: { color: string; label: string; ring?: string }[] = [
   { color: SUBGRAPH_NODE_COLOR, label: 'Papers in this graph' },
+  {
+    color: SUBGRAPH_NODE_COLOR,
+    ring: PINNED_RING_COLOR,
+    label: 'Papers you added by hand',
+  },
   { color: SEARCH_GHOST_NODE_COLOR, label: 'Search results outside this graph' },
   { color: RELATED_GHOST_NODE_COLOR, label: 'Papers related to the selected one' },
 ]
@@ -52,11 +58,14 @@ export default function GraphLegend() {
         </button>
       </div>
       <ul className='space-y-1 mb-2'>
-        {SWATCHES.map(({ color, label }) => (
+        {SWATCHES.map(({ color, label, ring }) => (
           <li key={label} className='flex items-center gap-2 text-neutral-300'>
             <span
               className='shrink-0 w-2.5 h-2.5 rounded-full border border-white/70'
-              style={{ backgroundColor: color }}
+              style={{
+                backgroundColor: color,
+                ...(ring ? { boxShadow: `0 0 0 1.5px ${ring}` } : {}),
+              }}
             />
             {label}
           </li>
@@ -64,7 +73,8 @@ export default function GraphLegend() {
       </ul>
       <p className='leading-snug'>
         Papers are placed near others on similar topics, so closer means more
-        alike. Use Generate graph to choose which papers are shown.
+        alike. Use Generate graph to choose which papers are shown; a broad
+        choice is shown 500 papers at a time, newest first.
       </p>
     </div>
   )
