@@ -7,18 +7,21 @@ const PAGE_BUTTON =
 // show when the recipe has more than one page.
 export default function GraphPager({
   label,
+  paged,
   canNewer,
   canOlder,
   onNewer,
   onOlder,
 }: {
   label: string
+  // Whether the graph has more than one page, so the arrows show. Separate
+  // from canNewer/canOlder, which also go false while a page loads.
+  paged: boolean
   canNewer: boolean
   canOlder: boolean
   onNewer: () => void
   onOlder: () => void
 }) {
-  const paged = canNewer || canOlder
   return (
     <span className='flex items-center gap-1 text-[13px] text-neutral-500 whitespace-nowrap'>
       {paged && (

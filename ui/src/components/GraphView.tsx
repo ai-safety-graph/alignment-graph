@@ -992,6 +992,7 @@ export default function ArxivGraph() {
         span: data.meta.span,
         pinnedOffPage: data.nodes.length - recipeShown,
       })}
+      paged={pageIndex > 0 || !!data.meta.next}
       canNewer={pageIndex > 0}
       canOlder={!!data.meta.next && !content.isPaging}
       onNewer={goNewer}
