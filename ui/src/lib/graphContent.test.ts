@@ -60,4 +60,38 @@ describe('mergeGraphContent', () => {
     expect(merged.meta.next).toBeNull()
     expect(merged.meta.coords.included).toBe(true)
   })
+
+  it("keeps the pins' layout when the recipe page is empty", () => {
+    const empty = graph([], {
+      coords: {
+        included: false,
+        method: 'none',
+        canvas: { w: 1000, h: 700, pad: 24 },
+        bounds: null,
+      },
+      total: 0,
+    })
+    const pins = graph([node('p')])
+
+    const merged = mergeGraphContent(empty, pins, new Set())!
+
+    expect(merged.nodes.map((n) => n.aid)).toEqual(['p'])
+    expect(merged.meta.coords.included).toBe(true)
+    expect(merged.meta.coords.bounds).toEqual(pins.meta.coords.bounds)
+    expect(merged.meta.total).toBe(0)
+  })
+
+  it('reports no layout when a non-empty half has none', () => {
+    const pins = graph([node('p')], {
+      coords: {
+        included: false,
+        method: 'none',
+        canvas: { w: 1000, h: 700, pad: 24 },
+        bounds: null,
+      },
+    })
+    const merged = mergeGraphContent(graph([node('a')]), pins, new Set())!
+    expect(merged.meta.coords.included).toBe(false)
+    expect(merged.meta.coords.bounds).toBeNull()
+  })
 })

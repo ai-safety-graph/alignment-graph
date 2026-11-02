@@ -25,8 +25,13 @@ export function mergeGraphContent(
   for (const n of nodes)
     for (const t of n.tags) tags[t] = { size: (tags[t]?.size ?? 0) + 1 }
 
+  // An empty response (a recipe page with no matches) reports no coords and
+  // no bounds; it mustn't take the pins' stored layout down with it.
+  const placed = [page, pins].filter(
+    (g): g is GraphDataCompact => !!g && g.nodes.length > 0,
+  )
   const included =
-    (page?.meta.coords.included ?? true) && (pins?.meta.coords.included ?? true)
+    placed.length > 0 && placed.every((g) => g.meta.coords.included)
   return {
     ...base,
     meta: {
@@ -36,7 +41,8 @@ export function mergeGraphContent(
         included,
         method: included ? 'stored-subset' : 'none',
         bounds: included
-          ? (page?.meta.coords.bounds ?? pins?.meta.coords.bounds)
+          ? (placed.find((g) => g.meta.coords.bounds)?.meta.coords.bounds ??
+            null)
           : null,
       },
       total: page?.meta.total,

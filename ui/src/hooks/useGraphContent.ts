@@ -87,6 +87,9 @@ export function useGraphContent(spec: GraphContentSpec | null) {
     ),
     isLoading:
       (!!filters && page.isLoading) || (pinned.length > 0 && pins.isLoading),
+    // The page shown is the previous one while the next loads, so its
+    // `meta.next` is the cursor already requested
+    isPaging: !!filters && page.isPlaceholderData,
     error: (filters ? page.error : null) ?? (pinned.length ? pins.error : null),
     isEmpty,
   }
