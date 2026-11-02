@@ -208,7 +208,9 @@ export default function ArxivGraph() {
         : 'none'
 
   // Cursors for the pages after the first, newest first. Tied to the source
-  // they were collected on, so switching graphs starts again at page 1.
+  // they were collected on, and cleared by showSource, so switching graphs
+  // (or coming back to one whose filters were updated) starts at page 1.
+  // Pins and hides on the graph shown keep the page.
   const [paging, setPaging] = useState<{
     key: string
     cursors: GraphCursor[]
@@ -819,6 +821,7 @@ export default function ArxivGraph() {
     clearSelection()
     setConfirmingDelete(false)
     setPendingExit(null)
+    setPaging({ key: '', cursors: [] })
     setSource(next)
   }
 
