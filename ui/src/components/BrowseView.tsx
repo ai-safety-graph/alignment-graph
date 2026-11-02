@@ -729,7 +729,7 @@ export default function BrowseView() {
                 </div>
               )}
 
-              {isBrowsing && !semantic && error && (
+              {isBrowsing && !semantic && error && (!isMatches || recipe) && (
                 <p className='p-4 text-red-400'>{error}</p>
               )}
 
