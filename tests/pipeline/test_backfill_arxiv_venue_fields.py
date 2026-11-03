@@ -188,3 +188,20 @@ def test_an_outage_stops_the_run_with_misses_recorded(conn, test_dsn, fixture_pa
     # Stopped after _MAX_EMPTY_CHUNKS chunks, each recorded, the rest untouched.
     assert sorted(state["missing"]) == sorted(ids)[: backfill._MAX_EMPTY_CHUNKS]
     assert state["last_id"] == sorted(ids)[backfill._MAX_EMPTY_CHUNKS - 1]
+
+
+def test_filled_papers_are_requeued_for_the_venue_stage(conn, test_dsn, fixture_papers, monkeypatch):
+    """The backfill doesn't move harvested_at, so it clears venue_derived_at
+    for the papers it fills; otherwise an earlier "unknown" would stick."""
+    ids = fixture_papers("2401.40030", "2401.40031")
+    conn.execute("UPDATE papers SET venue_derived_at = now() WHERE id = ANY(%s)", (ids,))
+    conn.commit()
+    _isolate(monkeypatch, test_dsn, ids)
+    monkeypatch.setattr(backfill, "fetch_arxiv_venue_fields", lambda chunk: _fields(chunk, {ids[1]}))
+
+    _run(monkeypatch, "--restart")
+    derived = dict(conn.execute(
+        "SELECT id, venue_derived_at FROM papers WHERE id = ANY(%s)", (ids,)
+    ).fetchall())
+    assert derived[ids[0]] is None
+    assert derived[ids[1]] is not None  # not returned by arXiv, nothing new to derive
