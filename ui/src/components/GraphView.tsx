@@ -360,10 +360,23 @@ export default function ArxivGraph() {
   const requestedLayoutKey = `${
     recipe ? `recipe:${JSON.stringify(recipe)}` : sourceKey
   }#${pageIndex}${data && !data.meta.coords.included ? '#free' : ''}`
-  const shownLayoutRef = useRef({ data, key: requestedLayoutKey })
+  // The force mode belongs to the layout shown too: data that changes while
+  // a page change is in flight (e.g. a pin without coords landing first)
+  // mustn't switch the forces under the layout's frozen nodes.
+  const requestedAnchored = !!data?.meta.coords.included
+  const shownLayoutRef = useRef({
+    data,
+    key: requestedLayoutKey,
+    anchored: requestedAnchored,
+  })
   if (shownLayoutRef.current.data !== data && !content.isPaging)
-    shownLayoutRef.current = { data, key: requestedLayoutKey }
+    shownLayoutRef.current = {
+      data,
+      key: requestedLayoutKey,
+      anchored: requestedAnchored,
+    }
   const layoutKey = shownLayoutRef.current.key
+  const anchored = shownLayoutRef.current.anchored
 
   // Build a simulation node anchored at (ax, ay): its stored coord. It starts
   // there, or where it is or was in this layout (see layoutMemory); the live
@@ -768,7 +781,7 @@ export default function ArxivGraph() {
     (!showLoading || loadedSourceRef.current === sourceKey) &&
     width > 0 &&
     height > 0
-  useForceConfig(fgRef, canvasReady, !!data?.meta.coords.included)
+  useForceConfig(fgRef, canvasReady, anchored)
 
   // Autofit when new content arrives for another graph source or page: pages
   // of a broad recipe can sit in different parts of the map, and graphs
@@ -1314,7 +1327,7 @@ export default function ArxivGraph() {
             // With stored coords, nodes settle within a few px of where they
             // start, so frame them on the first tick: they spread apart in
             // place instead of the camera jumping once they've settled.
-            if (!didAutoFit.current && data.meta.coords.included) {
+            if (!didAutoFit.current && anchored) {
               fitView(0)
               didAutoFit.current = true
             }
