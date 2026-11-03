@@ -1,12 +1,15 @@
 import type { LinkCompact, NodeCompact } from './types'
 
 // Node radius in graph units, and the minimum centre-to-centre spacing the
-// layout's collide force separates nodes to (2 × radius plus a gap). Each
-// node's pointer (hover/click) area is half that spacing, so neighbours'
-// areas tile instead of covering each other.
+// anchored layout's collide force separates nodes to (2 × radius plus a
+// gap). The free layout (no stored coords) spaces nodes by its own, wider
+// collide radius. Each node's pointer (hover/click) area is half the active
+// layout's spacing, so neighbours' areas tile instead of covering each other.
 export const NODE_RADIUS = 4
 export const NODE_MIN_DIST = 2 * NODE_RADIUS + 4
-export const NODE_HIT_RADIUS = NODE_MIN_DIST / 2
+export const FREE_COLLIDE_RADIUS = 13
+export const nodeHitRadius = (anchored: boolean) =>
+  anchored ? NODE_MIN_DIST / 2 : FREE_COLLIDE_RADIUS
 
 export const clamp = (v: number, min: number, max: number) =>
   Math.max(min, Math.min(max, v))

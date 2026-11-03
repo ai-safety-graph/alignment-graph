@@ -198,7 +198,7 @@ Exports:
 - `fetchPapers(params)`: `GET /api/papers` with optional `q`, `from`, `to`, `tags: string[]`, `domains: string[]` (sent as repeated `domain` params), `page`, `limit`; returns `PaginatedPapers`
 - `fetchHealth()`, `fetchLatestBatch()`, `fetchCoverage()`
 
-Other `lib/` modules: `graph.ts` (`buildAdjacency`, `stepAlpha`, `clamp`, `lc`, `NODE_RADIUS`/`NODE_MIN_DIST`), `graphFilters.ts` (`GraphFilters`, `toRangeParams`, `defaultGraphName`), `graphContent.ts` (`mergeGraphContent`, `GRAPH_PAGE_SIZE`, `pageLabel`), `tags.ts` (`tagIcon()`, lucide icons keyed by taxonomy names, which must match `taxonomy.py`), `domain.ts` (`domainLabel()`), `summaries.ts`, `storage.ts`, `analytics.ts`, `queryClient.ts`.
+Other `lib/` modules: `graph.ts` (`buildAdjacency`, `stepAlpha`, `clamp`, `lc`, `NODE_RADIUS`/`NODE_MIN_DIST`/`FREE_COLLIDE_RADIUS`, `nodeHitRadius`), `graphFilters.ts` (`GraphFilters`, `toRangeParams`, `defaultGraphName`), `graphContent.ts` (`mergeGraphContent`, `GRAPH_PAGE_SIZE`, `pageLabel`), `tags.ts` (`tagIcon()`, lucide icons keyed by taxonomy names, which must match `taxonomy.py`), `domain.ts` (`domainLabel()`), `summaries.ts`, `storage.ts`, `analytics.ts`, `queryClient.ts`.
 
 ---
 

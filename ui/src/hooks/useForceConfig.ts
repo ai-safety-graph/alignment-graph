@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import * as d3 from 'd3-force'
 import type { ForceGraphMethods, LinkObject, NodeObject } from 'react-force-graph-2d'
-import { NODE_MIN_DIST } from '../lib/graph'
+import { FREE_COLLIDE_RADIUS, NODE_MIN_DIST } from '../lib/graph'
 import type { LinkCompact, NodeCompact } from '../lib/types'
 
 // Simulation nodes carry an anchor (ax, ay): the stored layout coord they're
@@ -54,7 +54,7 @@ export function useForceConfig(
       'collide',
       d3
         .forceCollide()
-        .radius(() => 13)
+        .radius(() => FREE_COLLIDE_RADIUS)
         .iterations(3)
     )
     fg.d3Force('x', null)

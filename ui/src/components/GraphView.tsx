@@ -30,8 +30,8 @@ import { useGraphShortcuts } from '../hooks/useGraphShortcuts'
 import {
   buildAdjacency,
   clamp,
-  NODE_HIT_RADIUS,
   NODE_RADIUS,
+  nodeHitRadius,
   PINNED_RING_COLOR,
   RELATED_GHOST_NODE_COLOR,
   SEARCH_GHOST_NODE_COLOR,
@@ -84,8 +84,9 @@ const FADE_MS = 150
 
 const SINGLE_NODE_ZOOM = 3
 // Ticks the layout runs before freezing. Measured on a month of real layout
-// (~1,300 nodes) with the anchored forces: 100 ticks leaves no overlapping
-// pairs and lands within 2px of a 200-tick run; below ~75 overlaps survive.
+// (~1,300 nodes) with the anchored forces at the earlier 10-unit spacing: 100
+// ticks left no overlapping pairs and landed within 2px of a 200-tick run;
+// below ~75 overlaps survived. Not re-measured at the current spacing.
 const COOLDOWN_TICKS = 100
 
 // Ghost ids live in their own ranges, above any graph node's id (graphs have
@@ -1316,7 +1317,7 @@ export default function ArxivGraph() {
             // No wider than half the node spacing: the pointer canvas picks
             // the last area painted, so wider areas overlapping neighbours
             // would bury nodes in dense clusters under the ones around them
-            ctx.arc(n.x ?? 0, n.y ?? 0, NODE_HIT_RADIUS, 0, 2 * Math.PI)
+            ctx.arc(n.x ?? 0, n.y ?? 0, nodeHitRadius(anchored), 0, 2 * Math.PI)
             ctx.fill()
           }}
           linkVisibility={(l: LinkObject<NodeCompact, LinkCompact>) => {
