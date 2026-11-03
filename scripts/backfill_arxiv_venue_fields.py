@@ -29,6 +29,7 @@ from collections.abc import Callable
 
 from psycopg2.extras import execute_values
 
+from aisafety_pipeline.config import OAI_THROTTLE_SEC
 from aisafety_pipeline.db import connect, get_state, set_state
 from aisafety_pipeline.oai import ARXIV_API_BATCH, fetch_arxiv_venue_fields
 
@@ -43,10 +44,12 @@ _UPDATE = """
 """
 
 
-def _is_client_error(exc: Exception) -> bool:
+def _is_bad_request(exc: Exception) -> bool:
+    """HTTP 400: arXiv rejecting the id_list (a malformed id). Other 4xx
+    (403 block, 404, ...) say nothing about a particular id and must stop
+    the run rather than be bisected into hundreds of failing requests."""
     resp = getattr(exc, "response", None)
-    status = getattr(resp, "status_code", None)
-    return status is not None and 400 <= status < 500 and status != 429
+    return getattr(resp, "status_code", None) == 400
 
 
 def fetch_resilient(
@@ -57,23 +60,28 @@ def fetch_resilient(
 ) -> tuple[dict[str, dict], list[str]]:
     """Fetch venue fields for `ids`, returning (found, missing).
 
-    - A 4xx for the batch (arXiv rejecting an id) splits it in halves until
-      the rejected id is isolated, so one bad id can't block the rest.
+    - A 400 for the batch (arXiv rejecting an id) splits it in halves until
+      the rejected id is isolated, so one bad id can't block the rest. Each
+      split request waits the arXiv throttle first.
     - Ids absent from an otherwise fine response are retried once (the API
       occasionally returns short feeds); those still absent are `missing`.
-    Other errors (5xx, network) propagate: the checkpoint hasn't moved, so a
-    rerun redoes this batch.
+    Other errors (403/other 4xx, 5xx, network) propagate: the checkpoint
+    hasn't moved, so a rerun redoes this batch.
     """
     fetch = fetch or fetch_arxiv_venue_fields
     try:
         found = fetch(ids)
     except Exception as exc:
-        if not _is_client_error(exc):
+        if not _is_bad_request(exc):
             raise
         if len(ids) == 1:
             return {}, list(ids)
+        # A failed request skips _oai_fetch's post-success throttle, so wait
+        # before each half ourselves.
         mid = len(ids) // 2
+        sleep(OAI_THROTTLE_SEC)
         f1, m1 = fetch_resilient(ids[:mid], fetch, sleep, retry)
+        sleep(OAI_THROTTLE_SEC)
         f2, m2 = fetch_resilient(ids[mid:], fetch, sleep, retry)
         return {**f1, **f2}, m1 + m2
 
@@ -117,6 +125,13 @@ def main() -> None:
         for i in range(0, len(ids), ARXIV_API_BATCH):
             chunk = ids[i : i + ARXIV_API_BATCH]
             found, chunk_missing = fetch_resilient(chunk)
+            if chunk and not found:
+                # Nothing came back at all: an outage or empty feed, not a
+                # few bad ids. Stop without touching the checkpoint.
+                raise SystemExit(
+                    f"backfill: arXiv returned none of {len(chunk)} papers starting at {chunk[0]}; "
+                    "stopping with the checkpoint unchanged. Rerun later."
+                )
             values = [
                 (pid, f["journal_ref"], f["doi"], f["comments"])
                 for pid, f in found.items()
