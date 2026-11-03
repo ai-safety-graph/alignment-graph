@@ -82,6 +82,17 @@ COMMENT_CASES = [
      None, None, "unknown"),
     ("This paper is a curated version of my keynote at the Web Conference 2022", None, None, "unknown"),
     ("2nd Place Winner, ICCV 2025 2COOOL Competition", None, None, "unknown"),
+    # ... but not too eagerly (synthetic, from review)
+    ("ICLR 2025. Code published on GitHub", True, "ICLR 2025", "conference"),
+    ("ICML 2025 (spotlight). Cite the published version when it is available", True, "ICML 2025", "conference"),
+    ("Accepted at ICML 2025 (not yet published)", True, "ICML 2025", "conference"),
+    ("Accepted to NeurIPS 2025 (proceedings to be published once available)", True, "NeurIPS 2025", "conference"),
+    ("Published at https://aclanthology.org/2024.acl-long.1", True, None, "unknown"),
+    ("ICML 2024. Published at https://proceedings.mlr.press/v235/x.html", True, "ICML 2024", "conference"),
+    ("Best Paper Award Winner at AIES 2024", True, "AIES 2024", "conference"),
+    ("Outstanding Paper Award winner, ACL 2024", True, "ACL 2024", "conference"),
+    ("AAAI 2025, tackles the challenge of jailbreaks", True, "AAAI 2025", "conference"),
+    ("Workshop on Challenges in Deployable Generative AI at ICML 2023", True, "ICML 2023 Workshop", "workshop"),
     ("Winning solution to the NeurIPS 2023 LLM Efficiency Challenge (synthetic)", None, None, "unknown"),
     # No signal
     ("15 pages, 4 figures", None, None, "unknown"),

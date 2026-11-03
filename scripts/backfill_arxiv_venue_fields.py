@@ -48,6 +48,7 @@ _UPDATE = """
 """
 # The backfill doesn't move harvested_at, so the venue stage's incremental
 # query wouldn't see these papers again; clearing venue_derived_at queues them.
+# Needs papers.venue_derived_at: run init-db / migrations/add_peer_review_columns.sql first.
 _REQUEUE_VENUE = "UPDATE papers SET venue_derived_at = NULL WHERE id = ANY(%s)"
 
 
