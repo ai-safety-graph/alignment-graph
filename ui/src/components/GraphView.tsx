@@ -116,9 +116,8 @@ type SimNode = NodeCompact & {
 // last position of papers that left it. A paper coming back is frozen there
 // again if the spot is still free (no node within restoreClearance of it),
 // else unfrozen so collide can move it off the node that has taken the spot
-// since. Kept outside the
-// component so leaving the view (e.g. for /browse) and coming back keeps the
-// layout too.
+// since. Kept outside the component so leaving the view (e.g. for /browse)
+// and coming back keeps the layout too.
 // `restored` holds the papers frozen back onto their `left` spot since the
 // last sync, so papers returning in the same batch (e.g. one search's
 // ghosts) are checked against each other too.
