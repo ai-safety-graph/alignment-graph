@@ -30,6 +30,7 @@ import { useGraphShortcuts } from '../hooks/useGraphShortcuts'
 import {
   buildAdjacency,
   clamp,
+  NODE_HIT_RADIUS,
   NODE_RADIUS,
   PINNED_RING_COLOR,
   RELATED_GHOST_NODE_COLOR,
@@ -1312,7 +1313,10 @@ export default function ArxivGraph() {
             if (!isInteractive(n.id)) return
             ctx.fillStyle = color
             ctx.beginPath()
-            ctx.arc(n.x ?? 0, n.y ?? 0, 10, 0, 2 * Math.PI)
+            // No wider than half the node spacing: the pointer canvas picks
+            // the last area painted, so wider areas overlapping neighbours
+            // would bury nodes in dense clusters under the ones around them
+            ctx.arc(n.x ?? 0, n.y ?? 0, NODE_HIT_RADIUS, 0, 2 * Math.PI)
             ctx.fill()
           }}
           linkVisibility={(l: LinkObject<NodeCompact, LinkCompact>) => {
