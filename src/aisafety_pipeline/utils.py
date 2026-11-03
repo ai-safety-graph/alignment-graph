@@ -106,6 +106,14 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Re-derive every relevant paper (after changing the rules in venue.py)")
     vn.set_defaults(func=venue.cmd_venue)
 
+    ve = sp.add_parser("venue-enrich",
+                       help="Look up papers the venue rules left unknown in OpenAlex (published "
+                            "journal/conference versions); rechecks recent ones monthly")
+    ve.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
+    ve.add_argument("--limit", type=int, default=None,
+                    help="Papers to check this run (default: $OPENALEX_MAX_PER_RUN, 5000)")
+    ve.set_defaults(func=venue.cmd_venue_enrich)
+
     lc = sp.add_parser("llm-classify", help="LLM-based combined relevance + taxonomy classification (post stage-2)")
     lc.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
     lc.add_argument("--model", default=config.LLM_MODEL, help="OpenAI model name/id")
@@ -166,7 +174,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     ra = sp.add_parser(
         "run-all",
-        help="Chain harvest -> stage1 -> embed -> filter -> llm-classify-run -> venue -> embed-topic -> "
+        help="Chain harvest -> stage1 -> embed -> filter -> llm-classify-run -> venue -> venue-enrich -> embed-topic -> "
              "compute-layout -> compute-related in order, for unattended/cron use",
     )
     ra.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
@@ -199,7 +207,8 @@ def _cmd_init_db(args):
 # papers without graph coordinates -- see ARCHITECTURE.md. compute-related
 # only needs llm-classify and embed, but runs last as a full recompute over
 # the final relevant set. venue only needs llm-classify (it derives
-# peer-review status for llm_relevant rows) and harvest's raw fields.
+# peer-review status for llm_relevant rows) and harvest's raw fields;
+# venue-enrich fills what venue left unknown, so it runs right after.
 _RUN_ALL_STAGES = [
     ("harvest", oai.cmd_harvest),
     ("stage1", filters.cmd_stage1),
@@ -207,6 +216,7 @@ _RUN_ALL_STAGES = [
     ("filter", filters.cmd_filter),
     ("llm-classify", llm_classify.cmd_llm_classify_run),
     ("venue", venue.cmd_venue),
+    ("venue-enrich", venue.cmd_venue_enrich),
     ("embed-topic", embeddings.cmd_embed_topic),
     ("compute-layout", compute_layout.cmd_compute_layout),
     ("compute-related", related.cmd_compute_related),

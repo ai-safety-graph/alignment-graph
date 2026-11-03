@@ -459,6 +459,9 @@ def _ensure_columns(conn: PgConnection) -> None:
         ("papers", "venue_type", "TEXT"),
         ("papers", "venue_source", "TEXT"),
         ("papers", "venue_derived_at", "TIMESTAMPTZ"),
+        # Last OpenAlex lookup by the venue-enrich stage (venue.py), which
+        # rechecks recent unknown papers since acceptance comes months later.
+        ("papers", "openalex_checked_at", "TIMESTAMPTZ"),
     ]
     for table, col, dtype in _ENSURE:
         try:

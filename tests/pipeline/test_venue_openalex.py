@@ -1,0 +1,115 @@
+"""OpenAlex mapping tests. Works are trimmed copies of real OpenAlex
+records for arXiv papers whose arXiv fields gave no peer-review signal."""
+from __future__ import annotations
+
+import pytest
+
+from aisafety_pipeline import venue
+from aisafety_pipeline.venue import classify_openalex_work
+
+
+def _loc(name, stype, version="publishedVersion", url=None):
+    return {
+        "landing_page_url": url,
+        "source": {"display_name": name, "type": stype} if name else None,
+        "version": version,
+    }
+
+
+_ARXIV_LOC = _loc("arXiv (Cornell University)", "repository", "submittedVersion", "https://arxiv.org/abs/2003.01886")
+
+
+def _work(*locs, year=2020, doi="https://doi.org/10.1109/itsc45102.2020.9294590"):
+    return {"doi": doi, "publication_year": year, "primary_location": locs[0], "locations": list(locs)}
+
+
+@pytest.mark.parametrize(
+    ("work", "venue_name", "venue_type"),
+    [
+        # "8 pages and submitted to IEEE ITSC 2020" -- later accepted
+        (_work(_loc("IEEE International Conference on Intelligent Transportation Systems (ITSC)", "conference"),
+               _ARXIV_LOC), "ITSC 2020", "conference"),
+        # "12 pages, 10 figures, under-review conference" -- later a journal article
+        (_work(_loc("Safety Science", "journal"), _ARXIV_LOC, year=2026), "Safety Science", "journal"),
+        (_work(_loc("Findings of the Association for Computational Linguistics: EMNLP (Findings of EMNLP)",
+                    "conference"), _ARXIV_LOC, year=2025), "EMNLP 2025 Findings", "conference"),
+        (_work(_loc("neural information processing systems", "conference"), _ARXIV_LOC, year=2024),
+         "NeurIPS 2024", "conference"),
+        (_work(_loc("ACM SIGKDD Conference on Knowledge Discovery and Data Mining (KDD)", "conference"),
+               _ARXIV_LOC, year=2024), "KDD 2024", "conference"),
+        (_work(_loc("Natural Legal Language Processing Workshop (NLLP)", "conference"), _ARXIV_LOC, year=2026),
+         "NLLP 2026 Workshop", "workshop"),
+        (_work(_loc("Lecture notes in computer science", "book series"), _ARXIV_LOC, year=2022),
+         "Lecture notes in computer science", "conference"),
+        # The published location needn't be the primary one
+        (_work(_ARXIV_LOC, _loc("AI & Society", "journal")), "AI & Society", "journal"),
+    ],
+)
+def test_published_location_means_reviewed(work, venue_name, venue_type):
+    res = classify_openalex_work(work)
+    assert (res.peer_reviewed, res.venue, res.venue_type, res.source) == (True, venue_name, venue_type, "openalex")
+
+
+@pytest.mark.parametrize(
+    "work",
+    [
+        _work(_ARXIV_LOC),  # arXiv only
+        _work(_loc("SSRN Electronic Journal", "journal"), _ARXIV_LOC),  # preprint host typed as a journal
+        _work(_loc("Qeios", "journal"), _ARXIV_LOC),
+        _work(_loc("AI and Ethics", "journal", version="submittedVersion"), _ARXIV_LOC),  # not the reviewed version
+        _work(_loc(None, None), _ARXIV_LOC),  # location without a source
+    ],
+)
+def test_no_published_location_is_unknown(work):
+    assert classify_openalex_work(work).peer_reviewed is None
+
+
+def test_arxiv_ids_in_work_reads_dois_and_location_urls():
+    work = {
+        "doi": "https://doi.org/10.48550/arxiv.2401.00001",
+        "locations": [
+            {"landing_page_url": "https://arxiv.org/abs/2401.00002v3", "pdf_url": "https://arxiv.org/pdf/2401.00003v1.pdf"},
+            {"landing_page_url": "http://arxiv.org/abs/cs/0601001", "pdf_url": None},
+            {"landing_page_url": "https://doi.org/10.1145/1", "pdf_url": None},
+        ],
+    }
+    assert venue._arxiv_ids_in_work(work) == {"2401.00001", "2401.00002", "2401.00003", "cs/0601001"}
+
+
+class _Resp:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return self._payload
+
+
+def test_fetch_matches_merged_works_back_through_arxiv_urls(monkeypatch):
+    """A preprint merged with its published version comes back under the
+    publisher DOI; it must still map to the requested paper."""
+    captured = {}
+
+    class _Session:
+        def get(self, url, params, timeout, headers):
+            captured.update(url=url, params=params)
+            return _Resp({"results": [
+                {"doi": "https://doi.org/10.1109/itsc45102.2020.9294590",
+                 "locations": [{"landing_page_url": "https://arxiv.org/abs/2003.01886", "pdf_url": None}]},
+                {"doi": "https://doi.org/10.48550/arxiv.2401.00001", "locations": []},
+                {"doi": "https://doi.org/10.48550/arxiv.9999.99999", "locations": []},  # not requested
+            ]})
+
+    monkeypatch.setattr("aisafety_pipeline.oai._get_session", lambda: _Session())
+    monkeypatch.setattr("aisafety_pipeline.config.OPENALEX_MAILTO", "ops@example.com")
+    found = venue.fetch_openalex_works(
+        ["https://arxiv.org/abs/2003.01886", "https://arxiv.org/abs/2401.00001", "https://arxiv.org/abs/2401.00002"]
+    )
+    assert set(found) == {"https://arxiv.org/abs/2003.01886", "https://arxiv.org/abs/2401.00001"}
+    assert captured["params"]["filter"] == (
+        "doi:10.48550/arxiv.2003.01886|10.48550/arxiv.2401.00001|10.48550/arxiv.2401.00002"
+    )
+    assert captured["params"]["mailto"] == "ops@example.com"
+    assert "api_key" not in captured["params"]

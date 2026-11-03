@@ -82,11 +82,11 @@ def test_full_rederives_everything(conn, committed_papers):
     assert _venue(conn, aid)["venue"] == "ICLR 2026"
 
 
-def test_does_not_erase_a_semantic_scholar_result(conn, committed_papers):
+def test_does_not_erase_an_openalex_result(conn, committed_papers):
     aid = committed_papers("2401.30031", comments="15 pages", llm_relevant=True)
     conn.execute(
         "UPDATE papers SET peer_reviewed = TRUE, venue = 'AIES 2025', venue_type = 'conference', "
-        "venue_source = 's2' WHERE id = %s",
+        "venue_source = 'openalex' WHERE id = %s",
         (aid,),
     )
     conn.commit()
@@ -94,6 +94,82 @@ def test_does_not_erase_a_semantic_scholar_result(conn, committed_papers):
     counts = derive_venues(conn)
 
     row = _venue(conn, aid)
-    assert (row["peer_reviewed"], row["venue"], row["venue_source"]) == (True, "AIES 2025", "s2")
+    assert (row["peer_reviewed"], row["venue"], row["venue_source"]) == (True, "AIES 2025", "openalex")
     assert row["venue_derived_at"] is not None
-    assert counts["kept_s2"] >= 1
+    assert counts["kept_openalex"] >= 1
+
+
+_PUBLISHED_WORK = {
+    "publication_year": 2026,
+    "primary_location": {
+        "source": {"display_name": "Conference on Empirical Methods in Natural Language Processing (EMNLP)",
+                   "type": "conference"},
+        "version": "publishedVersion",
+    },
+    "locations": [],
+}
+
+
+def _checked(conn, aid):
+    return conn.execute(
+        "SELECT peer_reviewed, venue, venue_source, openalex_checked_at FROM papers WHERE id = %s", (aid,)
+    ).fetchone()
+
+
+def test_enrich_marks_published_papers_and_stamps_every_lookup(conn, committed_papers):
+    from aisafety_pipeline.venue import enrich_from_openalex
+
+    published = committed_papers("2401.30041", comments="15 pages", llm_relevant=True)
+    missing = committed_papers("2401.30042", comments="15 pages", llm_relevant=True)
+    derive_venues(conn)
+    calls = []
+
+    def fake_fetch(ids):
+        calls.append(list(ids))
+        return {published: _PUBLISHED_WORK}
+
+    counts = enrich_from_openalex(conn, limit=100_000, fetch=fake_fetch, sleep=lambda s: None)
+
+    row = _checked(conn, published)
+    assert (row["peer_reviewed"], row["venue"], row["venue_source"]) == (True, "EMNLP 2026", "openalex")
+    row = _checked(conn, missing)
+    assert row["peer_reviewed"] is None and row["openalex_checked_at"] is not None
+    assert counts["reviewed"] >= 1
+    assert all(len(c) <= 50 for c in calls)
+
+    # A second run doesn't look up papers that were just checked.
+    calls.clear()
+    enrich_from_openalex(conn, limit=100_000, fetch=fake_fetch, sleep=lambda s: None)
+    assert not any(published in c or missing in c for c in calls)
+
+    # A later re-derivation with no arXiv signal keeps the OpenAlex result.
+    derive_venues(conn, full=True)
+    assert _checked(conn, published)["venue_source"] == "openalex"
+
+
+def test_enrich_rechecks_recent_unknowns_after_30_days_but_not_old_ones(conn, committed_papers):
+    import datetime as dt
+
+    from aisafety_pipeline.venue import enrich_from_openalex
+
+    recent = committed_papers("2401.30051", llm_relevant=True, published=dt.date.today().isoformat())
+    old = committed_papers("2401.30052", llm_relevant=True, published="2019-01-01")
+    conn.execute(
+        "UPDATE papers SET openalex_checked_at = now() - interval '31 days' WHERE id = ANY(%s)", ([recent, old],)
+    )
+    conn.commit()
+    seen = []
+    enrich_from_openalex(conn, limit=100_000, fetch=lambda ids: seen.extend(ids) or {}, sleep=lambda s: None)
+    assert recent in seen
+    assert old not in seen
+
+
+def test_enrich_never_touches_papers_the_rules_marked_reviewed(conn, committed_papers):
+    from aisafety_pipeline.venue import enrich_from_openalex
+
+    aid = committed_papers("2401.30061", journal_ref="ICLR 2023", llm_relevant=True)
+    derive_venues(conn)
+    seen = []
+    enrich_from_openalex(conn, limit=100_000, fetch=lambda ids: seen.extend(ids) or {}, sleep=lambda s: None)
+    assert aid not in seen
+    assert _checked(conn, aid)["venue_source"] == "journal_ref"

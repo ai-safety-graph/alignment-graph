@@ -17,6 +17,11 @@ applies it to `papers`. Rules, strongest signal first:
 
 Workshop papers count as reviewed but are labelled `venue_type='workshop'`
 (and "Workshop" in the venue name) so the UI can tell them apart.
+
+`enrich_from_openalex` (stage `venue-enrich`) then looks up papers the rules
+left unknown in OpenAlex, which links many arXiv preprints to their published
+journal/conference version, and rechecks recent ones periodically because
+acceptance often comes months after posting.
 """
 from __future__ import annotations
 
@@ -178,7 +183,7 @@ class VenueResult:
     peer_reviewed: bool | None
     venue: str | None
     venue_type: str  # conference | workshop | journal | unknown
-    source: str | None  # journal_ref | doi | comments | None
+    source: str | None  # journal_ref | doi | comments | openalex | None
 
 
 UNKNOWN = VenueResult(None, None, "unknown", None)
@@ -376,7 +381,7 @@ def derive_venues(conn, full: bool = False) -> dict[str, int]:
         since = watermark["harvested_at"] if watermark else "epoch"
         rows = conn.execute(_SELECT_PENDING, (since, cutoff or "epoch")).fetchall()
 
-    counts = {"reviewed": 0, "unknown": 0, "kept_s2": 0}
+    counts = {"reviewed": 0, "unknown": 0, "kept_openalex": 0}
     updates: list[tuple] = []
     touch: list[str] = []
     cur = conn.raw_cursor()
@@ -392,11 +397,11 @@ def derive_venues(conn, full: bool = False) -> dict[str, int]:
 
     for r in rows:
         res = classify_venue(r["journal_ref"], r["doi"], r["comments"])
-        if res.peer_reviewed is None and r["venue_source"] == "s2":
-            # Semantic Scholar found a venue the arXiv fields don't show;
-            # don't let a re-derivation erase it.
+        if res.peer_reviewed is None and r["venue_source"] == "openalex":
+            # OpenAlex found a venue the arXiv fields don't show; don't let
+            # a re-derivation erase it.
             touch.append(r["id"])
-            counts["kept_s2"] += 1
+            counts["kept_openalex"] += 1
         else:
             updates.append((r["id"], res.peer_reviewed, res.venue, res.venue_type, res.source))
             counts["reviewed" if res.peer_reviewed else "unknown"] += 1
@@ -417,7 +422,189 @@ def cmd_venue(args):
         counts = derive_venues(conn, full=args.full)
         print(
             f"{GREEN}venue:{RESET} {counts['reviewed']} reviewed, {counts['unknown']} unknown"
-            + (f", {counts['kept_s2']} kept from Semantic Scholar" if counts["kept_s2"] else "")
+            + (f", {counts['kept_openalex']} kept from OpenAlex" if counts["kept_openalex"] else "")
+        )
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# OpenAlex enrichment
+# ---------------------------------------------------------------------------
+
+_OPENALEX_BATCH = 50  # OR'd DOI filter values per request
+_OPENALEX_SLEEP_SEC = 0.2  # OpenAlex allows 10 req/s
+# Unknown papers are rechecked this often while they're this recent;
+# older unknown papers are looked up once.
+_RECHECK_DAYS = 30
+_RECHECK_WINDOW_DAYS = 548  # ~18 months
+
+_PEER_REVIEWED_SOURCE_TYPES = {"journal", "conference", "book series"}
+_PUBLISHED_VERSIONS = {"publishedVersion", "acceptedVersion"}
+# Typed as journals in OpenAlex but they host unreviewed preprints.
+_PREPRINT_SOURCE_RE = re.compile(
+    r"\b(?:arxiv|ssrn|qeios|research\s+square|techrxiv|preprints|authorea|biorxiv|medrxiv|"
+    r"osf|zenodo|psyarxiv|socarxiv|engrxiv|chemrxiv)\b",
+    re.I,
+)
+_ARXIV_ID_RES = (
+    re.compile(r"arxiv\.org/(?:abs|pdf)/([^\s?#]+?)(?:v\d+)?(?:\.pdf)?/?$", re.I),
+    re.compile(r"10\.48550/arxiv\.([^\s?#]+)$", re.I),
+)
+_TRAILING_ACRONYM_RE = re.compile(r"\(([A-Z][\w&+-]{1,15})\)\s*$")
+
+
+def _arxiv_ids_in_work(work: dict) -> set[str]:
+    urls = [work.get("doi") or ""]
+    for loc in work.get("locations") or []:
+        urls += [loc.get("landing_page_url") or "", loc.get("pdf_url") or ""]
+    ids = set()
+    for url in urls:
+        for rx in _ARXIV_ID_RES:
+            m = rx.search(url.strip())
+            if m:
+                ids.add(m.group(1).lower())
+    return ids
+
+
+def _openalex_venue(name: str, year: int | None, source_type: str) -> tuple[str | None, str]:
+    workshop = bool(_WORKSHOP_RE.search(name))
+    if source_type == "journal":
+        return _clip(name), "workshop" if workshop else "journal"
+    # Conferences: prefer a short "ACRONYM year" name, as the rules produce.
+    m = _VENUE_ANY_RE.search(name)
+    paren = _TRAILING_ACRONYM_RE.search(name)
+    base = paren.group(1) if paren else (_canonical(m["venue"]) if m else None)
+    if base is None:
+        return _clip(name), "workshop" if workshop else "conference"
+    venue = f"{_canonical(base)} {year}" if year else _canonical(base)
+    if re.search(r"\bfindings\b", name, re.I):
+        venue += " Findings"
+    if workshop:
+        venue += " Workshop"
+    return venue, "workshop" if workshop else "conference"
+
+
+def classify_openalex_work(work: dict) -> VenueResult:
+    """Reviewed when OpenAlex lists a journal / conference / book-series
+    location in its published or accepted version (not a preprint server)."""
+    locations = [work.get("primary_location") or {}] + list(work.get("locations") or [])
+    for loc in locations:
+        src = loc.get("source") or {}
+        stype = src.get("type")
+        name = (src.get("display_name") or "").strip()
+        if (
+            stype in _PEER_REVIEWED_SOURCE_TYPES
+            and loc.get("version") in _PUBLISHED_VERSIONS
+            and name
+            and not _PREPRINT_SOURCE_RE.search(name)
+        ):
+            venue, vtype = _openalex_venue(name, work.get("publication_year"), stype)
+            return VenueResult(True, venue, vtype, "openalex")
+    return UNKNOWN
+
+
+def fetch_openalex_works(paper_ids: list[str]) -> dict[str, dict]:
+    """Look up up to _OPENALEX_BATCH papers (papers.id abs URLs) by their
+    arXiv DOI. Returns paper id -> OpenAlex work for the ones found. A work
+    merged with its published version carries the publisher DOI, so results
+    are matched back through the arXiv URLs in their locations."""
+    from . import config
+    from .oai import _get_session
+
+    by_arxiv = {pid.removeprefix("https://arxiv.org/abs/").lower(): pid for pid in paper_ids}
+    params = {
+        "filter": "doi:" + "|".join(f"10.48550/arxiv.{a}" for a in by_arxiv),
+        "per-page": str(_OPENALEX_BATCH),
+        "select": "id,doi,publication_year,primary_location,locations",
+    }
+    if config.OPENALEX_MAILTO:
+        params["mailto"] = config.OPENALEX_MAILTO
+    if config.OPENALEX_API_KEY:
+        params["api_key"] = config.OPENALEX_API_KEY
+    r = _get_session().get(
+        config.OPENALEX_BASE, params=params, timeout=(10, 60), headers={"Accept": "application/json"}
+    )
+    r.raise_for_status()
+    found: dict[str, dict] = {}
+    for work in r.json().get("results", []):
+        for aid in _arxiv_ids_in_work(work):
+            if aid in by_arxiv:
+                found[by_arxiv[aid]] = work
+    return found
+
+
+_SELECT_ENRICH = """
+    SELECT id FROM papers
+    WHERE llm_relevant AND peer_reviewed IS NOT TRUE
+      AND (openalex_checked_at IS NULL
+           OR (openalex_checked_at < now() - make_interval(days => %s) AND published >= %s))
+    ORDER BY openalex_checked_at NULLS FIRST, published DESC, id
+    LIMIT %s
+"""
+# The peer_reviewed guard means a rule result that arrived in the meantime
+# (a journal-ref) is never overwritten.
+_UPDATE_ENRICHED = """
+    UPDATE papers AS p SET
+      peer_reviewed = TRUE, venue = v.venue, venue_type = v.venue_type,
+      venue_source = 'openalex', openalex_checked_at = now()
+    FROM (VALUES %s) AS v(id, venue, venue_type)
+    WHERE p.id = v.id AND p.peer_reviewed IS NOT TRUE
+"""
+_TOUCH_ENRICHED = "UPDATE papers SET openalex_checked_at = now() WHERE id = ANY(%s)"
+
+
+def enrich_from_openalex(conn, limit: int, fetch=None, sleep=None) -> dict[str, int]:
+    """Check up to `limit` unknown relevant papers against OpenAlex: never
+    checked first, then recent ones not checked for _RECHECK_DAYS. `fetch` /
+    `sleep` are injectable for tests."""
+    import datetime as dt
+    import time
+
+    from psycopg2.extras import execute_values
+
+    fetch = fetch or fetch_openalex_works
+    sleep = sleep or time.sleep
+    window_start = (dt.date.today() - dt.timedelta(days=_RECHECK_WINDOW_DAYS)).isoformat()
+    ids = [r["id"] for r in conn.execute(_SELECT_ENRICH, (_RECHECK_DAYS, window_start, limit)).fetchall()]
+
+    counts = {"checked": 0, "reviewed": 0, "not_found": 0}
+    cur = conn.raw_cursor()
+    for i in range(0, len(ids), _OPENALEX_BATCH):
+        chunk = ids[i : i + _OPENALEX_BATCH]
+        works = fetch(chunk)
+        reviewed = []
+        for pid in chunk:
+            work = works.get(pid)
+            if work is None:
+                counts["not_found"] += 1
+                continue
+            res = classify_openalex_work(work)
+            if res.peer_reviewed:
+                reviewed.append((pid, res.venue, res.venue_type))
+        if reviewed:
+            execute_values(cur, _UPDATE_ENRICHED, reviewed)
+        cur.execute(_TOUCH_ENRICHED, (chunk,))
+        conn.commit()
+        counts["checked"] += len(chunk)
+        counts["reviewed"] += len(reviewed)
+        if i + _OPENALEX_BATCH < len(ids):
+            sleep(_OPENALEX_SLEEP_SEC)
+    return counts
+
+
+def cmd_venue_enrich(args):
+    from . import config
+    from .db import connect
+
+    limit = args.limit if getattr(args, "limit", None) else config.OPENALEX_MAX_PER_RUN
+    conn = connect(args.db)
+    try:
+        print(f"{BLUE}venue-enrich:{RESET} checking up to {limit} unknown papers against OpenAlex")
+        counts = enrich_from_openalex(conn, limit)
+        print(
+            f"{GREEN}venue-enrich:{RESET} checked {counts['checked']}, {counts['reviewed']} newly reviewed, "
+            f"{counts['not_found']} not in OpenAlex"
         )
     finally:
         conn.close()

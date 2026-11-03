@@ -7,7 +7,7 @@
 Its core job is to manage a staged literature-processing pipeline:
 
 ```text
-harvest -> stage1 -> embed -> filter -> llm-classify(-run) -> venue -> embed-topic -> compute-layout -> compute-related -> serve
+harvest -> stage1 -> embed -> filter -> llm-classify(-run) -> venue -> venue-enrich -> embed-topic -> compute-layout -> compute-related -> serve
 ```
 
 The package is PostgreSQL + pgvector only — every pipeline command and the API require `DATABASE_URL` to be set.
@@ -79,7 +79,9 @@ Eligible papers are `ai_stage2_keep = TRUE` rows not yet classified and not in f
 
 ### `venue.py`
 
-Peer-review status for `llm_relevant` papers (CLI `venue`), derived by rules from `papers_raw.journal_ref` / `doi` / `comments`. In order: a journal-ref means reviewed, then a publisher DOI (arXiv's own `10.48550/` and preprint-server DOIs don't count), then the comments. In the comments, an explicit acceptance phrase ("accepted at", "to appear in", "published in", "in proceedings of", "camera-ready") wins. Without one, "submitted to" / "under review" means unknown, and a known venue with a year ("ICLR 2026", "AAAI-23") means reviewed. Writes `peer_reviewed` (NULL = unknown, not "not reviewed"), `venue` (display name, e.g. "NeurIPS 2025 Workshop"), `venue_type` (`conference`/`workshop`/`journal`/`unknown`; workshops count as reviewed but are labelled), `venue_source` and `venue_derived_at`. Incremental: relevant papers never derived, plus relevant papers re-harvested since the `venue_watermark` in `pipeline_state` (an author adding a journal-ref re-issues the OAI record). `--full` re-derives everything after a rule change. A result with `venue_source = 's2'` is never downgraded to unknown.
+Peer-review status for `llm_relevant` papers (CLI `venue`), derived by rules from `papers_raw.journal_ref` / `doi` / `comments`. In order: a journal-ref means reviewed, then a publisher DOI (arXiv's own `10.48550/` and preprint-server DOIs don't count), then the comments. In the comments, an explicit acceptance phrase ("accepted at", "to appear in", "published in", "in proceedings of", "camera-ready") wins. Without one, "submitted to" / "under review" means unknown, and a known venue with a year ("ICLR 2026", "AAAI-23") means reviewed. Writes `peer_reviewed` (NULL = unknown, not "not reviewed"), `venue` (display name, e.g. "NeurIPS 2025 Workshop"), `venue_type` (`conference`/`workshop`/`journal`/`unknown`; workshops count as reviewed but are labelled), `venue_source` and `venue_derived_at`. Incremental: relevant papers never derived, plus relevant papers re-harvested since the `venue_watermark` in `pipeline_state` (an author adding a journal-ref re-issues the OAI record). `--full` re-derives everything after a rule change. A result with `venue_source = 'openalex'` is never downgraded to unknown.
+
+`venue-enrich` (`enrich_from_openalex`) then looks up `llm_relevant` papers with `peer_reviewed IS NOT TRUE` in OpenAlex, by their arXiv DOI (50 per request). OpenAlex merges many preprints with their published version. A paper counts as reviewed when the work has a journal / conference / book-series location in its published or accepted version, excluding preprint hosts typed as journals (SSRN, Qeios, Research Square, …). This writes `venue_source = 'openalex'` and never overrides a rules result. Every lookup stamps `openalex_checked_at`. Papers never checked go first, then unknown papers published in the last ~18 months whose last check is over 30 days old, since acceptance often comes months after posting. Older unknown papers are checked once. Capped at `OPENALEX_MAX_PER_RUN` (default 5000) per run; `OPENALEX_MAILTO` / `OPENALEX_API_KEY` are optional.
 
 ### `compute_layout.py`
 
@@ -110,6 +112,7 @@ aisafety-pipeline embed             # SPECTER2 vectors
 aisafety-pipeline filter            # semantic stage-2
 aisafety-pipeline llm-classify-run  # LLM relevance + taxonomy tags (live source, into llm_relevant/llm_tags)
 aisafety-pipeline venue             # peer-review status from arXiv journal-ref/DOI/comments
+aisafety-pipeline venue-enrich      # fills unknowns from OpenAlex, rechecks recent ones monthly
 aisafety-pipeline embed-topic       # BGE topic vectors (relevant rows only, after llm-classify)
 aisafety-pipeline compute-layout    # persists graph_x/y to DB
 aisafety-pipeline compute-related   # precomputes related papers into paper_related
@@ -138,7 +141,7 @@ Raw upstream metadata from OAI harvest. Columns: `id`, `title`, `authors`, `publ
 
 Working set and pipeline state.
 
-Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `ai_regex_hit`, `ai_sem_sim`, `ai_stage2_keep`, `ai_stage2_reason`, `domain_tag`, `graph_x`, `graph_y`, `embedding vector(768)` (SPECTER2), `embedding_topic vector(768)` (BGE), plus LLM classification columns `llm_relevant`, `llm_confidence`, `llm_tags`, `llm_reason`, `llm_model`, `llm_classified_at`, `llm_batch_id` (written by `llm_classify.py`; these are what the API reads), and peer-review columns `peer_reviewed`, `venue`, `venue_type`, `venue_source`, `venue_derived_at` (written by `venue.py`)
+Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `ai_regex_hit`, `ai_sem_sim`, `ai_stage2_keep`, `ai_stage2_reason`, `domain_tag`, `graph_x`, `graph_y`, `embedding vector(768)` (SPECTER2), `embedding_topic vector(768)` (BGE), plus LLM classification columns `llm_relevant`, `llm_confidence`, `llm_tags`, `llm_reason`, `llm_model`, `llm_classified_at`, `llm_batch_id` (written by `llm_classify.py`; these are what the API reads), and peer-review columns `peer_reviewed`, `venue`, `venue_type`, `venue_source`, `venue_derived_at`, `openalex_checked_at` (written by `venue.py`)
 
 ### `paper_related`
 

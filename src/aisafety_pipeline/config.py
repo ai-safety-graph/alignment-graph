@@ -41,6 +41,14 @@ OAI_SETS = ["cs", "stat", "econ", "eess:eess:SY"]
 OAI_PREFIX = "arXiv"
 OAI_THROTTLE_SEC = 3
 
+# OpenAlex (venue-enrich stage): fills peer-review status the arXiv fields
+# don't show. Works without a key; a contact email gets the "polite pool".
+OPENALEX_BASE = "https://api.openalex.org/works"
+OPENALEX_MAILTO = os.getenv("OPENALEX_MAILTO", "")
+OPENALEX_API_KEY = os.getenv("OPENALEX_API_KEY", "")
+# Papers checked per run (50 per request, ~0.2s apart).
+OPENALEX_MAX_PER_RUN = int(os.getenv("OPENALEX_MAX_PER_RUN", "5000"))
+
 # API
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
 API_PORT = int(os.getenv("API_PORT", "8000"))
