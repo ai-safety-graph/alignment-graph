@@ -32,6 +32,7 @@ import {
   clamp,
   NODE_RADIUS,
   nodeHitRadius,
+  restoreClearance,
   PINNED_RING_COLOR,
   RELATED_GHOST_NODE_COLOR,
   SEARCH_GHOST_NODE_COLOR,
@@ -113,10 +114,9 @@ type SimNode = NodeCompact & {
 // keeps its position instead of settling again. `live` is the nodes on the
 // canvas (the simulation mutates them, so they're always current); `left` the
 // last position of papers that left it. A paper coming back is frozen there
-// again if the spot is still free (no node it would overlap; settled
-// neighbours can sit a little closer than NODE_MIN_DIST), else unfrozen so
-// collide can move it off the node that has taken the spot since. Kept
-// outside the
+// again if the spot is still free (no node within restoreClearance of it),
+// else unfrozen so collide can move it off the node that has taken the spot
+// since. Kept outside the
 // component so leaving the view (e.g. for /browse) and coming back keeps the
 // layout too.
 // `restored` holds the papers frozen back onto their `left` spot since the
@@ -386,6 +386,8 @@ export default function ArxivGraph() {
   // it settles (onEngineStop).
   const layoutKeyRef = useRef(layoutKey)
   layoutKeyRef.current = layoutKey
+  const anchoredRef = useRef(anchored)
+  anchoredRef.current = anchored
   const toSimNode = useCallback(
     <N extends NodeCompact>(n: N, ax: number, ay: number): N & SimNode => {
       const node: N & SimNode = {
@@ -403,7 +405,8 @@ export default function ArxivGraph() {
       const left = layoutMemory.left.get(n.aid)
       if (!left) return node
       const overlaps = (o: { x: number; y: number }) =>
-        Math.hypot(o.x - left.x, o.y - left.y) < 2 * NODE_RADIUS
+        Math.hypot(o.x - left.x, o.y - left.y) <
+        restoreClearance(anchoredRef.current)
       let free = true
       for (const o of layoutMemory.live.values()) {
         if (overlaps(o)) {
