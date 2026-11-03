@@ -117,11 +117,15 @@ type SimNode = NodeCompact & {
 // outside the
 // component so leaving the view (e.g. for /browse) and coming back keeps the
 // layout too.
+// `restored` holds the papers frozen back onto their `left` spot since the
+// last sync, so papers returning in the same batch (e.g. one search's
+// ghosts) are checked against each other too.
 const layoutMemory: {
   key: string
   live: Map<string, SimNode>
   left: Map<string, { x: number; y: number }>
-} = { key: '', live: new Map(), left: new Map() }
+  restored: Map<string, { x: number; y: number }>
+} = { key: '', live: new Map(), left: new Map(), restored: new Map() }
 
 // Map a paper's raw global coords (rx, ry) into the main graph's canvas space,
 // mirroring the backend normalization in graph.py so ghost nodes land at the
@@ -379,16 +383,24 @@ export default function ArxivGraph() {
       if (live) return { ...node, x: live.x, y: live.y, fx: live.fx, fy: live.fy }
       const left = layoutMemory.left.get(n.aid)
       if (!left) return node
+      const overlaps = (o: { x: number; y: number }) =>
+        Math.hypot(o.x - left.x, o.y - left.y) < 2 * NODE_RADIUS
       let free = true
       for (const o of layoutMemory.live.values()) {
-        if (Math.hypot(o.x - left.x, o.y - left.y) < 2 * NODE_RADIUS) {
+        if (overlaps(o)) {
           free = false
           break
         }
       }
-      return free
-        ? { ...node, ...left, fx: left.x, fy: left.y }
-        : { ...node, ...left }
+      // Keyed by aid, so rebuilding the same node (StrictMode runs state
+      // updaters twice) doesn't count as a clash with itself
+      for (const [aid, o] of layoutMemory.restored) {
+        if (!free) break
+        if (aid !== n.aid && overlaps(o)) free = false
+      }
+      if (!free) return { ...node, ...left }
+      layoutMemory.restored.set(n.aid, left)
+      return { ...node, ...left, fx: left.x, fy: left.y }
     },
     [],
   )
@@ -1044,6 +1056,7 @@ export default function ArxivGraph() {
       m.live = new Map()
       m.left = new Map()
     }
+    m.restored = new Map()
     const live = new Map(allSimNodes.map((n) => [n.aid, n]))
     for (const [aid, n] of m.live)
       if (!live.has(aid)) m.left.set(aid, { x: n.x, y: n.y })
