@@ -47,6 +47,7 @@ pipeline = [
 test = [
     { name = "httpx" },
     { name = "pytest" },
+    { name = "requests" },
 ]
 
 [package.metadata]
@@ -61,6 +62,7 @@ requires-dist = [
     { name = "psycopg2-binary", specifier = ">=2.9" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8" },
     { name = "requests", marker = "extra == 'pipeline'", specifier = "==2.32.4" },
+    { name = "requests", marker = "extra == 'test'", specifier = "==2.32.4" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.16.5" },
     { name = "scikit-learn", marker = "extra == 'pipeline'", specifier = "==1.7.1" },
     { name = "sentence-transformers", marker = "extra == 'pipeline'", specifier = "==3.3.1" },

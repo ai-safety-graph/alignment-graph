@@ -7,7 +7,7 @@
 Its core job is to manage a staged literature-processing pipeline:
 
 ```text
-harvest -> stage1 -> embed -> filter -> llm-classify(-run) -> venue -> embed-topic -> compute-layout -> compute-related -> serve
+harvest -> stage1 -> embed -> filter -> llm-classify(-run) -> venue -> venue-enrich -> embed-topic -> compute-layout -> compute-related -> serve
 ```
 
 The package is PostgreSQL + pgvector only — every pipeline command and the API require `DATABASE_URL` to be set.
@@ -83,6 +83,8 @@ Peer-review status for `llm_relevant` papers (CLI `venue`), derived by rules fro
 
 Acceptance words that don't report an acceptance ("not accepted", "will appear in X if accepted", "code published on GitHub") don't count and also rule out the venue-mention fallback. The fallback also skips clauses that name a venue for something else: a preprint template, a keynote or invited talk, a competition. `scripts/backfill_arxiv_venue_fields.py` clears `venue_derived_at` on the papers it fills, because a backfill doesn't move `harvested_at`, so the next `venue` run re-derives them.
 
+`venue-enrich` (`enrich_from_openalex`) then looks up `llm_relevant` papers with `peer_reviewed IS NOT TRUE` in OpenAlex, by their arXiv DOI (50 per request). OpenAlex merges many preprints with their published version. A paper counts as reviewed when the work has a journal / conference / book-series location in its published or accepted version, excluding preprint hosts typed as journals (SSRN, Qeios, Research Square, …). This writes `venue_source = 'openalex'` and never overrides a rules result. Every lookup stamps `openalex_checked_at`. Papers never checked go first, then unknown papers published in the last ~18 months whose last check is over 30 days old, since acceptance often comes months after posting. Older unknown papers are checked once. Capped at `OPENALEX_MAX_PER_RUN` (default 5000) per run; `OPENALEX_MAILTO` / `OPENALEX_API_KEY` are optional and are redacted from errors and urllib3 retry logs. OpenAlex has its own HTTP session that honours `Retry-After` up to 60s, so a rate-limited run gives up within minutes. A failed request ends the stage early, keeping finished batches, and the next run resumes there. A manual `venue-enrich` exits non-zero. Inside `run-all` it never stops the run: a transient error (429, 5xx, connection) is a warning, and a permanent one (e.g. a 401 from a bad key) makes `run-all` exit non-zero after its last stage. When several works carry one arXiv id, one showing a publication wins.
+
 ### `compute_layout.py`
 
 Places `llm_relevant` papers in 2D from their topic embeddings — incrementally (new papers at the mean of their nearest placed neighbours) by default, or a full umap/pca refit with `--full` — and persists `graph_x` / `graph_y` back to the `papers` table. No JSON output — purely a DB-persistence stage consumed live by `api/routes/graph.py`.
@@ -112,6 +114,7 @@ aisafety-pipeline embed             # SPECTER2 vectors
 aisafety-pipeline filter            # semantic stage-2
 aisafety-pipeline llm-classify-run  # LLM relevance + taxonomy tags (live source, into llm_relevant/llm_tags)
 aisafety-pipeline venue             # peer-review status from arXiv journal-ref/DOI/comments
+aisafety-pipeline venue-enrich      # fills unknowns from OpenAlex, rechecks recent ones monthly
 aisafety-pipeline embed-topic       # BGE topic vectors (relevant rows only, after llm-classify)
 aisafety-pipeline compute-layout    # persists graph_x/y to DB
 aisafety-pipeline compute-related   # precomputes related papers into paper_related
@@ -140,7 +143,7 @@ Raw upstream metadata from OAI harvest. Columns: `id`, `title`, `authors`, `publ
 
 Working set and pipeline state.
 
-Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `ai_regex_hit`, `ai_sem_sim`, `ai_stage2_keep`, `ai_stage2_reason`, `domain_tag`, `graph_x`, `graph_y`, `embedding vector(768)` (SPECTER2), `embedding_topic vector(768)` (BGE), plus LLM classification columns `llm_relevant`, `llm_confidence`, `llm_tags`, `llm_reason`, `llm_model`, `llm_classified_at`, `llm_batch_id` (written by `llm_classify.py`; these are what the API reads), and peer-review columns `peer_reviewed`, `venue`, `venue_type`, `venue_source`, `venue_derived_at` (written by `venue.py`)
+Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `ai_regex_hit`, `ai_sem_sim`, `ai_stage2_keep`, `ai_stage2_reason`, `domain_tag`, `graph_x`, `graph_y`, `embedding vector(768)` (SPECTER2), `embedding_topic vector(768)` (BGE), plus LLM classification columns `llm_relevant`, `llm_confidence`, `llm_tags`, `llm_reason`, `llm_model`, `llm_classified_at`, `llm_batch_id` (written by `llm_classify.py`; these are what the API reads), and peer-review columns `peer_reviewed`, `venue`, `venue_type`, `venue_source`, `venue_derived_at`, `openalex_checked_at` (written by `venue.py`)
 
 ### `paper_related`
 

@@ -97,3 +97,107 @@ def test_does_not_erase_an_openalex_result(conn, committed_papers):
     assert (row["peer_reviewed"], row["venue"], row["venue_source"]) == (True, "AIES 2025", "openalex")
     assert row["venue_derived_at"] is not None
     assert counts["kept_openalex"] >= 1
+
+
+_PUBLISHED_WORK = {
+    "publication_year": 2026,
+    "primary_location": {
+        "source": {"display_name": "Conference on Empirical Methods in Natural Language Processing (EMNLP)",
+                   "type": "conference"},
+        "version": "publishedVersion",
+    },
+    "locations": [],
+}
+
+
+def _checked(conn, aid):
+    return conn.execute(
+        "SELECT peer_reviewed, venue, venue_source, openalex_checked_at FROM papers WHERE id = %s", (aid,)
+    ).fetchone()
+
+
+def test_enrich_marks_published_papers_and_stamps_every_lookup(conn, committed_papers):
+    from aisafety_pipeline.venue import enrich_from_openalex
+
+    published = committed_papers("2401.30041", comments="15 pages", llm_relevant=True)
+    missing = committed_papers("2401.30042", comments="15 pages", llm_relevant=True)
+    derive_venues(conn)
+    calls = []
+
+    def fake_fetch(ids):
+        calls.append(list(ids))
+        return {published: _PUBLISHED_WORK}
+
+    counts = enrich_from_openalex(conn, limit=100_000, fetch=fake_fetch, sleep=lambda s: None)
+
+    row = _checked(conn, published)
+    assert (row["peer_reviewed"], row["venue"], row["venue_source"]) == (True, "EMNLP 2026", "openalex")
+    row = _checked(conn, missing)
+    assert row["peer_reviewed"] is None and row["openalex_checked_at"] is not None
+    assert counts["reviewed"] >= 1
+    assert all(len(c) <= 50 for c in calls)
+
+    # A second run doesn't look up papers that were just checked.
+    calls.clear()
+    enrich_from_openalex(conn, limit=100_000, fetch=fake_fetch, sleep=lambda s: None)
+    assert not any(published in c or missing in c for c in calls)
+
+    # A later re-derivation with no arXiv signal keeps the OpenAlex result.
+    derive_venues(conn, full=True)
+    assert _checked(conn, published)["venue_source"] == "openalex"
+
+
+def test_enrich_rechecks_recent_unknowns_after_30_days_but_not_old_ones(conn, committed_papers):
+    import datetime as dt
+
+    from aisafety_pipeline.venue import enrich_from_openalex
+
+    recent = committed_papers("2401.30051", llm_relevant=True, published=dt.date.today().isoformat())
+    old = committed_papers("2401.30052", llm_relevant=True, published="2019-01-01")
+    conn.execute(
+        "UPDATE papers SET openalex_checked_at = now() - interval '31 days' WHERE id = ANY(%s)", ([recent, old],)
+    )
+    conn.commit()
+    seen = []
+    enrich_from_openalex(conn, limit=100_000, fetch=lambda ids: seen.extend(ids) or {}, sleep=lambda s: None)
+    assert recent in seen
+    assert old not in seen
+
+
+def test_enrich_never_touches_papers_the_rules_marked_reviewed(conn, committed_papers):
+    from aisafety_pipeline.venue import enrich_from_openalex
+
+    aid = committed_papers("2401.30061", journal_ref="ICLR 2023", llm_relevant=True)
+    derive_venues(conn)
+    seen = []
+    enrich_from_openalex(conn, limit=100_000, fetch=lambda ids: seen.extend(ids) or {}, sleep=lambda s: None)
+    assert aid not in seen
+    assert _checked(conn, aid)["venue_source"] == "journal_ref"
+
+
+def test_an_openalex_failure_stops_enrichment_softly(conn, committed_papers, monkeypatch):
+    """An outage or exhausted budget ends the stage without raising (run-all
+    goes on to the graph stages); finished batches stay committed and the
+    failed batch isn't stamped, so the next run resumes there."""
+    import requests
+
+    from aisafety_pipeline import venue
+
+    ids = [committed_papers(f"2401.3010{i}", comments="15 pages", llm_relevant=True) for i in range(3)]
+    derive_venues(conn)
+    calls = []
+
+    def flaky_fetch(chunk):
+        calls.append(list(chunk))
+        if len(calls) > 1:
+            raise requests.HTTPError("429 Client Error for url: https://api.openalex.org/works?api_key=SECRET")
+        return {}
+
+    monkeypatch.setattr(venue, "_OPENALEX_BATCH", 1)
+    counts = venue.enrich_from_openalex(conn, limit=100_000, fetch=flaky_fetch, sleep=lambda s: None)
+
+    assert counts["error"] and "SECRET" not in counts["error"]
+    first, failed = calls[0][0], calls[1][0]
+    assert _checked(conn, first)["openalex_checked_at"] is not None
+    assert _checked(conn, failed)["openalex_checked_at"] is None
+    assert all(i in {first, failed} or _checked(conn, i)["openalex_checked_at"] is None for i in ids)

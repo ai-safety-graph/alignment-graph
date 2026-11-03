@@ -106,6 +106,14 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Re-derive every relevant paper (after changing the rules in venue.py)")
     vn.set_defaults(func=venue.cmd_venue)
 
+    ve = sp.add_parser("venue-enrich",
+                       help="Look up papers the venue rules left unknown in OpenAlex (published "
+                            "journal/conference versions); rechecks recent ones monthly")
+    ve.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
+    ve.add_argument("--limit", type=int, default=None,
+                    help="Papers to check this run (default: $OPENALEX_MAX_PER_RUN, 5000)")
+    ve.set_defaults(func=venue.cmd_venue_enrich)
+
     lc = sp.add_parser("llm-classify", help="LLM-based combined relevance + taxonomy classification (post stage-2)")
     lc.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
     lc.add_argument("--model", default=config.LLM_MODEL, help="OpenAI model name/id")
@@ -166,7 +174,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     ra = sp.add_parser(
         "run-all",
-        help="Chain harvest -> stage1 -> embed -> filter -> llm-classify-run -> venue -> embed-topic -> "
+        help="Chain harvest -> stage1 -> embed -> filter -> llm-classify-run -> venue -> venue-enrich -> embed-topic -> "
              "compute-layout -> compute-related in order, for unattended/cron use",
     )
     ra.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
@@ -199,7 +207,8 @@ def _cmd_init_db(args):
 # papers without graph coordinates -- see ARCHITECTURE.md. compute-related
 # only needs llm-classify and embed, but runs last as a full recompute over
 # the final relevant set. venue only needs llm-classify (it derives
-# peer-review status for llm_relevant rows) and harvest's raw fields.
+# peer-review status for llm_relevant rows) and harvest's raw fields;
+# venue-enrich fills what venue left unknown, so it runs right after.
 _RUN_ALL_STAGES = [
     ("harvest", oai.cmd_harvest),
     ("stage1", filters.cmd_stage1),
@@ -207,6 +216,7 @@ _RUN_ALL_STAGES = [
     ("filter", filters.cmd_filter),
     ("llm-classify", llm_classify.cmd_llm_classify_run),
     ("venue", venue.cmd_venue),
+    ("venue-enrich", venue.cmd_venue_enrich),
     ("embed-topic", embeddings.cmd_embed_topic),
     ("compute-layout", compute_layout.cmd_compute_layout),
     ("compute-related", related.cmd_compute_related),
@@ -218,7 +228,9 @@ def _cmd_run_all(args) -> None:
     """Chain every pipeline stage in the order above, for unattended/cron
     use. Stops immediately on the first stage failure (non-zero exit) --
     running a later stage after e.g. a failed embed-topic would just
-    lay out a corpus missing its newest relevant papers."""
+    lay out a corpus missing its newest relevant papers. venue-enrich is
+    the exception: it never stops the run (OpenAlex is optional enrichment),
+    but a permanent OpenAlex error makes run-all exit non-zero at the end."""
     ns = argparse.Namespace(
         db=args.db,
         # stage1 / filter / compute-layout: always incremental in run-all
@@ -236,6 +248,9 @@ def _cmd_run_all(args) -> None:
         # compute-layout
         coords=args.coords, umap_n_neighbors=15, umap_min_dist=0.10, umap_rand=42, pca_rand=42,
         canvas_w=1000, canvas_h=700, canvas_pad=24, knn_k=10,
+        # venue-enrich: never stops the run; permanent errors land here and
+        # fail run-all after the last stage
+        run_all=True, deferred_failures=[],
     )
 
     started_at = dt.datetime.now(dt.UTC)
@@ -251,6 +266,10 @@ def _cmd_run_all(args) -> None:
             raise
 
     _record_latest_batch_safely(args.db, started_at)
+    if ns.deferred_failures:
+        for failure in ns.deferred_failures:
+            print(f"{RED}run-all: completed with a failure:{RESET} {failure}")
+        raise SystemExit(1)
     print(f"{GREEN}run-all: complete{RESET}")
 
 
