@@ -353,9 +353,13 @@ export default function ArxivGraph() {
       : source.kind === 'saved'
         ? source.graph.filters
         : null
-  const requestedLayoutKey = recipe
-    ? `recipe:${JSON.stringify(recipe)}#${pageIndex}`
-    : `${sourceKey}#${pageIndex}`
+  // The force mode is part of it: a pin without stored coords turns the whole
+  // graph to the free layout (see useForceConfig), where nodes frozen at
+  // their anchored positions would leave the new node alone against
+  // forceCenter, so it lays out afresh instead.
+  const requestedLayoutKey = `${
+    recipe ? `recipe:${JSON.stringify(recipe)}` : sourceKey
+  }#${pageIndex}${data && !data.meta.coords.included ? '#free' : ''}`
   const shownLayoutRef = useRef({ data, key: requestedLayoutKey })
   if (shownLayoutRef.current.data !== data && !content.isPaging)
     shownLayoutRef.current = { data, key: requestedLayoutKey }
