@@ -48,8 +48,8 @@ export async function fetchSubgraph(
 }
 
 // One page of the relevant papers matching the filters (any of `tags`, any of
-// `domains`, published in [from, to] as YYYY-MM-DD, not in `exclude`; every
-// bound optional), newest first. `meta.total` is the full match count and
+// `domains`, published in [from, to] as YYYY-MM-DD, not in `exclude`, known
+// peer-reviewed when `peerReviewed`; every bound optional), newest first. `meta.total` is the full match count and
 // `meta.next` the cursor for the following page, passed back as `before`.
 export async function fetchGraphRange(
   params: {
@@ -59,6 +59,7 @@ export async function fetchGraphRange(
     domains?: string[]
     exclude?: string[]
     before?: GraphCursor | null
+    peerReviewed?: boolean
   } = {},
 ): Promise<GraphDataCompact> {
   const qs = new URLSearchParams()
@@ -67,6 +68,7 @@ export async function fetchGraphRange(
   params.tags?.forEach((t) => qs.append('tags', t))
   params.domains?.forEach((d) => qs.append('domain', d))
   params.exclude?.forEach((aid) => qs.append('exclude', aid))
+  if (params.peerReviewed) qs.set('peer_reviewed', 'true')
   if (params.before) {
     qs.set('before_date', params.before.before_date)
     qs.set('before_id', params.before.before_id)
@@ -91,12 +93,23 @@ export async function fetchPaper(
 
 export async function searchPapers(
   query: string,
-  opts: { limit?: number; domain?: string; tag?: string } = {},
+  opts: {
+    limit?: number
+    domain?: string
+    tag?: string
+    peerReviewed?: boolean
+  } = {},
 ): Promise<SearchResponse> {
+  const { peerReviewed, ...rest } = opts
   const res = await apiFetch<SearchResponse>('/api/search', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query, limit: opts.limit ?? 20, ...opts }),
+    body: JSON.stringify({
+      query,
+      limit: opts.limit ?? 20,
+      ...rest,
+      ...(peerReviewed ? { peer_reviewed: true } : {}),
+    }),
   })
   return { ...res, results: res.results.map(withTags) }
 }
@@ -110,6 +123,7 @@ export async function fetchPapers(
     from?: string
     to?: string
     q?: string
+    peerReviewed?: boolean
   } = {},
 ): Promise<PaginatedPapers> {
   const qs = new URLSearchParams()
@@ -120,6 +134,7 @@ export async function fetchPapers(
   if (params.from) qs.set('from', params.from)
   if (params.to) qs.set('to', params.to)
   if (params.q) qs.set('q', params.q)
+  if (params.peerReviewed) qs.set('peer_reviewed', 'true')
   const data = await apiFetch<PaginatedPapers>(`/api/papers?${qs}`)
   return { ...data, items: data.items.map(withTags) }
 }

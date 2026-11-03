@@ -957,6 +957,7 @@ export default function ArxivGraph() {
       tags: filters.tags.length,
       domains: filters.domains.length,
       date: filters.datePreset,
+      peer_reviewed: filters.peerReviewed ?? false,
       mode: modal?.mode ?? 'generate',
     })
     // Editing keeps the papers added or removed by hand: the draft's own, or

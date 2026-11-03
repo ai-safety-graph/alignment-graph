@@ -33,6 +33,8 @@ export default function GenerateGraphModal({
   const {
     datePreset,
     setDatePreset,
+    peerReviewedOnly,
+    togglePeerReviewed,
     activeTags,
     activeDomains,
     tagEntries,
@@ -47,8 +49,9 @@ export default function GenerateGraphModal({
       tags: [...activeTags],
       domains: [...activeDomains],
       datePreset,
+      ...(peerReviewedOnly ? { peerReviewed: true } : {}),
     }),
-    [activeTags, activeDomains, datePreset],
+    [activeTags, activeDomains, datePreset, peerReviewedOnly],
   )
 
   // Live match count: /api/papers applies the same filters as /api/graph/range,
@@ -156,6 +159,8 @@ export default function GenerateGraphModal({
             onToggleTag={toggleTag}
             onToggleDomain={toggleDomain}
             onSetDatePreset={setDatePreset}
+            peerReviewedOnly={peerReviewedOnly}
+            onTogglePeerReviewed={togglePeerReviewed}
             onClearAll={clearAllFilters}
             bordered={false}
           />

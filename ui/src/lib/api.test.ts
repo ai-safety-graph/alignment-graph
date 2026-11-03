@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  searchPapers,
   fetchGraphRange,
   fetchLatestBatch,
   fetchPaper,
@@ -53,6 +54,19 @@ describe('fetchPapers', () => {
     const url = new URL(calledUrl, 'http://localhost')
     expect(url.searchParams.has('tags')).toBe(false)
     expect(url.searchParams.has('q')).toBe(false)
+    expect(url.searchParams.has('peer_reviewed')).toBe(false)
+  })
+
+  it('sends peer_reviewed only when the toggle is on', async () => {
+    mockFetchOnce({ total: 0, page: 1, limit: 50, items: [] })
+    await fetchPapers({ peerReviewed: true })
+    let url = new URL(vi.mocked(fetch).mock.calls[0][0] as string, 'http://localhost')
+    expect(url.searchParams.get('peer_reviewed')).toBe('true')
+
+    mockFetchOnce({ total: 0, page: 1, limit: 50, items: [] })
+    await fetchPapers({ peerReviewed: false })
+    url = new URL(vi.mocked(fetch).mock.calls[0][0] as string, 'http://localhost')
+    expect(url.searchParams.has('peer_reviewed')).toBe(false)
   })
 
   it('throws on a non-OK response', async () => {
@@ -169,5 +183,31 @@ describe('fetchLatestBatch', () => {
   it('returns null before any batch is recorded', async () => {
     mockFetchOnce(null)
     expect(await fetchLatestBatch()).toBeNull()
+  })
+})
+
+describe('peer-review filter on graph range and search', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('adds peer_reviewed=true to /api/graph/range', async () => {
+    mockFetchOnce({ meta: {}, tags: {}, nodes: [], links: [] })
+    await fetchGraphRange({ peerReviewed: true })
+    const url = new URL(vi.mocked(fetch).mock.calls[0][0] as string, 'http://localhost')
+    expect(url.pathname).toBe('/api/graph/range')
+    expect(url.searchParams.get('peer_reviewed')).toBe('true')
+  })
+
+  it('sends peer_reviewed in the search body in the API spelling', async () => {
+    mockFetchOnce({ query: 'q', results: [] })
+    await searchPapers('q', { tag: 'rlhf', peerReviewed: true })
+    const init = vi.mocked(fetch).mock.calls[0][1] as RequestInit
+    expect(JSON.parse(init.body as string)).toEqual({
+      query: 'q',
+      limit: 20,
+      tag: 'rlhf',
+      peer_reviewed: true,
+    })
   })
 })

@@ -94,6 +94,8 @@ export default function BrowseView() {
     fromDate,
     datePreset,
     setDatePreset,
+    peerReviewedOnly,
+    togglePeerReviewed,
     activeTags,
     activeDomains,
     tagEntries,
@@ -119,13 +121,14 @@ export default function BrowseView() {
         fromDate: presetToFromDate(recipe.datePreset),
         activeTags: new Set(recipe.tags),
         activeDomains: new Set(recipe.domains),
+        peerReviewed: recipe.peerReviewed ?? false,
       },
     [recipe],
   )
   const listParams =
     isMatches && recipeParams
       ? recipeParams
-      : { fromDate, activeTags, activeDomains }
+      : { fromDate, activeTags, activeDomains, peerReviewed: peerReviewedOnly }
 
   const {
     papers: listedPapers,
@@ -444,6 +447,8 @@ export default function BrowseView() {
         onToggleTag={toggleTag}
         onToggleDomain={toggleDomain}
         onSetDatePreset={setDatePreset}
+        peerReviewedOnly={peerReviewedOnly}
+        onTogglePeerReviewed={togglePeerReviewed}
         onClearAll={clearAllFilters}
         isExpanded={filterExpanded}
         showTagCounts={false}
@@ -473,7 +478,10 @@ export default function BrowseView() {
     : `${subgraphItems.length} of ${subgraphNodes?.length ?? 0} pinned papers`
 
   const activeFilterCount = canFilter
-    ? activeTags.size + activeDomains.size + (datePreset !== 'all' ? 1 : 0)
+    ? activeTags.size +
+      activeDomains.size +
+      (datePreset !== 'all' ? 1 : 0) +
+      (peerReviewedOnly ? 1 : 0)
     : subgraphActiveTags.size + subgraphActiveDomains.size
 
   const filterToggleButton = (
@@ -568,6 +576,7 @@ export default function BrowseView() {
               DATE_PRESETS.find((p) => p.value === recipe.datePreset)?.label ??
                 recipe.datePreset,
             ]),
+        ...(recipe.peerReviewed ? ['Peer-reviewed'] : []),
       ]
     : []
   const recipeSummary = isMatches && selectedSubgraph && (
@@ -609,6 +618,7 @@ export default function BrowseView() {
           tags: [...activeTags],
           domains: [...activeDomains],
           datePreset,
+          ...(peerReviewedOnly ? { peerReviewed: true } : {}),
         }
       : EMPTY_FILTERS
 

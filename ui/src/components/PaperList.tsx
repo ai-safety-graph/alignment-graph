@@ -2,6 +2,7 @@ import { Pin, PinOff } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { NodeCompact } from '../lib/types'
 import TagChips from './TagChips'
+import VenueBadge from './VenueBadge'
 import { MAX_PINNED } from '../lib/storage'
 
 interface PaperListProps {
@@ -84,8 +85,9 @@ export default function PaperList({
               </div>
               <div className='mt-0.5 text-[15px] leading-snug'>{n.t}</div>
               <div className='mt-1 text-[12px] text-neutral-400'>
-                <div className='flex items-center gap-2 mb-0.5'>
+                <div className='flex flex-wrap items-center gap-x-2 gap-y-1 mb-0.5'>
                   <TagChips tags={n.tags} max={2} />
+                  <VenueBadge pr={n.pr} vn={n.vn} />
                 </div>
               </div>
             </button>

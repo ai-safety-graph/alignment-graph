@@ -51,6 +51,7 @@ export function useServerFilters(
     tags: string[]
     domains: string[]
     datePreset: DatePreset
+    peerReviewed?: boolean
   },
 ) {
   const [activeTags, setActiveTags] = useState<Set<string>>(
@@ -62,6 +63,10 @@ export function useServerFilters(
   const [datePreset, setDatePreset] = useState<DatePreset>(
     initial?.datePreset ?? 'all',
   )
+  // Only papers known to be peer-reviewed; unknown status is hidden too.
+  const [peerReviewedOnly, setPeerReviewedOnly] = useState<boolean>(
+    initial?.peerReviewed ?? false,
+  )
 
   const tagEntries = useMemo(
     () => Object.entries(tags) as Array<[string, { size: number }]>,
@@ -71,13 +76,25 @@ export function useServerFilters(
   const fromDate = useMemo(() => presetToFromDate(datePreset), [datePreset])
 
   const hasActiveFilters =
-    activeTags.size > 0 || activeDomains.size > 0 || datePreset !== 'all'
+    activeTags.size > 0 ||
+    activeDomains.size > 0 ||
+    datePreset !== 'all' ||
+    peerReviewedOnly
 
   function clearAllFilters() {
     track('filter_change', { kind: 'clear' })
     setActiveTags(new Set())
     setActiveDomains(new Set())
     setDatePreset('all')
+    setPeerReviewedOnly(false)
+  }
+
+  function togglePeerReviewed() {
+    track('filter_change', {
+      kind: 'peer_reviewed',
+      value: peerReviewedOnly ? 'off' : 'on',
+    })
+    setPeerReviewedOnly((v) => !v)
   }
 
   function toggleTag(tag: string) {
@@ -104,6 +121,8 @@ export function useServerFilters(
     fromDate,
     datePreset,
     setDatePreset,
+    peerReviewedOnly,
+    togglePeerReviewed,
     activeTags,
     activeDomains,
     tagEntries,

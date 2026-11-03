@@ -11,6 +11,8 @@ type Params = {
   fromDate: string | undefined
   activeTags: Set<string>
   activeDomains: Set<string>
+  /** Only papers known to be peer-reviewed. */
+  peerReviewed?: boolean
   /** When false, the browser pauses fetching (e.g. while semantic search is active). */
   enabled?: boolean
 }
@@ -45,6 +47,7 @@ export function usePaperBrowser({
   fromDate,
   activeTags,
   activeDomains,
+  peerReviewed = false,
   enabled = true,
 }: Params): PaperBrowser {
   const tagsKey = [...activeTags].sort().join(',')
@@ -59,13 +62,14 @@ export function usePaperBrowser({
     isFetchingNextPage,
     error: queryError,
   } = useInfiniteQuery({
-    queryKey: ['papers', query, fromDate ?? '', tagsKey, domainsKey],
+    queryKey: ['papers', query, fromDate ?? '', tagsKey, domainsKey, peerReviewed],
     queryFn: ({ pageParam }) =>
       fetchPapers({
         q: query || undefined,
         from: fromDate,
         tags: activeTags.size > 0 ? [...activeTags] : undefined,
         domains: activeDomains.size > 0 ? [...activeDomains] : undefined,
+        peerReviewed,
         limit: PAGE_SIZE,
         page: pageParam,
       }),

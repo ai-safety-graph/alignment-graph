@@ -2,6 +2,7 @@ import { Pin, PinOff } from 'lucide-react'
 import type { NodeCompact } from '../lib/types'
 import { MAX_PINNED } from '../lib/storage'
 import TagChips from './TagChips'
+import VenueBadge from './VenueBadge'
 
 const truncate = (s: string, n: number) =>
   s.length > n ? s.slice(0, n - 1) + '…' : s
@@ -66,8 +67,9 @@ export default function SearchResultsOverlay({
                   <div className='text-[12px] text-neutral-500 truncate'>
                     {n.au}
                   </div>
-                  <div className='text-[12px] text-neutral-400 flex items-center gap-2 mb-0.5'>
+                  <div className='text-[12px] text-neutral-400 flex flex-wrap items-center gap-x-2 gap-y-1 mb-0.5'>
                     <TagChips tags={n.tags} max={2} />
+                    <VenueBadge pr={n.pr} vn={n.vn} />
                   </div>
                 </div>
                 {(onAddToSubgraph || onRemoveFromSubgraph) && (

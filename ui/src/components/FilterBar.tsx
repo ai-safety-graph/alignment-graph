@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 import * as Slider from '@radix-ui/react-slider'
 import { track } from '../lib/analytics'
-import { RotateCcw, X } from 'lucide-react'
+import { BadgeCheck, RotateCcw, X } from 'lucide-react'
 import { tagIcon } from '../lib/tags'
 import { domainLabel } from '../lib/domain'
 import { DATE_PRESETS } from '../hooks/useServerFilters'
@@ -23,6 +23,9 @@ interface FilterBarProps {
   onSetDatePreset?: (preset: DatePreset) => void
   // Slider notches; defaults to every preset
   datePresets?: typeof DATE_PRESETS
+  // "Peer-reviewed only" toggle; hidden when no handler is given
+  peerReviewedOnly?: boolean
+  onTogglePeerReviewed?: () => void
   isExpanded?: boolean
   showTagCounts?: boolean
   // Off when the bar sits inside a container that already frames it (mobile overlay)
@@ -105,6 +108,8 @@ function ActiveFilterSummary({
   activeDomains,
   datePresetLabel,
   onClearDate,
+  peerReviewedOnly,
+  onTogglePeerReviewed,
   onToggleTag,
   onToggleDomain,
   onClearAll,
@@ -113,6 +118,8 @@ function ActiveFilterSummary({
   activeDomains: Set<string>
   datePresetLabel?: string
   onClearDate?: () => void
+  peerReviewedOnly?: boolean
+  onTogglePeerReviewed?: () => void
   onToggleTag: (tag: string) => void
   onToggleDomain: (domain: string) => void
   onClearAll: () => void
@@ -139,6 +146,9 @@ function ActiveFilterSummary({
             track('filter_change', { kind: 'date', value: 'all' })
             onClearDate()
           })}
+        {peerReviewedOnly &&
+          onTogglePeerReviewed &&
+          chip('peer-reviewed', 'Peer-reviewed', onTogglePeerReviewed)}
         {[...activeDomains].map((dm) =>
           chip(`dm:${dm}`, domainLabel(dm), () => onToggleDomain(dm)),
         )}
@@ -179,6 +189,8 @@ export default function FilterBar({
   datePreset,
   onSetDatePreset,
   datePresets = DATE_PRESETS,
+  peerReviewedOnly = false,
+  onTogglePeerReviewed,
   isExpanded = true,
   showTagCounts = true,
   bordered = true,
@@ -194,6 +206,8 @@ export default function FilterBar({
             : undefined
         }
         onClearDate={onSetDatePreset && (() => onSetDatePreset('all'))}
+        peerReviewedOnly={peerReviewedOnly}
+        onTogglePeerReviewed={onTogglePeerReviewed}
         onToggleTag={onToggleTag}
         onToggleDomain={onToggleDomain}
         onClearAll={onClearAll}
@@ -230,6 +244,37 @@ export default function FilterBar({
               }}
             />
           )}
+
+        {onTogglePeerReviewed && (
+          <div className='flex flex-col gap-1.5'>
+            <span className='shrink-0 text-xs text-neutral-500'>
+              Peer review
+            </span>
+            <div className='flex flex-wrap items-center gap-x-3 gap-y-1'>
+              <button
+                type='button'
+                onClick={onTogglePeerReviewed}
+                aria-pressed={peerReviewedOnly}
+                className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1 rounded-md border text-xs whitespace-nowrap cursor-pointer ${
+                  peerReviewedOnly
+                    ? 'bg-neutral-800 border-neutral-500 text-white'
+                    : 'bg-neutral-950 border-neutral-700 hover:border-neutral-500'
+                }`}
+              >
+                <BadgeCheck
+                  size={12}
+                  className={peerReviewedOnly ? 'text-[#4ea8de]' : ''}
+                  aria-hidden
+                />
+                Peer-reviewed only
+              </button>
+              <span className='text-[11px] text-neutral-500'>
+                Accepted at a journal, conference or workshop. Papers with no
+                known acceptance are hidden.
+              </span>
+            </div>
+          </div>
+        )}
 
         {(isLoading || availableDomains.length > 0) && (
           <div className='flex flex-col gap-1.5'>

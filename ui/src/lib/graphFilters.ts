@@ -8,6 +8,9 @@ export type GraphFilters = {
   tags: string[]
   domains: string[]
   datePreset: DatePreset
+  // Only papers known to be peer-reviewed. Optional: recipes saved before
+  // the toggle existed don't have it and mean "all papers".
+  peerReviewed?: boolean
 }
 
 export const EMPTY_FILTERS: GraphFilters = {
@@ -21,15 +24,17 @@ export function toRangeParams(f: GraphFilters): {
   from?: string
   tags: string[]
   domains: string[]
+  peerReviewed: boolean
 } {
   return {
     from: presetToFromDate(f.datePreset),
     tags: f.tags,
     domains: f.domains,
+    peerReviewed: f.peerReviewed ?? false,
   }
 }
 
-// e.g. "Interpretability and explainability +1 · past month"
+// e.g. "Interpretability and explainability +1 · past month · peer-reviewed"
 export function defaultGraphName(f: GraphFilters, maxLength: number): string {
   const subject =
     f.tags.length > 0
@@ -42,6 +47,7 @@ export function defaultGraphName(f: GraphFilters, maxLength: number): string {
     const label = DATE_PRESETS.find((p) => p.value === f.datePreset)?.label
     if (label) parts.push(label.toLowerCase())
   }
+  if (f.peerReviewed) parts.push('peer-reviewed')
   const name = parts.join(' · ')
   return name.length > maxLength ? name.slice(0, maxLength - 1) + '…' : name
 }
