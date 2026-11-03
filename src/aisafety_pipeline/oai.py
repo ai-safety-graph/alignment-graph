@@ -25,12 +25,14 @@ if TYPE_CHECKING:
 _HARVEST_BATCH_SIZE = 500
 
 _UPSERT_PAPERS_RAW = """
-    INSERT INTO papers_raw (id, title, authors, published, summary, link, categories, updated, pdf_url)
+    INSERT INTO papers_raw (id, title, authors, published, summary, link, categories, updated, pdf_url,
+                            journal_ref, doi, comments)
     VALUES %s
     ON CONFLICT (id) DO UPDATE SET
       title=EXCLUDED.title, authors=EXCLUDED.authors, published=EXCLUDED.published,
       summary=EXCLUDED.summary, link=EXCLUDED.link,
       categories=EXCLUDED.categories, updated=EXCLUDED.updated, pdf_url=EXCLUDED.pdf_url,
+      journal_ref=EXCLUDED.journal_ref, doi=EXCLUDED.doi, comments=EXCLUDED.comments,
       harvested_at=now()
 """
 
@@ -74,7 +76,7 @@ def _sleep_with_jitter(base: float):
     # adds 0–30% jitter to avoid thundering herd
     _time.sleep(base * (1.0 + 0.3 * random.random()))
 
-def _oai_fetch(params: dict) -> str:
+def _oai_fetch(params: dict, url: str = OAI_BASE) -> str:
     """
     Robust fetch that:
       - retries on read/connect timeout and 5xx/429
@@ -89,7 +91,7 @@ def _oai_fetch(params: dict) -> str:
     attempts = 6
     for attempt in range(attempts):
         try:
-            r = s.get(OAI_BASE, params=params, timeout=timeout, allow_redirects=True)
+            r = s.get(url, params=params, timeout=timeout, allow_redirects=True)
             # If arXiv asks us to wait (503 + Retry-After), honor it explicitly
             if r.status_code == 503:
                 ra = r.headers.get("Retry-After")
@@ -188,7 +190,64 @@ def _oai_parse_record(rec) -> dict | None:
         "pdf_url": pdf_url,
         "categories": (tx("arxiv:categories") or "").strip(),
         "updated": (tx("arxiv:updated") or "").strip(),
+        # Peer-review signals (see venue derivation). An author can add these
+        # long after posting; that gives the record a new OAI datestamp, so
+        # the incremental harvest sees it again and the upsert overwrites.
+        "journal_ref": _clean_text(tx("arxiv:journal-ref")),
+        "doi": _clean_text(tx("arxiv:doi")),
+        "comments": _clean_text(tx("arxiv:comments")),
     }
+
+
+# ---- arXiv API lookup of venue fields by id (backfill / recheck) ----
+# OAI-PMH can only list by date, so fetching a known set of papers (e.g. the
+# relevant ones harvested before journal_ref/doi/comments were stored) goes
+# through the arXiv search API's `id_list`, which returns the same fields.
+ARXIV_API_URL = "https://export.arxiv.org/api/query"
+ARXIV_API_BATCH = 200
+_ATOM_NS = {"atom": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom"}
+_ABS_PREFIX = "https://arxiv.org/abs/"
+
+
+def _clean_text(text: str | None) -> str | None:
+    """Collapse whitespace (fields wrap across lines); empty -> None."""
+    return " ".join((text or "").split()) or None
+
+
+def _strip_version(arxiv_id: str) -> str:
+    head, sep, tail = arxiv_id.rpartition("v")
+    return head if sep and head and tail.isdigit() else arxiv_id
+
+
+def _parse_arxiv_api_feed(xml: str) -> dict[str, dict]:
+    """Map versionless abs URL (our `papers_raw.id`) -> venue fields."""
+    out: dict[str, dict] = {}
+    root = ET.fromstring(xml)
+    for entry in root.findall("atom:entry", _ATOM_NS):
+        raw_id = (entry.findtext("atom:id", default="", namespaces=_ATOM_NS) or "").strip()
+        # e.g. http://arxiv.org/abs/2111.03319v2; error entries use api/errors#...
+        marker = "arxiv.org/abs/"
+        if marker not in raw_id:
+            continue
+        arxiv_id = _strip_version(raw_id.split(marker, 1)[1])
+
+        out[_ABS_PREFIX + arxiv_id] = {
+            "journal_ref": _clean_text(entry.findtext("arxiv:journal_ref", namespaces=_ATOM_NS)),
+            "doi": _clean_text(entry.findtext("arxiv:doi", namespaces=_ATOM_NS)),
+            "comments": _clean_text(entry.findtext("arxiv:comment", namespaces=_ATOM_NS)),
+        }
+    return out
+
+
+def fetch_arxiv_venue_fields(paper_ids: list[str]) -> dict[str, dict]:
+    """Look up journal_ref/doi/comments for up to ARXIV_API_BATCH papers,
+    given `papers_raw.id` values (abs URLs). Throttled like the harvest."""
+    ids = [pid.removeprefix(_ABS_PREFIX) for pid in paper_ids]
+    xml = _oai_fetch(
+        {"id_list": ",".join(ids), "max_results": str(len(ids))},
+        url=ARXIV_API_URL,
+    )
+    return _parse_arxiv_api_feed(xml)
 
 
 def harvest_arxiv_oai_to_papers_raw(conn, from_date: str | None = None, until_date: str | None = None, state_file: str = STATE_FILE):
@@ -220,7 +279,8 @@ def harvest_arxiv_oai_to_papers_raw(conn, from_date: str | None = None, until_da
             return
         rows = [
             (r["id"], r["title"], r["authors"], r["published"], r["summary"],
-             r["link"], r["categories"], r["updated"], r["pdf_url"])
+             r["link"], r["categories"], r["updated"], r["pdf_url"],
+             r.get("journal_ref"), r.get("doi"), r.get("comments"))
             for r in batch.values()
         ]
         execute_values(cur, _UPSERT_PAPERS_RAW, rows)

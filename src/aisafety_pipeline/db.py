@@ -438,6 +438,12 @@ def _ensure_columns(conn: PgConnection) -> None:
         # volatile and would rewrite the whole ~1M-row table; init_db sets
         # the default separately, which only affects future inserts.
         ("papers_raw", "harvested_at", "TIMESTAMPTZ"),
+        # arXiv's own peer-review signals, harvested from the OAI `arXiv`
+        # record (oai._oai_parse_record). Raw author-supplied text; the
+        # peer-review flag is derived from them later.
+        ("papers_raw", "journal_ref", "TEXT"),
+        ("papers_raw", "doi", "TEXT"),
+        ("papers_raw", "comments", "TEXT"),
     ]
     for table, col, dtype in _ENSURE:
         try:

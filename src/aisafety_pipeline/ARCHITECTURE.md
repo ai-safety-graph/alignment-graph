@@ -127,7 +127,7 @@ A fresh database is bootstrapped by running `aisafety-pipeline init-db` (or any 
 
 ### `papers_raw`
 
-Raw upstream metadata from OAI harvest. Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `categories`, `updated`, `pdf_url`, `harvested_at` (default `now()`; NULL for rows harvested before the column existed).
+Raw upstream metadata from OAI harvest. Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `categories`, `updated`, `pdf_url`, `harvested_at` (default `now()`; NULL for rows harvested before the column existed). Also `journal_ref`, `doi`, `comments`: arXiv's author-supplied peer-review signals, NULL when absent. Authors often add them after acceptance, which gives the record a new OAI datestamp, so the incremental harvest picks the update up again. Rows harvested before these columns existed were filled for `llm_relevant` papers by `scripts/backfill_arxiv_venue_fields.py` (arXiv API `id_list` lookup).
 
 ### `papers`
 
