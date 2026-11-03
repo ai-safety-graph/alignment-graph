@@ -130,3 +130,23 @@ def test_cli_run_all_exits_despite_lingering_non_daemon_thread(mode, expected_co
         assert "run-all: complete" in proc.stdout
     else:
         assert "stage exploded" in proc.stderr
+
+
+def test_a_permanent_venue_enrich_failure_runs_later_stages_then_fails(monkeypatch, _record_calls):
+    """venue-enrich never stops run-all (OpenAlex is optional), but a
+    permanent error it records makes run-all exit non-zero at the end."""
+    calls: list[str] = []
+    stages = _recording_stages(calls)
+
+    def _enrich(ns):
+        calls.append("venue-enrich")
+        ns.deferred_failures.append("venue-enrich: stopped early, OpenAlex request failed: 401")
+
+    stages = [(n, _enrich if n == "venue-enrich" else fn) for n, fn in stages]
+    monkeypatch.setattr(utils, "_RUN_ALL_STAGES", stages)
+
+    with pytest.raises(SystemExit) as exc:
+        utils._cmd_run_all(_make_args())
+    assert exc.value.code == 1
+    assert calls[-1] == "compute-related"
+    assert _record_calls == [None]
