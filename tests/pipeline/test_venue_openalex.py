@@ -113,3 +113,50 @@ def test_fetch_matches_merged_works_back_through_arxiv_urls(monkeypatch):
     )
     assert captured["params"]["mailto"] == "ops@example.com"
     assert "api_key" not in captured["params"]
+
+
+def test_a_published_duplicate_wins_over_an_arxiv_only_work(monkeypatch):
+    """Two works can carry one arXiv id; whichever order OpenAlex returns
+    them in, the one showing a publication is kept."""
+    pid = "https://arxiv.org/abs/2003.01886"
+    published = _work(_loc("Safety Science", "journal"), _ARXIV_LOC)
+    arxiv_only = _work(_ARXIV_LOC, doi="https://doi.org/10.48550/arxiv.2003.01886")
+    for results in ([published, arxiv_only], [arxiv_only, published]):
+        class _Session:
+            def get(self, url, params, timeout, headers, _r=results):
+                return _Resp({"results": _r})
+
+        monkeypatch.setattr("aisafety_pipeline.oai._get_session", lambda s=_Session: s())
+        assert venue.fetch_openalex_works([pid])[pid] is published
+
+
+def test_secrets_are_redacted_from_urls_and_retry_logs():
+    import logging
+
+    msg = "429 Client Error for url: https://api.openalex.org/works?filter=x&mailto=a%40b.com&api_key=SECRET"
+    assert venue._redact(msg) == (
+        "429 Client Error for url: https://api.openalex.org/works?filter=x&mailto=***&api_key=***"
+    )
+    record = logging.LogRecord("urllib3.connectionpool", logging.WARNING, __file__, 1,
+                               "Retrying after connection broken: %s", ("/works?api_key=SECRET",), None)
+    venue._RedactSecrets().filter(record)
+    assert "SECRET" not in record.getMessage()
+
+
+def test_limit_zero_is_respected(monkeypatch):
+    import argparse
+
+    class _Conn:
+        def close(self):
+            pass
+
+    seen = {}
+
+    def fake_enrich(conn, limit):
+        seen["limit"] = limit
+        return {"checked": 0, "reviewed": 0, "not_found": 0, "error": None}
+
+    monkeypatch.setattr("aisafety_pipeline.db.connect", lambda db: _Conn())
+    monkeypatch.setattr(venue, "enrich_from_openalex", fake_enrich)
+    venue.cmd_venue_enrich(argparse.Namespace(db=None, limit=0))
+    assert seen["limit"] == 0
