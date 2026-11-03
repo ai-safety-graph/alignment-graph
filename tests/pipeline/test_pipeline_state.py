@@ -86,3 +86,40 @@ def test_harvest_dedupes_paper_cross_listed_in_multiple_sets(conn, tmp_path, mon
     finally:
         conn.execute("DELETE FROM papers_raw WHERE id = %s", (paper_id,))
         conn.commit()
+
+
+def test_harvest_stores_and_overwrites_venue_fields(conn, tmp_path, monkeypatch):
+    """A journal-ref added after acceptance arrives as a re-issued OAI record;
+    the upsert must overwrite the stored venue fields, not keep the old ones."""
+    paper_id = "https://arxiv.org/abs/test.venue.0001"
+    base = {
+        "id": paper_id, "title": "Venue fields", "authors": "A. Author",
+        "published": "2026-10-01", "summary": "s", "link": paper_id,
+        "pdf_url": "https://arxiv.org/pdf/test.venue.0001.pdf",
+        "categories": "cs.LG", "updated": "",
+    }
+    monkeypatch.setattr("aisafety_pipeline.oai.OAI_SETS", ["cs"])
+    monkeypatch.setattr("aisafety_pipeline.oai._oai_iter_records", lambda f, u, s: iter([object()]))
+
+    def harvest(record):
+        monkeypatch.setattr("aisafety_pipeline.oai._oai_parse_record", lambda rec: dict(record))
+        harvest_arxiv_oai_to_papers_raw(
+            conn, from_date="2026-10-01", until_date="2026-10-01",
+            state_file=str(tmp_path / "last_run.txt"),
+        )
+        return conn.execute(
+            "SELECT journal_ref, doi, comments FROM papers_raw WHERE id = %s", (paper_id,)
+        ).fetchone()
+
+    try:
+        first = harvest({**base, "journal_ref": None, "doi": None, "comments": "Submitted to ICLR 2026"})
+        assert tuple(first) == (None, None, "Submitted to ICLR 2026")
+
+        second = harvest({
+            **base, "journal_ref": "ICLR 2026", "doi": "10.1000/xyz",
+            "comments": "Accepted at ICLR 2026",
+        })
+        assert tuple(second) == ("ICLR 2026", "10.1000/xyz", "Accepted at ICLR 2026")
+    finally:
+        conn.execute("DELETE FROM papers_raw WHERE id = %s", (paper_id,))
+        conn.commit()
