@@ -11,9 +11,10 @@ export const FREE_COLLIDE_RADIUS = 13
 export const nodeHitRadius = (anchored: boolean) =>
   anchored ? NODE_MIN_DIST / 2 : FREE_COLLIDE_RADIUS
 // How close a paper's old spot may be to a neighbour for it to be frozen
-// back there: the active spacing, less the slack settled neighbours sit
-// within (the anchor pull slightly outweighs collide), so restored nodes'
-// pointer areas overlap no more than settled ones' do.
+// back there: the active spacing, less a 4-unit slack. In the anchored
+// layout that's how much closer settled neighbours sit (the anchor pull
+// slightly outweighs collide), so restored nodes' pointer areas overlap no
+// more than settled ones' do; the free layout reuses the same slack.
 export const restoreClearance = (anchored: boolean) =>
   2 * nodeHitRadius(anchored) - (NODE_MIN_DIST - 2 * NODE_RADIUS)
 
