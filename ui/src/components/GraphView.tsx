@@ -105,19 +105,23 @@ type SimNode = NodeCompact & {
   fy?: number
 }
 
-// Settled (frozen) position of a node
-type Settled = Pick<SimNode, 'x' | 'y' | 'fx' | 'fy'>
-
-// Where each paper settled in the layout shown (graph source + page), by aid:
-// ids are renumbered per response. Recorded whenever the simulation stops and
-// read whenever a node is built, so a node rebuilt by a pin, hide or ghost
-// refresh, including a paper switching between ghost and graph node, keeps
-// its position instead of settling again. Kept outside the component so
-// leaving the view (e.g. for /browse) and coming back keeps the layout too.
-const layoutMemory: { key: string; byAid: Map<string, Settled> } = {
-  key: '',
-  byAid: new Map(),
-}
+// Where each paper is in the layout shown, by aid (ids are renumbered per
+// response), read whenever a node is built: a node rebuilt by a pin, hide or
+// ghost refresh, including a paper switching between ghost and graph node,
+// keeps its position instead of settling again. `live` is the nodes on the
+// canvas (the simulation mutates them, so they're always current); `left` the
+// last position of papers that left it. A paper coming back is frozen there
+// again if the spot is still free (no node it would overlap; settled
+// neighbours can sit a little closer than NODE_MIN_DIST), else unfrozen so
+// collide can move it off the node that has taken the spot since. Kept
+// outside the
+// component so leaving the view (e.g. for /browse) and coming back keeps the
+// layout too.
+const layoutMemory: {
+  key: string
+  live: Map<string, SimNode>
+  left: Map<string, { x: number; y: number }>
+} = { key: '', live: new Map(), left: new Map() }
 
 // Map a paper's raw global coords (rx, ry) into the main graph's canvas space,
 // mirroring the backend normalization in graph.py so ghost nodes land at the
@@ -335,48 +339,59 @@ export default function ArxivGraph() {
     }
   }, [])
 
-  // Build a simulation node anchored at (ax, ay): its stored coord. It starts
-  // there, or where it settled earlier in this layout (see layoutMemory); the
-  // live simulation separates overlaps (see useForceConfig) and freezes nodes
-  // once it settles (onEngineStop).
   // A layout is a recipe's page (or a recipe-less graph), not a source, so
-  // saving a draft (draft → saved, same recipe) keeps its layout and camera.
+  // saving a draft (draft → saved, same recipe) keeps it. The requested one
+  // runs ahead of the data while the next page loads (placeholder data), so
+  // the layout shown only follows it when the data itself changes.
   const recipe =
     source.kind === 'draft'
       ? source.filters
       : source.kind === 'saved'
         ? source.graph.filters
         : null
-  const layoutKey = recipe
+  const requestedLayoutKey = recipe
     ? `recipe:${JSON.stringify(recipe)}#${pageIndex}`
     : `${sourceKey}#${pageIndex}`
+  const shownLayoutRef = useRef({ data, key: requestedLayoutKey })
+  if (shownLayoutRef.current.data !== data && !content.isPaging)
+    shownLayoutRef.current = { data, key: requestedLayoutKey }
+  const layoutKey = shownLayoutRef.current.key
+
+  // Build a simulation node anchored at (ax, ay): its stored coord. It starts
+  // there, or where it is or was in this layout (see layoutMemory); the live
+  // simulation separates overlaps (see useForceConfig) and freezes nodes once
+  // it settles (onEngineStop).
   const layoutKeyRef = useRef(layoutKey)
   layoutKeyRef.current = layoutKey
   const toSimNode = useCallback(
-    <N extends NodeCompact>(n: N, ax: number, ay: number): N & SimNode => ({
-      ...n,
-      ax,
-      ay,
-      x: ax,
-      y: ay,
-      fx: undefined,
-      fy: undefined,
-      ...(layoutMemory.key === layoutKeyRef.current
-        ? layoutMemory.byAid.get(n.aid)
-        : undefined),
-    }),
+    <N extends NodeCompact>(n: N, ax: number, ay: number): N & SimNode => {
+      const node: N & SimNode = {
+        ...n,
+        ax,
+        ay,
+        x: ax,
+        y: ay,
+        fx: undefined,
+        fy: undefined,
+      }
+      if (layoutMemory.key !== layoutKeyRef.current) return node
+      const live = layoutMemory.live.get(n.aid)
+      if (live) return { ...node, x: live.x, y: live.y, fx: live.fx, fy: live.fy }
+      const left = layoutMemory.left.get(n.aid)
+      if (!left) return node
+      let free = true
+      for (const o of layoutMemory.live.values()) {
+        if (Math.hypot(o.x - left.x, o.y - left.y) < 2 * NODE_RADIUS) {
+          free = false
+          break
+        }
+      }
+      return free
+        ? { ...node, ...left, fx: left.x, fy: left.y }
+        : { ...node, ...left }
+    },
     [],
   )
-  // Replaces the memory with the nodes on the canvas now: a node that left
-  // (e.g. a related ghost after deselecting) mustn't come back frozen on a
-  // spot another node has settled into since, where collide can't move
-  // either of them.
-  const rememberLayout = (nodes: SimNode[]) => {
-    layoutMemory.key = layoutKey
-    layoutMemory.byAid = new Map(
-      nodes.map((n) => [n.aid, { x: n.x, y: n.y, fx: n.fx, fy: n.fy }]),
-    )
-  }
 
   const simNodes = useMemo(() => {
     if (!data) return [] as SimNode[]
@@ -476,8 +491,6 @@ export default function ArxivGraph() {
   // built keep their id, results that became real nodes drop out, and only
   // results with no ghost yet are fetched, so a pin costs no request.
   const nextSearchGhostId = useRef(SEARCH_GHOST_ID_BASE)
-  // Layout the current search ghosts were placed in
-  const ghostLayoutRef = useRef(layoutKey)
   useEffect(() => {
     // Wait for the graph, so ghosts aren't placed against an empty one
     if (!data) return
@@ -497,13 +510,12 @@ export default function ArxivGraph() {
     const wanted = new Set(
       apiResults.map((r) => r.aid).filter((aid) => !inGraph.has(aid)),
     )
-    // Kept ghosts keep their id. Within the same layout they're reused as-is,
-    // keeping their live position even mid-settle; after a layout change
-    // they're placed again against the new graph's coords.
-    const prevKept = ghostSimNodesRef.current.filter((g) => wanted.has(g.aid))
-    const kept =
-      ghostLayoutRef.current === layoutKey ? prevKept : place(prevKept)
-    ghostLayoutRef.current = layoutKey
+    // Kept ghosts keep their id. Placing them again keeps their live
+    // position within the same layout (layoutMemory), and re-anchors them
+    // against a new graph's coords after a layout change.
+    const kept = place(
+      ghostSimNodesRef.current.filter((g) => wanted.has(g.aid)),
+    )
     for (const g of kept) wanted.delete(g.aid)
     setGhostSimNodes(kept)
     if (wanted.size === 0) return
@@ -526,7 +538,7 @@ export default function ArxivGraph() {
     return () => {
       alive = false
     }
-  }, [apiResults, simNodes, data, toSimNode, layoutKey])
+  }, [apiResults, simNodes, data, toSimNode])
 
   // Search results for overlay
   const searchResults = useMemo(() => {
@@ -742,27 +754,24 @@ export default function ArxivGraph() {
     height > 0
   useForceConfig(fgRef, canvasReady, !!data?.meta.coords.included)
 
-  // Autofit once per graph source and page: pages of a broad recipe can sit
-  // in different parts of the map, and graphs sharing a recipe can have pins
-  // anywhere. Saving a draft (keepFramingRef, set by saveDraft) keeps the
-  // framing when the layout is unchanged. Also refit whenever the canvas
-  // mounts afresh (e.g. switching to a graph that loads), since it starts at
-  // the default camera.
+  // Autofit when new content arrives for another graph source or page: pages
+  // of a broad recipe can sit in different parts of the map, and graphs
+  // sharing a recipe can have pins anywhere. When the source changes but the
+  // content doesn't (saving a draft, or editing a recipe without changing
+  // it), the framing carries over to the new source. Not while the previous
+  // page stands in for the next one. Also refit whenever the canvas mounts
+  // afresh (e.g. switching to a graph that loads), since it starts at the
+  // default camera.
   const didAutoFit = useRef(false)
-  const keepFramingRef = useRef(false)
-  const prevFrameRef = useRef({ sourceKey, layoutKey })
+  const framedRef = useRef({ data, sourceKey, layoutKey: requestedLayoutKey })
   useEffect(() => {
-    const prev = prevFrameRef.current
-    prevFrameRef.current = { sourceKey, layoutKey }
-    const keepFraming = keepFramingRef.current
-    keepFramingRef.current = false
-    if (
-      prev.layoutKey === layoutKey &&
-      (prev.sourceKey === sourceKey || keepFraming)
-    )
-      return
-    didAutoFit.current = false
-  }, [sourceKey, layoutKey])
+    if (content.isPaging) return
+    const prev = framedRef.current
+    framedRef.current = { data, sourceKey, layoutKey: requestedLayoutKey }
+    if (prev.data === data) return
+    if (prev.sourceKey !== sourceKey || prev.layoutKey !== requestedLayoutKey)
+      didAutoFit.current = false
+  }, [data, sourceKey, requestedLayoutKey, content.isPaging])
   useEffect(() => {
     if (!canvasReady) didAutoFit.current = false
   }, [canvasReady])
@@ -975,7 +984,6 @@ export default function ArxivGraph() {
     const pins = queryClient.getQueryData(graphPinsKey('draft', source.pinned))
     if (pins) queryClient.setQueryData(graphPinsKey(saved.id, saved.pinned), pins)
     setSavedGraphs((prev) => [saved, ...prev.filter((s) => s.id !== saved.id)])
-    keepFramingRef.current = true
     showSource({ kind: 'saved', graph: saved })
     return null
   }
@@ -1027,6 +1035,21 @@ export default function ArxivGraph() {
     () => [...simNodes, ...ghostSimNodes, ...relatedGhostNodes],
     [simNodes, ghostSimNodes, relatedGhostNodes],
   )
+
+  // Keep layoutMemory in step with the canvas (see its comment)
+  useEffect(() => {
+    const m = layoutMemory
+    if (m.key !== layoutKey) {
+      m.key = layoutKey
+      m.live = new Map()
+      m.left = new Map()
+    }
+    const live = new Map(allSimNodes.map((n) => [n.aid, n]))
+    for (const [aid, n] of m.live)
+      if (!live.has(aid)) m.left.set(aid, { x: n.x, y: n.y })
+    for (const aid of live.keys()) m.left.delete(aid)
+    m.live = live
+  }, [allSimNodes, layoutKey])
 
   const graphData = useMemo(
     () => ({ nodes: allSimNodes, links: data?.links ?? [] }),
@@ -1274,12 +1297,7 @@ export default function ArxivGraph() {
             // With stored coords, nodes settle within a few px of where they
             // start, so frame them on the first tick: they spread apart in
             // place instead of the camera jumping once they've settled.
-            // Not while the previous page stands in for the next one
-            if (
-              !didAutoFit.current &&
-              !content.isPaging &&
-              data.meta.coords.included
-            ) {
+            if (!didAutoFit.current && data.meta.coords.included) {
               fitView(0)
               didAutoFit.current = true
             }
@@ -1294,10 +1312,6 @@ export default function ArxivGraph() {
                 n.fy = n.y
               }
             }
-            // While a page change is in flight the nodes shown are still the
-            // previous page's, but layoutKey already names the next one
-            if (content.isPaging) return
-            rememberLayout(allSimNodes)
             // Without coords the layout grows from the origin, so it can
             // only be framed once it has settled
             if (!didAutoFit.current) {
