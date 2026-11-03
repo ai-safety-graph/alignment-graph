@@ -102,7 +102,7 @@ def test_fetch_matches_merged_works_back_through_arxiv_urls(monkeypatch):
                 {"doi": "https://doi.org/10.48550/arxiv.9999.99999", "locations": []},  # not requested
             ]})
 
-    monkeypatch.setattr("aisafety_pipeline.oai._get_session", lambda: _Session())
+    monkeypatch.setattr("aisafety_pipeline.venue._get_openalex_session", lambda: _Session())
     monkeypatch.setattr("aisafety_pipeline.config.OPENALEX_MAILTO", "ops@example.com")
     found = venue.fetch_openalex_works(
         ["https://arxiv.org/abs/2003.01886", "https://arxiv.org/abs/2401.00001", "https://arxiv.org/abs/2401.00002"]
@@ -126,7 +126,7 @@ def test_a_published_duplicate_wins_over_an_arxiv_only_work(monkeypatch):
             def get(self, url, params, timeout, headers, _r=results):
                 return _Resp({"results": _r})
 
-        monkeypatch.setattr("aisafety_pipeline.oai._get_session", lambda s=_Session: s())
+        monkeypatch.setattr("aisafety_pipeline.venue._get_openalex_session", lambda s=_Session: s())
         assert venue.fetch_openalex_works([pid])[pid] is published
 
 
@@ -154,9 +154,75 @@ def test_limit_zero_is_respected(monkeypatch):
 
     def fake_enrich(conn, limit):
         seen["limit"] = limit
-        return {"checked": 0, "reviewed": 0, "not_found": 0, "error": None}
+        return {"checked": 0, "reviewed": 0, "not_found": 0, "error": None, "transient": False}
 
     monkeypatch.setattr("aisafety_pipeline.db.connect", lambda db: _Conn())
     monkeypatch.setattr(venue, "enrich_from_openalex", fake_enrich)
     venue.cmd_venue_enrich(argparse.Namespace(db=None, limit=0))
     assert seen["limit"] == 0
+
+
+def test_openalex_session_caps_retry_after():
+    adapter = venue._get_openalex_session().get_adapter("https://api.openalex.org/works")
+
+    class _R:
+        headers = {"Retry-After": "3600"}
+
+    assert adapter.max_retries.get_retry_after(_R()) == venue._MAX_RETRY_AFTER_SEC
+    # Retry.new() (called on every retry) keeps the capped subclass
+    assert adapter.max_retries.new().get_retry_after(_R()) == venue._MAX_RETRY_AFTER_SEC
+
+
+def test_redaction_covers_both_urllib3_loggers():
+    import logging
+
+    venue._install_log_redaction()
+    for name in ("urllib3.connectionpool", "urllib3.util.retry"):
+        assert any(isinstance(f, venue._RedactSecrets) for f in logging.getLogger(name).filters)
+
+
+def _http_error(status):
+    import requests
+
+    resp = requests.Response()
+    resp.status_code = status
+    return requests.HTTPError(f"{status} for url: https://api.openalex.org/works?api_key=SECRET", response=resp)
+
+
+def test_transient_errors():
+    import requests
+
+    assert venue._is_transient(_http_error(429))
+    assert venue._is_transient(_http_error(503))
+    assert venue._is_transient(requests.ConnectionError("refused"))
+    assert not venue._is_transient(_http_error(401))
+    assert not venue._is_transient(_http_error(400))
+
+
+@pytest.mark.parametrize(("run_all", "status", "raises", "deferred"), [
+    (False, 503, True, False),   # manual run: any failure exits non-zero
+    (False, 401, True, False),
+    (True, 503, False, False),   # run-all, transient: a warning only
+    (True, 401, False, True),    # run-all, permanent: run-all fails at the end
+])
+def test_enrich_errors_by_context(monkeypatch, run_all, status, raises, deferred):
+    import argparse
+
+    class _Conn:
+        def close(self):
+            pass
+
+    def fake_enrich(conn, limit):
+        return {"checked": 0, "reviewed": 0, "not_found": 0,
+                "error": venue._redact(str(_http_error(status))), "transient": venue._is_transient(_http_error(status))}
+
+    monkeypatch.setattr("aisafety_pipeline.db.connect", lambda db: _Conn())
+    monkeypatch.setattr(venue, "enrich_from_openalex", fake_enrich)
+    args = argparse.Namespace(db=None, limit=None, run_all=run_all, deferred_failures=[])
+    if raises:
+        with pytest.raises(SystemExit) as exc:
+            venue.cmd_venue_enrich(args)
+        assert "SECRET" not in str(exc.value.code)
+    else:
+        venue.cmd_venue_enrich(args)
+        assert bool(args.deferred_failures) is deferred

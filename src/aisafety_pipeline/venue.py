@@ -32,7 +32,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from .config import BLUE, GREEN, RESET, YELLOW
+from .config import BLUE, GREEN, RED, RESET, YELLOW
 
 # ---------------------------------------------------------------------------
 # Rules
@@ -585,9 +585,60 @@ class _RedactSecrets:
 def _install_log_redaction() -> None:
     import logging
 
-    logger = logging.getLogger("urllib3.connectionpool")
-    if not any(isinstance(f, _RedactSecrets) for f in logger.filters):
-        logger.addFilter(_RedactSecrets())
+    # connectionpool logs "Retrying ... <url>" (WARNING) and the request line
+    # (DEBUG); util.retry logs "Incremented Retry for (url=...)" (DEBUG).
+    for name in ("urllib3.connectionpool", "urllib3.util.retry"):
+        logger = logging.getLogger(name)
+        if not any(isinstance(f, _RedactSecrets) for f in logger.filters):
+            logger.addFilter(_RedactSecrets())
+
+
+# Longest Retry-After honoured. urllib3 sleeps for the full header value with
+# no cap, so a 429 with "Retry-After: 3600" (e.g. an exhausted daily budget)
+# would otherwise stall run-all for hours before the stage gives up.
+_MAX_RETRY_AFTER_SEC = 60
+_OPENALEX_SESSION = None
+
+
+def _get_openalex_session():
+    """A session for OpenAlex only: retries 429/5xx a few times, honouring
+    Retry-After up to _MAX_RETRY_AFTER_SEC (worst case ~5 minutes before the
+    stage soft-fails). The harvest's arXiv session is left as it is."""
+    global _OPENALEX_SESSION
+    if _OPENALEX_SESSION is not None:
+        return _OPENALEX_SESSION
+    import os
+
+    import requests
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
+
+    class _CappedRetry(Retry):
+        def get_retry_after(self, response):
+            retry_after = super().get_retry_after(response)
+            return None if retry_after is None else min(retry_after, _MAX_RETRY_AFTER_SEC)
+
+    retry = _CappedRetry(
+        total=5, connect=3, read=0, backoff_factor=1.5,
+        status_forcelist=(429, 500, 502, 503, 504), allowed_methods=frozenset(["GET"]),
+        respect_retry_after_header=True, raise_on_status=False,
+    )
+    s = requests.Session()
+    s.mount("https://", HTTPAdapter(max_retries=retry))
+    s.headers["User-Agent"] = os.getenv("AIS_USER_AGENT", "aisafety-pipeline/1.0")
+    _OPENALEX_SESSION = s
+    return s
+
+
+def _is_transient(exc) -> bool:
+    """429 / 5xx / connection trouble: worth retrying next run. Anything else
+    (a 4xx from a bad key or request) is a configuration problem."""
+    import requests
+
+    if isinstance(exc, (requests.ConnectionError, requests.Timeout, requests.exceptions.RetryError)):
+        return True
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    return status is not None and (status == 429 or status >= 500)
 
 
 def _prefer(current: dict | None, candidate: dict) -> dict:
@@ -606,8 +657,6 @@ def fetch_openalex_works(paper_ids: list[str]) -> dict[str, dict]:
     merged with its published version carries the publisher DOI, so results
     are matched back through the arXiv URLs in their locations."""
     from . import config
-    from .oai import _get_session
-
     by_arxiv = {pid.removeprefix("https://arxiv.org/abs/").lower(): pid for pid in paper_ids}
     params = {
         "filter": "doi:" + "|".join(f"10.48550/arxiv.{a}" for a in by_arxiv),
@@ -620,7 +669,7 @@ def fetch_openalex_works(paper_ids: list[str]) -> dict[str, dict]:
     if config.OPENALEX_API_KEY:
         params["api_key"] = config.OPENALEX_API_KEY
     _install_log_redaction()
-    r = _get_session().get(
+    r = _get_openalex_session().get(
         config.OPENALEX_BASE, params=params, timeout=(10, 60), headers={"Accept": "application/json"}
     )
     r.raise_for_status()
@@ -668,17 +717,19 @@ def enrich_from_openalex(conn, limit: int, fetch=None, sleep=None) -> dict[str, 
     window_start = (dt.date.today() - dt.timedelta(days=_RECHECK_WINDOW_DAYS)).isoformat()
     ids = [r["id"] for r in conn.execute(_SELECT_ENRICH, (_RECHECK_DAYS, window_start, limit)).fetchall()]
 
-    counts: dict = {"checked": 0, "reviewed": 0, "not_found": 0, "error": None}
+    counts: dict = {"checked": 0, "reviewed": 0, "not_found": 0, "error": None, "transient": False}
     cur = conn.raw_cursor()
     for i in range(0, len(ids), _OPENALEX_BATCH):
         chunk = ids[i : i + _OPENALEX_BATCH]
         try:
             works = fetch(chunk)
-        except (requests.RequestException, ValueError) as exc:
-            # An OpenAlex outage or exhausted budget must not stop run-all
-            # before the graph stages. Earlier batches are committed and this
-            # one isn't stamped, so the next run resumes here.
+        except requests.RequestException as exc:
+            # Stop here; cmd_venue_enrich decides how loud to be. Earlier
+            # batches are committed and this one isn't stamped, so the next
+            # run resumes here. (requests' JSONDecodeError is a
+            # RequestException; other exceptions are bugs and propagate.)
             counts["error"] = _redact(f"{type(exc).__name__}: {exc}")
+            counts["transient"] = _is_transient(exc)
             break
         reviewed = []
         for pid in chunk:
@@ -700,6 +751,21 @@ def enrich_from_openalex(conn, limit: int, fetch=None, sleep=None) -> dict[str, 
     return counts
 
 
+def _report_enrich_error(args, counts: dict) -> None:
+    """A manual run fails loudly on any OpenAlex error. Inside run-all the
+    graph stages matter more, so the stage never stops the run: a transient
+    error (outage, rate limit) is a warning, and a permanent one (e.g. a bad
+    API key) is recorded so run-all exits non-zero after its last stage."""
+    msg = f"stopped early, OpenAlex request failed: {counts['error']}"
+    if not getattr(args, "run_all", False):
+        raise SystemExit(f"venue-enrich: {msg}")
+    if counts["transient"]:
+        print(f"{YELLOW}venue-enrich:{RESET} {msg} (the next run resumes here)")
+    else:
+        print(f"{RED}venue-enrich:{RESET} {msg}")
+        args.deferred_failures.append(f"venue-enrich: {msg}")
+
+
 def cmd_venue_enrich(args):
     from . import config
     from .db import connect
@@ -715,6 +781,6 @@ def cmd_venue_enrich(args):
             f"{counts['not_found']} not in OpenAlex"
         )
         if counts["error"]:
-            print(f"{YELLOW}venue-enrich:{RESET} stopped early, OpenAlex request failed: {counts['error']}")
+            _report_enrich_error(args, counts)
     finally:
         conn.close()
