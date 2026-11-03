@@ -30,10 +30,12 @@ import { useGraphShortcuts } from '../hooks/useGraphShortcuts'
 import {
   buildAdjacency,
   clamp,
+  NODE_RADIUS,
+  nodeHitRadius,
+  restoreClearance,
   PINNED_RING_COLOR,
   RELATED_GHOST_NODE_COLOR,
   SEARCH_GHOST_NODE_COLOR,
-  separatePoints,
   stepAlpha,
   SUBGRAPH_NODE_COLOR,
 } from '../lib/graph'
@@ -81,11 +83,12 @@ const DIM_ALPHA_HOVER = 0.3
 const DIM_ALPHA_LOCKED = 0.15
 const FADE_MS = 150
 
-// Node radius in graph units, and the minimum centre-to-centre spacing that
-// pinned nodes are separated to (2 × radius plus a small gap).
-const NODE_RADIUS = 4
-const NODE_MIN_DIST = 2 * NODE_RADIUS + 2
 const SINGLE_NODE_ZOOM = 3
+// Ticks the layout runs before freezing. Measured on a month of real layout
+// (~1,300 nodes) with the anchored forces at the earlier 10-unit spacing: 100
+// ticks left no overlapping pairs and landed within 2px of a 200-tick run;
+// below ~75 overlaps survived. Not re-measured at the current spacing.
+const COOLDOWN_TICKS = 100
 
 // Ghost ids live in their own ranges, above any graph node's id (graphs have
 // at most a page plus MAX_PINNED nodes), so they never collide with the
@@ -94,8 +97,36 @@ const SEARCH_GHOST_ID_BASE = 1_000_000
 const RELATED_GHOST_ID_BASE = 2_000_000
 
 // A node once it's in the force simulation: always has a live x/y position,
-// and fx/fy when pinned (dragged, hovered while locked, or coordinate-pinned).
-type SimNode = NodeCompact & { x: number; y: number; fx?: number; fy?: number }
+// an anchor (ax, ay) the anchored layout pulls it back toward (its stored
+// layout coord), and fx/fy once the simulation has settled and frozen it.
+type SimNode = NodeCompact & {
+  x: number
+  y: number
+  ax: number
+  ay: number
+  fx?: number
+  fy?: number
+}
+
+// Where each paper is in the layout shown, by aid (ids are renumbered per
+// response), read whenever a node is built: a node rebuilt by a pin, hide or
+// ghost refresh, including a paper switching between ghost and graph node,
+// keeps its position instead of settling again. `live` is the nodes on the
+// canvas (the simulation mutates them, so they're always current); `left` the
+// last position of papers that left it. A paper coming back is frozen there
+// again if the spot is still free (no node within restoreClearance of it),
+// else unfrozen so collide can move it off the node that has taken the spot
+// since. Kept outside the component so leaving the view (e.g. for /browse)
+// and coming back keeps the layout too.
+// `restored` holds the papers frozen back onto their `left` spot since the
+// last sync, so papers returning in the same batch (e.g. one search's
+// ghosts) are checked against each other too.
+const layoutMemory: {
+  key: string
+  live: Map<string, SimNode>
+  left: Map<string, { x: number; y: number }>
+  restored: Map<string, { x: number; y: number }>
+} = { key: '', live: new Map(), left: new Map(), restored: new Map() }
 
 // Map a paper's raw global coords (rx, ry) into the main graph's canvas space,
 // mirroring the backend normalization in graph.py so ghost nodes land at the
@@ -313,24 +344,92 @@ export default function ArxivGraph() {
     }
   }, [])
 
-  // Prepare simulation nodes (mutable x/y)
-  // Stored coords are pinned, so the collide force never runs on them; resolve
-  // overlaps once up front instead.
+  // A layout is a recipe's page (or a recipe-less graph), not a source, so
+  // saving a draft (draft → saved, same recipe) keeps it. The requested one
+  // runs ahead of the data while the next page loads (placeholder data), so
+  // the layout shown only follows it when the data itself changes.
+  const recipe =
+    source.kind === 'draft'
+      ? source.filters
+      : source.kind === 'saved'
+        ? source.graph.filters
+        : null
+  // The force mode is part of it: a pin without stored coords turns the whole
+  // graph to the free layout (see useForceConfig), where nodes frozen at
+  // their anchored positions would leave the new node alone against
+  // forceCenter, so it lays out afresh instead.
+  const requestedLayoutKey = `${
+    recipe ? `recipe:${JSON.stringify(recipe)}` : sourceKey
+  }#${pageIndex}${data && !data.meta.coords.included ? '#free' : ''}`
+  // The force mode belongs to the layout shown too: data that changes while
+  // a page change is in flight (e.g. a pin without coords landing first)
+  // mustn't switch the forces under the layout's frozen nodes.
+  const requestedAnchored = !!data?.meta.coords.included
+  const shownLayoutRef = useRef({
+    data,
+    key: requestedLayoutKey,
+    anchored: requestedAnchored,
+  })
+  if (shownLayoutRef.current.data !== data && !content.isPaging)
+    shownLayoutRef.current = {
+      data,
+      key: requestedLayoutKey,
+      anchored: requestedAnchored,
+    }
+  const layoutKey = shownLayoutRef.current.key
+  const anchored = shownLayoutRef.current.anchored
+
+  // Build a simulation node anchored at (ax, ay): its stored coord. It starts
+  // there, or where it is or was in this layout (see layoutMemory); the live
+  // simulation separates overlaps (see useForceConfig) and freezes nodes once
+  // it settles (onEngineStop).
+  const layoutKeyRef = useRef(layoutKey)
+  layoutKeyRef.current = layoutKey
+  const anchoredRef = useRef(anchored)
+  anchoredRef.current = anchored
+  const toSimNode = useCallback(
+    <N extends NodeCompact>(n: N, ax: number, ay: number): N & SimNode => {
+      const node: N & SimNode = {
+        ...n,
+        ax,
+        ay,
+        x: ax,
+        y: ay,
+        fx: undefined,
+        fy: undefined,
+      }
+      if (layoutMemory.key !== layoutKeyRef.current) return node
+      const live = layoutMemory.live.get(n.aid)
+      if (live) return { ...node, x: live.x, y: live.y, fx: live.fx, fy: live.fy }
+      const left = layoutMemory.left.get(n.aid)
+      if (!left) return node
+      const overlaps = (o: { x: number; y: number }) =>
+        Math.hypot(o.x - left.x, o.y - left.y) <
+        restoreClearance(anchoredRef.current)
+      let free = true
+      for (const o of layoutMemory.live.values()) {
+        if (overlaps(o)) {
+          free = false
+          break
+        }
+      }
+      // Keyed by aid, so rebuilding the same node (StrictMode runs state
+      // updaters twice) doesn't count as a clash with itself
+      for (const [aid, o] of layoutMemory.restored) {
+        if (!free) break
+        if (aid !== n.aid && overlaps(o)) free = false
+      }
+      if (!free) return { ...node, ...left }
+      layoutMemory.restored.set(n.aid, left)
+      return { ...node, ...left, fx: left.x, fy: left.y }
+    },
+    [],
+  )
+
   const simNodes = useMemo(() => {
     if (!data) return [] as SimNode[]
-    const pin = data.meta.coords.included
-    const pos = pin
-      ? separatePoints(
-          data.nodes.map((n) => ({ x: n.x ?? 0, y: n.y ?? 0 })),
-          { minDist: NODE_MIN_DIST },
-        )
-      : data.nodes.map((n) => ({ x: n.x ?? 0, y: n.y ?? 0 }))
-    return data.nodes.map((n, i) => ({
-      ...n,
-      ...pos[i],
-      ...(pin ? { fx: pos[i].x, fy: pos[i].y } : {}),
-    }))
-  }, [data])
+    return data.nodes.map((n) => toSimNode(n, n.x ?? 0, n.y ?? 0))
+  }, [data, toSimNode])
 
   const simNodesRef = useRef(simNodes)
   useEffect(() => {
@@ -429,31 +528,29 @@ export default function ArxivGraph() {
     // Wait for the graph, so ghosts aren't placed against an empty one
     if (!data) return
     const coords = data.meta.coords
-    const pin = coords.included
-    const place = (nodes: (NodeCompact & { id: number })[]): SimNode[] => {
-      const rawPos = nodes.map((n) =>
-        coords.bounds && n.rx != null && n.ry != null
-          ? ghostCoord(n.rx, n.ry, coords)
-          : { x: n.x ?? 0, y: n.y ?? 0 },
-      )
-      const positions = pin
-        ? separatePoints(rawPos, { minDist: NODE_MIN_DIST, fixed: simNodes })
-        : rawPos
-      return nodes.map((n, i) => ({
-        ...n,
-        x: positions[i].x,
-        y: positions[i].y,
-        ...(pin ? { fx: positions[i].x, fy: positions[i].y } : {}),
-      }))
-    }
+    // New ghosts are anchored to their stored coord; the simulation
+    // separates them from the already-frozen graph nodes.
+    const place = (nodes: (NodeCompact & { id: number })[]): SimNode[] =>
+      nodes.map((n) => {
+        const { x: ax, y: ay } =
+          coords.bounds && n.rx != null && n.ry != null
+            ? ghostCoord(n.rx, n.ry, coords)
+            : { x: n.x ?? 0, y: n.y ?? 0 }
+        return toSimNode(n, ax, ay)
+      })
 
     const inGraph = new Set(simNodes.map((n) => n.aid))
     const wanted = new Set(
       apiResults.map((r) => r.aid).filter((aid) => !inGraph.has(aid)),
     )
-    const kept = ghostSimNodesRef.current.filter((g) => wanted.has(g.aid))
+    // Kept ghosts keep their id. Placing them again keeps their live
+    // position within the same layout (layoutMemory), and re-anchors them
+    // against a new graph's coords after a layout change.
+    const kept = place(
+      ghostSimNodesRef.current.filter((g) => wanted.has(g.aid)),
+    )
     for (const g of kept) wanted.delete(g.aid)
-    setGhostSimNodes(place(kept))
+    setGhostSimNodes(kept)
     if (wanted.size === 0) return
 
     let alive = true
@@ -466,7 +563,7 @@ export default function ArxivGraph() {
           ...n,
           id: nextSearchGhostId.current++,
         }))
-        setGhostSimNodes(place([...kept, ...fresh]))
+        setGhostSimNodes([...kept, ...place(fresh)])
       } catch {
         // Keep the ghosts we have
       }
@@ -474,7 +571,7 @@ export default function ArxivGraph() {
     return () => {
       alive = false
     }
-  }, [apiResults, simNodes, data])
+  }, [apiResults, simNodes, data, toSimNode])
 
   // Search results for overlay
   const searchResults = useMemo(() => {
@@ -581,7 +678,9 @@ export default function ArxivGraph() {
 
   // Build ghost nodes for a selected paper's related papers, positioned in the
   // main graph's coordinate space. Replaces the previous related-ghost set,
-  // retaining the selected node itself if it is already a related ghost.
+  // reusing the ghosts (and ids) of papers still in it, such as the selected
+  // node itself if it is a related ghost, so a rebuild (pin, hide) doesn't
+  // move them.
   const nextRelatedGhostId = useRef(RELATED_GHOST_ID_BASE)
   const buildRelatedGhosts = useCallback(
     (sel: NodeCompact, results: RelatedPaper[]) => {
@@ -595,10 +694,13 @@ export default function ArxivGraph() {
       const existingAids = new Set<string>()
       for (const n of sims) existingAids.add(n.aid)
       for (const n of searchGhosts) existingAids.add(n.aid)
-      const pin = coords.included
 
       setRelatedGhostNodes((prev) => {
-        const retained = prev.filter((n) => n.id === sel.id)
+        const wanted = new Set(results.map((r) => r.aid))
+        const retained = prev.filter(
+          (n) =>
+            n.id === sel.id || (wanted.has(n.aid) && !existingAids.has(n.aid)),
+        )
         const seenAids = new Set(retained.map((n) => n.aid))
         const fresh: RelatedPaper[] = []
         for (const r of results) {
@@ -608,17 +710,11 @@ export default function ArxivGraph() {
           seenAids.add(r.aid)
           fresh.push(r)
         }
-        const rawPos = fresh.map((r) => ghostCoord(r.rx!, r.ry!, coords))
-        const positions = pin
-          ? separatePoints(rawPos, {
-              minDist: NODE_MIN_DIST,
-              fixed: [...sims, ...searchGhosts, ...retained],
-            })
-          : rawPos
+        // Anchored at their stored coord; the simulation separates them
         const built = retained.slice()
-        fresh.forEach((r, i) => {
-          const { x, y } = positions[i]
-          built.push({
+        fresh.forEach((r) => {
+          const { x, y } = ghostCoord(r.rx!, r.ry!, coords)
+          const node: NodeCompact = {
             id: nextRelatedGhostId.current++,
             aid: r.aid,
             t: r.t,
@@ -627,15 +723,13 @@ export default function ArxivGraph() {
             dm: r.dm,
             ln: r.ln,
             tags: r.tags,
-            x,
-            y,
-            ...(pin ? { fx: x, fy: y } : {}),
-          } as SimNode)
+          }
+          built.push(toSimNode(node, x, y))
         })
         return built
       })
     },
-    [data],
+    [data, toSimNode],
   )
 
   // Fetch related papers for the selected node and build their ghost nodes.
@@ -673,24 +767,53 @@ export default function ArxivGraph() {
   }, [selected?.aid, buildRelatedGhosts])
 
   // Force configuration
-  useForceConfig(fgRef, !!data)
+  // The canvas first mounts once the graph has fully loaded: `data` is
+  // already set when only one of its queries (page or pins) has returned, and
+  // the first tick would frame just those nodes. After that it stays mounted
+  // for the source: pinning the first paper starts a pins query with no
+  // placeholder, and unmounting then would drop the camera framing.
+  // Forces are configured only once it's mounted: on a remount with cached
+  // data the first render has no width yet, so fgRef is still unset, and
+  // configuring then would leave force-graph's default forces.
+  // Cleared as soon as another source renders unloaded, so coming back to a
+  // source that is reloading waits for it again.
+  const loadedSourceRef = useRef<string | null>(null)
+  if (data && !showLoading) loadedSourceRef.current = sourceKey
+  else if (loadedSourceRef.current !== sourceKey) loadedSourceRef.current = null
+  const canvasReady =
+    !!data &&
+    (!showLoading || loadedSourceRef.current === sourceKey) &&
+    width > 0 &&
+    height > 0
+  useForceConfig(fgRef, canvasReady, anchored)
 
-  // Autofit once per graph source and page: pages of a broad recipe can sit
-  // in different parts of the map
+  // Autofit when new content arrives for another graph source or page: pages
+  // of a broad recipe can sit in different parts of the map, and graphs
+  // sharing a recipe can have pins anywhere. When the source changes but the
+  // content doesn't (saving a draft, or editing a recipe without changing
+  // it), the framing carries over to the new source. Not while the previous
+  // page stands in for the next one. Also refit whenever the canvas mounts
+  // afresh (e.g. switching to a graph that loads), since it starts at the
+  // default camera.
   const didAutoFit = useRef(false)
+  const framedRef = useRef({ data, sourceKey, layoutKey: requestedLayoutKey })
   useEffect(() => {
-    didAutoFit.current = false
-  }, [sourceKey, pageIndex])
+    if (content.isPaging) return
+    const prev = framedRef.current
+    framedRef.current = { data, sourceKey, layoutKey: requestedLayoutKey }
+    if (prev.data === data) return
+    if (prev.sourceKey !== sourceKey || prev.layoutKey !== requestedLayoutKey)
+      didAutoFit.current = false
+  }, [data, sourceKey, requestedLayoutKey, content.isPaging])
+  useEffect(() => {
+    if (!canvasReady) didAutoFit.current = false
+  }, [canvasReady])
 
   // ESC unlock (global). Off while the modal is open, which handles its own Esc.
   useEffect(() => {
     if (modal) return
     const h = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (hoverId != null && !ghostIds.has(hoverId))
-          setPinned(simById.get(hoverId), false)
-        if (lockedId != null && !ghostIds.has(lockedId))
-          setPinned(simById.get(lockedId), false)
         setLockedId(null)
         setHoverId(null)
         setSelectedId(null)
@@ -699,7 +822,7 @@ export default function ArxivGraph() {
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
-  }, [hoverId, lockedId, simById, modal])
+  }, [modal])
 
   // Fit the camera to the rendered nodes. Read through a ref so the ESC
   // handler's closure never fits against stale nodes or viewport size.
@@ -748,36 +871,15 @@ export default function ArxivGraph() {
     focusNode(simNode, zoomLevel, duration)
   }
 
-  // Node pinning
-  function setPinned(
-    n: NodeObject<NodeCompact> | null | undefined,
-    pinned: boolean,
-  ) {
-    if (!n) return
-    if (pinned) {
-      n.fx = n.x
-      n.fy = n.y
-    } else {
-      n.fx = undefined
-      n.fy = undefined
-    }
-  }
-
   // Hover handling
   const hoverTimer = useRef<number | null>(null)
-  const onNodeHover = (
-    node: NodeObject<NodeCompact> | null,
-    prevNode?: NodeObject<NodeCompact> | null,
-  ) => {
+  const onNodeHover = (node: NodeObject<NodeCompact> | null) => {
     if (node && !isInteractive(node.id)) {
-      setPinned(prevNode, false)
       if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
       hoverTimer.current = window.setTimeout(() => setHoverId(null), 120)
       return
     }
     if (lockedId != null) return
-    setPinned(prevNode, false)
-    setPinned(node, true)
     if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
     if (node) setHoverId(node.id)
     else hoverTimer.current = window.setTimeout(() => setHoverId(null), 120)
@@ -793,15 +895,10 @@ export default function ArxivGraph() {
     if (!isInteractive(node.id)) return
     setSelectedId(node.id)
     setLockedId(node.id)
-    setPinned(node, true)
     focusNode(node as SimNode)
   }
 
   const onBackgroundClick = () => {
-    if (hoverId != null && !ghostIds.has(hoverId))
-      setPinned(simById.get(hoverId), false)
-    if (lockedId != null && !ghostIds.has(lockedId))
-      setPinned(simById.get(lockedId), false)
     fitView(400)
     setLockedId(null)
     setHoverId(null)
@@ -971,6 +1068,22 @@ export default function ArxivGraph() {
     () => [...simNodes, ...ghostSimNodes, ...relatedGhostNodes],
     [simNodes, ghostSimNodes, relatedGhostNodes],
   )
+
+  // Keep layoutMemory in step with the canvas (see its comment)
+  useEffect(() => {
+    const m = layoutMemory
+    if (m.key !== layoutKey) {
+      m.key = layoutKey
+      m.live = new Map()
+      m.left = new Map()
+    }
+    m.restored = new Map()
+    const live = new Map(allSimNodes.map((n) => [n.aid, n]))
+    for (const [aid, n] of m.live)
+      if (!live.has(aid)) m.left.set(aid, { x: n.x, y: n.y })
+    for (const aid of live.keys()) m.left.delete(aid)
+    m.live = live
+  }, [allSimNodes, layoutKey])
 
   const graphData = useMemo(
     () => ({ nodes: allSimNodes, links: data?.links ?? [] }),
@@ -1173,7 +1286,7 @@ export default function ArxivGraph() {
           onClose={() => setModal(null)}
         />
       )}
-      {data && width > 0 && height > 0 && (
+      {canvasReady && (
         <ForceGraph2D<NodeCompact, LinkCompact>
           ref={fgRef}
           width={width}
@@ -1183,7 +1296,7 @@ export default function ArxivGraph() {
           nodeId='id'
           linkSource='s'
           linkTarget='t'
-          cooldownTicks={data.meta.coords.included ? 0 : 90}
+          cooldownTicks={COOLDOWN_TICKS}
           autoPauseRedraw={!relatedLoading && !fading}
           onRenderFramePre={() => {
             // Capped: the first frame after an idle pause would otherwise see
@@ -1203,7 +1316,10 @@ export default function ArxivGraph() {
             if (!isInteractive(n.id)) return
             ctx.fillStyle = color
             ctx.beginPath()
-            ctx.arc(n.x ?? 0, n.y ?? 0, 10, 0, 2 * Math.PI)
+            // No wider than half the node spacing: the pointer canvas picks
+            // the last area painted, so wider areas overlapping neighbours
+            // would bury nodes in dense clusters under the ones around them
+            ctx.arc(n.x ?? 0, n.y ?? 0, nodeHitRadius(anchored), 0, 2 * Math.PI)
             ctx.fill()
           }}
           linkVisibility={(l: LinkObject<NodeCompact, LinkCompact>) => {
@@ -1214,7 +1330,27 @@ export default function ArxivGraph() {
               l.t ?? (typeof l.target === 'object' ? l.target?.id : l.target)
             return s === activeId || t === activeId
           }}
+          onEngineTick={() => {
+            // With stored coords, nodes settle within a few px of where they
+            // start, so frame them on the first tick: they spread apart in
+            // place instead of the camera jumping once they've settled.
+            if (!didAutoFit.current && anchored) {
+              fitView(0)
+              didAutoFit.current = true
+            }
+          }}
           onEngineStop={() => {
+            // Freeze everything once settled, so the reheat each graphData
+            // change triggers (search or related ghosts, pin, hide) only
+            // moves the nodes added since.
+            for (const n of allSimNodes) {
+              if (n.fx == null) {
+                n.fx = n.x
+                n.fy = n.y
+              }
+            }
+            // Without coords the layout grows from the origin, so it can
+            // only be framed once it has settled
             if (!didAutoFit.current) {
               fitView(500)
               didAutoFit.current = true

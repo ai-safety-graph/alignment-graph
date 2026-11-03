@@ -1,71 +1,22 @@
-import { forceCollide, forceSimulation, forceX, forceY } from 'd3-force'
-import type { SimulationNodeDatum } from 'd3-force'
 import type { LinkCompact, NodeCompact } from './types'
 
-type Point = { x: number; y: number }
-
-// Nudge `points` apart so no two sit closer than `minDist`, while pulling each
-// back toward its original position so the (UMAP) layout's shape survives.
-// `fixed` points are obstacles that never move (e.g. already-placed nodes
-// when laying out ghosts). Runs a collide-only simulation to completion
-// synchronously and returns the new positions, in input order.
-//
-// Only obstacles near `points` can collide with them, so rather than simulate
-// the whole graph (which costs as much as separating it from scratch), the
-// simulation only gets the obstacles within a margin of some point. If a point
-// still ends up overlapping an obstacle left out, the margin doubles and it
-// reruns; once every obstacle is included the result is final.
-export function separatePoints(
-  points: Point[],
-  { minDist, fixed = [] }: { minDist: number; fixed?: Point[] },
-): Point[] {
-  if (points.length === 0) return []
-  for (let margin = 4 * minDist; ; margin *= 2) {
-    const isNear = nearAny(points, margin)
-    const near = fixed.filter(isNear)
-    const result = simulateSeparation(points, minDist, near)
-    if (near.length === fixed.length) return result
-    const far = fixed.filter((p) => !isNear(p))
-    const tooClose = far.some((o) =>
-      result.some((p) => Math.hypot(p.x - o.x, p.y - o.y) < minDist),
-    )
-    if (!tooClose) return result
-  }
-}
-
-// Predicate for "within `margin` (per axis) of at least one of `points`".
-// Checked per point rather than against one shared bounding box, since
-// related/search results are often spread across the whole canvas.
-function nearAny(points: Point[], margin: number): (p: Point) => boolean {
-  return (o) =>
-    points.some(
-      (p) => Math.abs(p.x - o.x) <= margin && Math.abs(p.y - o.y) <= margin,
-    )
-}
-
-// Measured on a month of real layout (~1,300 nodes): 100 ticks still leaves
-// no overlapping pairs and lands within 2px of a 200-tick run, at half the
-// cost; below ~75 ticks overlaps start to survive.
-const SEPARATION_TICKS = 100
-
-function simulateSeparation(
-  points: Point[],
-  minDist: number,
-  fixed: Point[],
-): Point[] {
-  type N = SimulationNodeDatum & { ax: number; ay: number }
-  const movable: N[] = points.map((p) => ({ x: p.x, y: p.y, ax: p.x, ay: p.y }))
-  const obstacles: N[] = fixed.map((p) => ({
-    x: p.x, y: p.y, fx: p.x, fy: p.y, ax: p.x, ay: p.y,
-  }))
-  forceSimulation<N>([...movable, ...obstacles])
-    .force('collide', forceCollide<N>(minDist / 2).iterations(4))
-    .force('x', forceX<N>((n) => n.ax).strength(0.05))
-    .force('y', forceY<N>((n) => n.ay).strength(0.05))
-    .stop()
-    .tick(SEPARATION_TICKS)
-  return movable.map((n) => ({ x: n.x!, y: n.y! }))
-}
+// Node radius in graph units, and the minimum centre-to-centre spacing the
+// anchored layout's collide force separates nodes to (2 × radius plus a
+// gap). The free layout (no stored coords) spaces nodes by its own, wider
+// collide radius. Each node's pointer (hover/click) area is half the active
+// layout's spacing, so neighbours' areas tile instead of covering each other.
+export const NODE_RADIUS = 4
+export const NODE_MIN_DIST = 2 * NODE_RADIUS + 4
+export const FREE_COLLIDE_RADIUS = 13
+export const nodeHitRadius = (anchored: boolean) =>
+  anchored ? NODE_MIN_DIST / 2 : FREE_COLLIDE_RADIUS
+// How close a paper's old spot may be to a neighbour for it to be frozen
+// back there: the active spacing, less a 4-unit slack. In the anchored
+// layout that's how much closer settled neighbours sit (the anchor pull
+// slightly outweighs collide), so restored nodes' pointer areas overlap no
+// more than settled ones' do; the free layout reuses the same slack.
+export const restoreClearance = (anchored: boolean) =>
+  2 * nodeHitRadius(anchored) - (NODE_MIN_DIST - 2 * NODE_RADIUS)
 
 export const clamp = (v: number, min: number, max: number) =>
   Math.max(min, Math.min(max, v))
