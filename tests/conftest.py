@@ -16,6 +16,13 @@ def _resolve_test_dsn() -> str | None:
     """
     explicit = os.getenv("TEST_DATABASE_URL")
     if explicit:
+        # db.connect() ignores a DSN that isn't a postgresql:// URL and falls
+        # back to DATABASE_URL (production), so refuse keyword-style DSNs.
+        if not explicit.startswith(("postgresql://", "postgres://")):
+            raise pytest.UsageError(
+                "TEST_DATABASE_URL must be a postgresql:// URL (keyword DSNs "
+                "would make db.connect() fall back to DATABASE_URL)."
+            )
         return explicit
 
     fallback = os.getenv("DATABASE_URL")

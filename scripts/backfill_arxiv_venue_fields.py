@@ -15,7 +15,9 @@ by its columns alone). --restart ignores the checkpoint.
 
 Ids arXiv doesn't return (after one retry) or rejects are never dropped
 silently: they're recorded under `missing` in the checkpoint and the run
-reports them. --retry-missing fetches just those.
+reports them. --retry-missing fetches just those. Several chunks in a row
+returning nothing look like an outage, so the run stops there (those
+chunks are already recorded as missing).
 
 Usage:
     python scripts/backfill_arxiv_venue_fields.py [--db DSN] [--limit N] [--dry-run]
@@ -35,6 +37,8 @@ from aisafety_pipeline.oai import ARXIV_API_BATCH, fetch_arxiv_venue_fields
 
 STATE_KEY = "arxiv_venue_backfill"
 _RETRY_SLEEP_SEC = 5
+# Consecutive chunks with nothing returned before the run assumes an outage.
+_MAX_EMPTY_CHUNKS = 3
 
 _UPDATE = """
     UPDATE papers_raw AS r
@@ -74,10 +78,11 @@ def fetch_resilient(
     except Exception as exc:
         if not _is_bad_request(exc):
             raise
+        # A failed request skips _oai_fetch's post-success throttle, so every
+        # path out of a 400 waits before the next request goes out.
         if len(ids) == 1:
+            sleep(OAI_THROTTLE_SEC)
             return {}, list(ids)
-        # A failed request skips _oai_fetch's post-success throttle, so wait
-        # before each half ourselves.
         mid = len(ids) // 2
         sleep(OAI_THROTTLE_SEC)
         f1, m1 = fetch_resilient(ids[:mid], fetch, sleep, retry)
@@ -91,6 +96,15 @@ def fetch_resilient(
         more, absent = fetch_resilient(absent, fetch, sleep, retry=False)
         found.update(more)
     return found, absent
+
+
+def select_pending_ids(conn, after: str) -> list[str]:
+    """Relevant papers after the checkpoint, in checkpoint order."""
+    rows = conn.execute(
+        "SELECT id FROM papers WHERE llm_relevant AND id > %s ORDER BY id",
+        (after,),
+    ).fetchall()
+    return [r[0] for r in rows]
 
 
 def main() -> None:
@@ -113,25 +127,15 @@ def main() -> None:
             ids = sorted(missing)[: args.limit]
             print(f"backfill: retrying {len(ids)} previously missing papers")
         else:
-            rows = conn.execute(
-                "SELECT id FROM papers WHERE llm_relevant AND id > %s ORDER BY id",
-                (last_id,),
-            ).fetchall()
-            ids = [r[0] for r in rows][: args.limit]
+            ids = select_pending_ids(conn, last_id)[: args.limit]
             print(f"backfill: {len(ids)} papers to fetch" + (f" (resuming after {last_id})" if last_id else ""))
 
-        done = with_any = 0
+        done = with_any = empty_streak = 0
         cur = conn.raw_cursor()
         for i in range(0, len(ids), ARXIV_API_BATCH):
             chunk = ids[i : i + ARXIV_API_BATCH]
             found, chunk_missing = fetch_resilient(chunk)
-            if chunk and not found:
-                # Nothing came back at all: an outage or empty feed, not a
-                # few bad ids. Stop without touching the checkpoint.
-                raise SystemExit(
-                    f"backfill: arXiv returned none of {len(chunk)} papers starting at {chunk[0]}; "
-                    "stopping with the checkpoint unchanged. Rerun later."
-                )
+            empty_streak = 0 if found else empty_streak + 1
             values = [
                 (pid, f["journal_ref"], f["doi"], f["comments"])
                 for pid, f in found.items()
@@ -148,6 +152,14 @@ def main() -> None:
                 set_state(conn, STATE_KEY, {"last_id": last_id, "missing": sorted(missing)})
             done += len(chunk)
             print(f"backfill: {done}/{len(ids)} fetched, {with_any} with any field, {len(missing)} missing so far")
+            if empty_streak >= _MAX_EMPTY_CHUNKS and not args.retry_missing:
+                # A single empty chunk (all bad ids) is recorded and passed;
+                # several in a row look like an outage. Their ids are already
+                # in `missing`, so stopping loses nothing.
+                raise SystemExit(
+                    f"backfill: arXiv returned nothing for {empty_streak} chunks in a row; "
+                    "stopping. Rerun later, then use --retry-missing."
+                )
 
         if missing:
             print(f"backfill: {len(missing)} papers not returned by arXiv; rerun with --retry-missing")
