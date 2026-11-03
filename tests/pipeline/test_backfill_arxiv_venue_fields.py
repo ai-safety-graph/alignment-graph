@@ -51,17 +51,34 @@ def test_ids_absent_after_retry_are_reported_missing():
 
 
 def test_a_rejected_id_is_isolated_and_the_rest_still_fetched():
-    fetch, _ = _fake_fetch(rejected={"c"})
-    found, missing = backfill.fetch_resilient(list("abcde"), fetch, sleep=lambda s: None)
+    fetch, calls = _fake_fetch(rejected={"c"})
+    sleeps = []
+    found, missing = backfill.fetch_resilient(list("abcde"), fetch, sleep=sleeps.append)
     assert set(found) == {"a", "b", "d", "e"} and missing == ["c"]
+    # Every split request is throttled like any other arXiv call.
+    assert len(sleeps) == len(calls) - 1
 
 
-def test_server_errors_propagate_so_the_batch_is_redone():
+@pytest.mark.parametrize("status", [403, 404, 503])
+def test_non_400_errors_propagate_without_bisecting(status):
+    calls = []
+
     def fetch(ids):
-        raise _http_error(503)
+        calls.append(ids)
+        raise _http_error(status)
 
     with pytest.raises(requests.HTTPError):
-        backfill.fetch_resilient(["a"], fetch, sleep=lambda s: None)
+        backfill.fetch_resilient(list("abcd"), fetch, sleep=lambda s: None)
+    assert len(calls) == 1
+
+
+def _use_test_db(monkeypatch, test_dsn):
+    """main() connects via db.connect(), which falls back to DATABASE_URL
+    (production) for a --db that isn't a postgresql:// URL. Bypass it so
+    the script can only ever reach the test database."""
+    from aisafety_pipeline.db import PgConnection
+
+    monkeypatch.setattr(backfill, "connect", lambda _db: PgConnection(test_dsn))
 
 
 def test_run_records_missing_ids_and_retry_missing_recovers_them(conn, test_dsn, make_paper, monkeypatch):
@@ -69,15 +86,17 @@ def test_run_records_missing_ids_and_retry_missing_recovers_them(conn, test_dsn,
     the checkpoint (not silently skipped) and --retry-missing fills it."""
     from aisafety_pipeline.db import get_state
 
+    _use_test_db(monkeypatch, test_dsn)
     ids = [make_paper(f"2401.4000{i}", llm_relevant=True) for i in range(3)]
     conn.commit()
     omitted = ids[1]
     arxiv_down_for = {omitted}
 
     def fetch(chunk):
+        # Only fixture papers ever get data, whatever else the DB holds.
         return {
             pid: {"journal_ref": "ICLR 2026", "doi": None, "comments": None}
-            for pid in chunk if pid not in arxiv_down_for
+            for pid in chunk if pid in ids and pid not in arxiv_down_for
         }
 
     monkeypatch.setattr(backfill, "fetch_arxiv_venue_fields", fetch)
@@ -86,7 +105,7 @@ def test_run_records_missing_ids_and_retry_missing_recovers_them(conn, test_dsn,
     monkeypatch.setattr(backfill, "ARXIV_API_BATCH", 2)
 
     def run(*extra):
-        monkeypatch.setattr(sys, "argv", ["backfill", "--db", test_dsn, "--restart", *extra])
+        monkeypatch.setattr(sys, "argv", ["backfill", "--restart", *extra])
         backfill.main()
 
     def jr(aid):
@@ -100,10 +119,31 @@ def test_run_records_missing_ids_and_retry_missing_recovers_them(conn, test_dsn,
         assert jr(omitted) is None
 
         arxiv_down_for.clear()
-        monkeypatch.setattr(sys, "argv", ["backfill", "--db", test_dsn, "--retry-missing"])
+        monkeypatch.setattr(sys, "argv", ["backfill", "--retry-missing"])
         backfill.main()
         assert jr(omitted) == "ICLR 2026"
         assert omitted not in get_state(conn, backfill.STATE_KEY)["missing"]
+    finally:
+        conn.execute("DELETE FROM papers_raw WHERE id = ANY(%s)", (ids,))
+        conn.execute("DELETE FROM pipeline_state WHERE key = %s", (backfill.STATE_KEY,))
+        conn.commit()
+
+
+def test_a_batch_with_nothing_returned_stops_without_moving_the_checkpoint(conn, test_dsn, make_paper, monkeypatch):
+    from aisafety_pipeline.db import get_state, set_state
+
+    _use_test_db(monkeypatch, test_dsn)
+    ids = [make_paper(f"2401.4001{i}", llm_relevant=True) for i in range(2)]
+    conn.commit()
+    set_state(conn, backfill.STATE_KEY, {"last_id": "", "missing": []})
+    monkeypatch.setattr(backfill, "fetch_arxiv_venue_fields", lambda chunk: {})
+    monkeypatch.setattr(backfill, "_RETRY_SLEEP_SEC", 0)
+    monkeypatch.setattr(backfill.time, "sleep", lambda s: None)
+    monkeypatch.setattr(sys, "argv", ["backfill"])
+    try:
+        with pytest.raises(SystemExit):
+            backfill.main()
+        assert get_state(conn, backfill.STATE_KEY) == {"last_id": "", "missing": []}
     finally:
         conn.execute("DELETE FROM papers_raw WHERE id = ANY(%s)", (ids,))
         conn.execute("DELETE FROM pipeline_state WHERE key = %s", (backfill.STATE_KEY,))
