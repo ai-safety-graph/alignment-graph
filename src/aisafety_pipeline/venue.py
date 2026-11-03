@@ -10,8 +10,12 @@ applies it to `papers`. Rules, strongest signal first:
    "published in", "in proceedings of", "camera-ready") -> reviewed, even
    if the comment also mentions a submission elsewhere. Without one, any
    submission/review phrase ("submitted to", "under review") -> unknown.
-   Otherwise a known venue with a year ("ICML 2026", "AAAI-23") or a
-   "Conference/Workshop/Symposium ... <year>" mention -> reviewed.
+   Acceptance words that don't report an acceptance ("not accepted",
+   "if accepted", "code published on GitHub") don't count, and also rule
+   out the venue-mention fallback. Otherwise a known venue with a year
+   ("ICML 2026", "AAAI-23") or a "Conference/Workshop/Symposium ... <year>"
+   mention -> reviewed, unless that clause names the venue for something
+   else (a preprint template, a keynote, a competition).
 4. Otherwise unknown (peer_reviewed NULL). Unknown is not "not reviewed":
    absence of a signal says nothing.
 
@@ -135,7 +139,7 @@ _VENUE_ANY_RE = re.compile(
 # Explicit acceptance. "if/once/when accepted" is a plan, not a fact.
 _POSITIVE_RE = re.compile(
     r"(?<!if )(?<!once )(?<!when )\bacc(?:ept|etp)ed\b"
-    r"|(?<!un)\bpublished\b"
+    r"|(?<!un)\bpublished\b(?!\s+version)"
     r"|\bto\s+(?:be\s+)?appear"
     r"|\bto\s+be\s+published\b"
     r"|\bforthcoming\b"
@@ -147,8 +151,25 @@ _POSITIVE_RE = re.compile(
     re.I,
 )
 _NEGATIVE_RE = re.compile(
-    r"\bsubmitted\b|\bsubmission\b|\bunder[\s-]+(?:peer[\s-]+)?review\b"
+    r"\bsubmitted\b|\bsubmission\b|\bto\s+submit\b|\bunder[\s-]+(?:peer[\s-]+)?review\b"
     r"|\bunder\s+consideration\b|\brejected\b|\bin\s+review\b",
+    re.I,
+)
+# An acceptance word that doesn't report an acceptance: negated, conditional,
+# or "published" about a code/data/blog host rather than a venue.
+_NOT_ACCEPTANCE_RE = re.compile(
+    r"\bnot\s+(?:yet\s+)?(?:been\s+)?(?:accepted|published)\b"
+    r"|\b(?:if|once|when|until)\s+(?:it\s+is\s+|is\s+)?(?:accepted|available|published)\b"
+    r"|\bpublished\s+(?:on|at)\s+(?:https?://|www\.)"
+    r"|\bpublished\s+(?:on|at|to|in)\s+(?:the\s+)?(?:github|hugging\s*face|arxiv|ssrn|zenodo"
+    r"|medium|substack|lesswrong|(?:ai\s+)?alignment\s+forum|our\b|my\b)",
+    re.I,
+)
+# A clause naming a venue for something other than this paper's acceptance.
+# Only used for the venue-mention fallback (no acceptance phrase).
+_NOT_A_PAPER_VENUE_RE = re.compile(
+    r"\b(?:19|20)\d\d\s+preprint\b|\btemplate\b|\bkeynote\b|\binvited\b|\bnon-archival\b"
+    r"|\bcompetition\b|\bchallenge\b|\bshared\s+task\b|\bwinners?\b|\b\d+(?:st|nd|rd|th)\s+place\b",
     re.I,
 )
 _GENERIC_VENUE_RE = re.compile(
@@ -267,25 +288,41 @@ def _venue_type(text: str, venue: str | None) -> str:
     return "unknown"
 
 
+_DOI_URL_PREFIX_RE = re.compile(r"^(?:https?://(?:dx\.)?doi\.org/|doi:\s*)", re.I)
+
+
 def _is_publisher_doi(doi: str | None) -> bool:
-    return bool(doi) and not doi.strip().lower().startswith(_NON_PUBLISHER_DOI_PREFIXES)
-
-
-def _comments_say_reviewed(comments: str) -> bool:
-    if _POSITIVE_RE.search(comments):
-        return True
-    if _NEGATIVE_RE.search(comments):
-        return False
-    return bool(
-        _VENUE_YEAR_RE.search(comments)
-        or _GENERIC_VENUE_RE.search(comments)
-        or _NAMED_VENUE_RE.search(comments)
-    )
+    bare = _DOI_URL_PREFIX_RE.sub("", (doi or "").strip()).lower()
+    return bool(bare) and not bare.startswith(_NON_PUBLISHER_DOI_PREFIXES)
 
 
 def _clauses(comments: str) -> list[str]:
-    # Split on ";" and on ". " before a capital, so "Proc. of the ..." stays whole.
-    return re.split(r";|\.\s+(?=[A-Z])", comments)
+    # Split on ";", " | " and ". " before a capital, so "Proc. of the ..." stays whole.
+    return re.split(r";|\s\|\s|\.\s+(?=[A-Z])", comments)
+
+
+def _states_acceptance(clause: str) -> bool:
+    """An acceptance phrase that isn't negated, conditional or about a code
+    host. Checked per comma-separated part so "Accepted at X, code published
+    on GitHub" still counts."""
+    return any(
+        _POSITIVE_RE.search(part) and not _NOT_ACCEPTANCE_RE.search(part)
+        for part in clause.split(",")
+    )
+
+
+def _comments_say_reviewed(comments: str) -> bool:
+    clauses = _clauses(comments)
+    if any(_states_acceptance(c) for c in clauses):
+        return True
+    if _NEGATIVE_RE.search(comments) or _NOT_ACCEPTANCE_RE.search(comments):
+        return False
+    mentions = " ; ".join(c for c in clauses if not _NOT_A_PAPER_VENUE_RE.search(c))
+    return bool(
+        _VENUE_YEAR_RE.search(mentions)
+        or _GENERIC_VENUE_RE.search(mentions)
+        or _NAMED_VENUE_RE.search(mentions)
+    )
 
 
 def _comments_venue(comments: str) -> tuple[str | None, str]:
@@ -293,8 +330,11 @@ def _comments_venue(comments: str) -> tuple[str | None, str]:
     the acceptance phrase ("Accepted at X; extended version submitted to Y"
     names X), then at the rest minus submission/review clauses."""
     clauses = _clauses(comments)
-    accepted = next((c for c in clauses if _POSITIVE_RE.search(c)), None)
-    rest = " ; ".join(c for c in clauses if c is not accepted and not _NEGATIVE_RE.search(c))
+    accepted = next((c for c in clauses if _states_acceptance(c)), None)
+    rest = " ; ".join(
+        c for c in clauses
+        if c is not accepted and not _NEGATIVE_RE.search(c) and not _NOT_A_PAPER_VENUE_RE.search(c)
+    )
     usable = " ; ".join(t for t in (accepted, rest) if t)
     for text in (accepted, rest):
         if not text:
@@ -376,8 +416,8 @@ def derive_venues(conn, full: bool = False) -> dict[str, int]:
     if full:
         rows = conn.execute(_SELECT_ALL).fetchall()
     else:
-        # No watermark yet: the NULL-derived half already covers every paper
-        # on a first run; epoch makes the harvested half match nothing new.
+        # No watermark yet: both halves match every relevant paper on a first
+        # run (all are NULL-derived and harvested after epoch); UNION dedupes.
         since = watermark["harvested_at"] if watermark else "epoch"
         rows = conn.execute(_SELECT_PENDING, (since, cutoff or "epoch")).fetchall()
 
