@@ -37,6 +37,7 @@ aisafety-pipeline stage1
 aisafety-pipeline embed
 aisafety-pipeline filter
 aisafety-pipeline llm-classify-run   # LLM relevance + taxonomy classification, live tag source
+aisafety-pipeline venue              # peer-review status from arXiv journal-ref/DOI/comments
 aisafety-pipeline embed-topic        # BGE topic embeddings (needed by compute-layout and semantic search)
 aisafety-pipeline compute-layout     # persists graph_x/y to DB
 aisafety-pipeline serve              # start FastAPI
@@ -121,6 +122,7 @@ The public orchestration surface is defined in `src/aisafety_pipeline/utils.py`:
 - `embed` — SPECTER2 embeddings (`papers.embedding`)
 - `filter` — semantic stage-2 filter (`--method centroid` or `centroid-multi`)
 - `llm-classify` / `llm-classify-submit` / `llm-classify-collect` / `llm-classify-run` — LLM relevance + taxonomy classification into `llm_relevant`/`llm_tags` (the live tag source; `llm-classify-run` is the recommended production command — submits, waits, and collects Batch API jobs until the corpus is classified)
+- `venue` — peer-review status (`peer_reviewed`, `venue`, `venue_type`) for LLM-relevant papers, derived from arXiv journal-ref/DOI/comments (`--full` re-derives after rule changes)
 - `embed-topic` — BGE topic embeddings (`papers.embedding_topic`) for LLM-relevant papers
 - `compute-layout` — persists `graph_x/y` to DB (incremental kNN placement; `--full` refits UMAP/PCA)
 - `run-all` — every stage above in order, for the scheduled job (`--skip <stage>` to omit stages); records a latest-batch summary in `pipeline_state`

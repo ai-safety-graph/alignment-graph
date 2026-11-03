@@ -397,6 +397,12 @@ def init_db(db_arg: str | None = None) -> PgConnection:
         # without it every page sorted all relevant rows.
         "CREATE INDEX IF NOT EXISTS idx_papers_relevant_published ON papers "
         "(published DESC, id DESC) WHERE llm_relevant",
+        # Same keyset order for the "peer-reviewed only" filter.
+        "CREATE INDEX IF NOT EXISTS idx_papers_reviewed_published ON papers "
+        "(published DESC, id DESC) WHERE llm_relevant AND peer_reviewed",
+        # venue stage work queue: relevant papers never derived.
+        "CREATE INDEX IF NOT EXISTS idx_papers_venue_pending ON papers (id) "
+        "WHERE llm_relevant AND venue_derived_at IS NULL",
     ):
         cur.execute(stmt)
     conn.commit()
@@ -444,6 +450,15 @@ def _ensure_columns(conn: PgConnection) -> None:
         ("papers_raw", "journal_ref", "TEXT"),
         ("papers_raw", "doi", "TEXT"),
         ("papers_raw", "comments", "TEXT"),
+        # Peer-review status derived from those fields by the `venue` stage
+        # (venue.py). peer_reviewed is NULL when there's no signal either
+        # way -- unknown, not "not reviewed". venue_type is conference /
+        # workshop / journal / unknown; venue_source says which field decided.
+        ("papers", "peer_reviewed", "BOOLEAN"),
+        ("papers", "venue", "TEXT"),
+        ("papers", "venue_type", "TEXT"),
+        ("papers", "venue_source", "TEXT"),
+        ("papers", "venue_derived_at", "TIMESTAMPTZ"),
     ]
     for table, col, dtype in _ENSURE:
         try:
