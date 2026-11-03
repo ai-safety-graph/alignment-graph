@@ -155,21 +155,39 @@ _NEGATIVE_RE = re.compile(
     r"|\bunder\s+consideration\b|\brejected\b|\bin\s+review\b",
     re.I,
 )
-# An acceptance word that doesn't report an acceptance: negated, conditional,
-# or "published" about a code/data/blog host rather than a venue.
-_NOT_ACCEPTANCE_RE = re.compile(
+# Says the paper was NOT accepted (yet): negated or conditional acceptance.
+# Rules out the venue-mention fallback for the whole comment.
+_NEGATED_ACCEPTANCE_RE = re.compile(
     r"\bnot\s+(?:yet\s+)?(?:been\s+)?(?:accepted|published)\b"
-    r"|\b(?:if|once|when|until)\s+(?:it\s+is\s+|is\s+)?(?:accepted|available|published)\b"
-    r"|\bpublished\s+(?:on|at)\s+(?:https?://|www\.)"
-    r"|\bpublished\s+(?:on|at|to|in)\s+(?:the\s+)?(?:github|hugging\s*face|arxiv|ssrn|zenodo"
+    r"|\b(?:if|once|when|until)\s+(?:it\s+is\s+|is\s+)?accepted\b",
+    re.I,
+)
+# Publisher / proceedings hosts: "published at <url>" with one of these is a venue.
+_PUBLISHER_HOSTS = (
+    r"aclanthology|proceedings\.mlr|openreview|(?:dx\.)?doi\.org|ieeexplore|dl\.acm|link\.springer"
+    r"|sciencedirect|papers\.nips|proceedings\.neurips|neurips\.cc|ojs\.aaai|jmlr|ijcai|nature\.com"
+    r"|science\.org|journals\.|onlinelibrary\.wiley|tandfonline|mdpi"
+)
+# An acceptance word that doesn't report an acceptance, within one part of a
+# clause: the above, "published"/"available" as a condition, or "published"
+# about a code/data/blog host rather than a venue.
+_NOT_ACCEPTANCE_RE = re.compile(
+    _NEGATED_ACCEPTANCE_RE.pattern
+    + r"|\b(?:if|once|when|until)\s+(?:it\s+is\s+|is\s+)?(?:available|published)\b"
+    + rf"|\bpublished\s+(?:on|at)\s+(?:https?://|www\.)(?!(?:www\.)?(?:{_PUBLISHER_HOSTS}))"
+    + r"|\bpublished\s+(?:on|at|to|in)\s+(?:the\s+)?(?:github|hugging\s*face|arxiv|ssrn|zenodo"
     r"|medium|substack|lesswrong|(?:ai\s+)?alignment\s+forum|our\b|my\b)",
     re.I,
 )
 # A clause naming a venue for something other than this paper's acceptance.
 # Only used for the venue-mention fallback (no acceptance phrase).
+# Capitalised "Challenge" is a named challenge ("LLM Efficiency Challenge");
+# lower-case "the challenge of jailbreaks" isn't. "Best paper winner" stays.
 _NOT_A_PAPER_VENUE_RE = re.compile(
-    r"\b(?:19|20)\d\d\s+preprint\b|\btemplate\b|\bkeynote\b|\binvited\b|\bnon-archival\b"
-    r"|\bcompetition\b|\bchallenge\b|\bshared\s+task\b|\bwinners?\b|\b\d+(?:st|nd|rd|th)\s+place\b",
+    r"\b(?:19|20)\d\d\s+preprint\b|\btemplate\b|\bkeynote\b|\bnon-archival\b"
+    r"|\bcompetition\b|(?-i:\bChallenge\b)|\bshared\s+task\b"
+    r"|\b(?:challenge|competition|track)\s+winners?\b|\bwinning\s+(?:solution|entry|team)\b"
+    r"|\b\d+(?:st|nd|rd|th)\s+place\b",
     re.I,
 )
 _GENERIC_VENUE_RE = re.compile(
@@ -303,11 +321,12 @@ def _clauses(comments: str) -> list[str]:
 
 def _states_acceptance(clause: str) -> bool:
     """An acceptance phrase that isn't negated, conditional or about a code
-    host. Checked per comma-separated part so "Accepted at X, code published
-    on GitHub" still counts."""
+    host. Checked per part (split on commas and brackets) so "Accepted at X,
+    code published on GitHub" and "Accepted at X (not yet published)" still
+    count."""
     return any(
         _POSITIVE_RE.search(part) and not _NOT_ACCEPTANCE_RE.search(part)
-        for part in clause.split(",")
+        for part in re.split(r"[,()\[\]]", clause)
     )
 
 
@@ -315,7 +334,7 @@ def _comments_say_reviewed(comments: str) -> bool:
     clauses = _clauses(comments)
     if any(_states_acceptance(c) for c in clauses):
         return True
-    if _NEGATIVE_RE.search(comments) or _NOT_ACCEPTANCE_RE.search(comments):
+    if _NEGATIVE_RE.search(comments) or _NEGATED_ACCEPTANCE_RE.search(comments):
         return False
     mentions = " ; ".join(c for c in clauses if not _NOT_A_PAPER_VENUE_RE.search(c))
     return bool(
@@ -340,6 +359,8 @@ def _comments_venue(comments: str) -> tuple[str | None, str]:
         if not text:
             continue
         venue = _acronym_venue(text) or _phrase_venue(text)
+        if venue and re.match(r"(?:https?://|www\.)", venue):
+            venue = None  # a link, not a venue name
         if venue:
             vtype = _venue_type(text, venue)
             # The type word ("Proceedings", "Journal") may sit in another clause.
