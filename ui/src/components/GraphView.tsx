@@ -476,6 +476,8 @@ export default function ArxivGraph() {
   // built keep their id, results that became real nodes drop out, and only
   // results with no ghost yet are fetched, so a pin costs no request.
   const nextSearchGhostId = useRef(SEARCH_GHOST_ID_BASE)
+  // Layout the current search ghosts were placed in
+  const ghostLayoutRef = useRef(layoutKey)
   useEffect(() => {
     // Wait for the graph, so ghosts aren't placed against an empty one
     if (!data) return
@@ -495,12 +497,13 @@ export default function ArxivGraph() {
     const wanted = new Set(
       apiResults.map((r) => r.aid).filter((aid) => !inGraph.has(aid)),
     )
-    // Kept ghosts keep their id. Placing them again keeps their settled
-    // position while the layout is the same (layoutMemory), and re-anchors
-    // them against a new graph's coords after a switch.
-    const kept = place(
-      ghostSimNodesRef.current.filter((g) => wanted.has(g.aid)),
-    )
+    // Kept ghosts keep their id. Within the same layout they're reused as-is,
+    // keeping their live position even mid-settle; after a layout change
+    // they're placed again against the new graph's coords.
+    const prevKept = ghostSimNodesRef.current.filter((g) => wanted.has(g.aid))
+    const kept =
+      ghostLayoutRef.current === layoutKey ? prevKept : place(prevKept)
+    ghostLayoutRef.current = layoutKey
     for (const g of kept) wanted.delete(g.aid)
     setGhostSimNodes(kept)
     if (wanted.size === 0) return
@@ -523,7 +526,7 @@ export default function ArxivGraph() {
     return () => {
       alive = false
     }
-  }, [apiResults, simNodes, data, toSimNode])
+  }, [apiResults, simNodes, data, toSimNode, layoutKey])
 
   // Search results for overlay
   const searchResults = useMemo(() => {
@@ -739,13 +742,27 @@ export default function ArxivGraph() {
     height > 0
   useForceConfig(fgRef, canvasReady, !!data?.meta.coords.included)
 
-  // Autofit once per layout (recipe page): pages of a broad recipe can sit in
-  // different parts of the map. Also whenever the canvas mounts afresh (e.g.
-  // switching to a graph that loads), since it starts at the default camera.
+  // Autofit once per graph source and page: pages of a broad recipe can sit
+  // in different parts of the map, and graphs sharing a recipe can have pins
+  // anywhere. Saving a draft (keepFramingRef, set by saveDraft) keeps the
+  // framing when the layout is unchanged. Also refit whenever the canvas
+  // mounts afresh (e.g. switching to a graph that loads), since it starts at
+  // the default camera.
   const didAutoFit = useRef(false)
+  const keepFramingRef = useRef(false)
+  const prevFrameRef = useRef({ sourceKey, layoutKey })
   useEffect(() => {
+    const prev = prevFrameRef.current
+    prevFrameRef.current = { sourceKey, layoutKey }
+    const keepFraming = keepFramingRef.current
+    keepFramingRef.current = false
+    if (
+      prev.layoutKey === layoutKey &&
+      (prev.sourceKey === sourceKey || keepFraming)
+    )
+      return
     didAutoFit.current = false
-  }, [layoutKey])
+  }, [sourceKey, layoutKey])
   useEffect(() => {
     if (!canvasReady) didAutoFit.current = false
   }, [canvasReady])
@@ -958,6 +975,7 @@ export default function ArxivGraph() {
     const pins = queryClient.getQueryData(graphPinsKey('draft', source.pinned))
     if (pins) queryClient.setQueryData(graphPinsKey(saved.id, saved.pinned), pins)
     setSavedGraphs((prev) => [saved, ...prev.filter((s) => s.id !== saved.id)])
+    keepFramingRef.current = true
     showSource({ kind: 'saved', graph: saved })
     return null
   }
