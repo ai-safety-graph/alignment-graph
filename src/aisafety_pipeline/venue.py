@@ -32,7 +32,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from .config import BLUE, GREEN, RESET
+from .config import BLUE, GREEN, RESET, YELLOW
 
 # ---------------------------------------------------------------------------
 # Rules
@@ -565,6 +565,41 @@ def classify_openalex_work(work: dict) -> VenueResult:
     return UNKNOWN
 
 
+_SECRET_PARAM_RE = re.compile(r"((?:api_key|mailto)=)[^&\s'\"]+", re.I)
+
+
+def _redact(text: str) -> str:
+    """Hide the OpenAlex key and contact address in a URL-bearing message
+    (requests' HTTPError and urllib3's retry warnings both print the URL)."""
+    return _SECRET_PARAM_RE.sub(r"\1***", text)
+
+
+class _RedactSecrets:
+    """logging filter: redacts urllib3's "Retrying ... <url>" records."""
+
+    def filter(self, record) -> bool:
+        record.msg, record.args = _redact(record.getMessage()), ()
+        return True
+
+
+def _install_log_redaction() -> None:
+    import logging
+
+    logger = logging.getLogger("urllib3.connectionpool")
+    if not any(isinstance(f, _RedactSecrets) for f in logger.filters):
+        logger.addFilter(_RedactSecrets())
+
+
+def _prefer(current: dict | None, candidate: dict) -> dict:
+    """Several works can carry the same arXiv id (a merged published work and
+    a leftover arXiv-only duplicate); keep one that shows a publication."""
+    if current is None:
+        return candidate
+    if classify_openalex_work(candidate).peer_reviewed and not classify_openalex_work(current).peer_reviewed:
+        return candidate
+    return current
+
+
 def fetch_openalex_works(paper_ids: list[str]) -> dict[str, dict]:
     """Look up up to _OPENALEX_BATCH papers (papers.id abs URLs) by their
     arXiv DOI. Returns paper id -> OpenAlex work for the ones found. A work
@@ -576,13 +611,15 @@ def fetch_openalex_works(paper_ids: list[str]) -> dict[str, dict]:
     by_arxiv = {pid.removeprefix("https://arxiv.org/abs/").lower(): pid for pid in paper_ids}
     params = {
         "filter": "doi:" + "|".join(f"10.48550/arxiv.{a}" for a in by_arxiv),
-        "per-page": str(_OPENALEX_BATCH),
+        # Room for duplicate works per DOI; results past this page would be lost.
+        "per-page": "200",
         "select": "id,doi,publication_year,primary_location,locations",
     }
     if config.OPENALEX_MAILTO:
         params["mailto"] = config.OPENALEX_MAILTO
     if config.OPENALEX_API_KEY:
         params["api_key"] = config.OPENALEX_API_KEY
+    _install_log_redaction()
     r = _get_session().get(
         config.OPENALEX_BASE, params=params, timeout=(10, 60), headers={"Accept": "application/json"}
     )
@@ -591,7 +628,8 @@ def fetch_openalex_works(paper_ids: list[str]) -> dict[str, dict]:
     for work in r.json().get("results", []):
         for aid in _arxiv_ids_in_work(work):
             if aid in by_arxiv:
-                found[by_arxiv[aid]] = work
+                pid = by_arxiv[aid]
+                found[pid] = _prefer(found.get(pid), work)
     return found
 
 
@@ -622,6 +660,7 @@ def enrich_from_openalex(conn, limit: int, fetch=None, sleep=None) -> dict[str, 
     import datetime as dt
     import time
 
+    import requests
     from psycopg2.extras import execute_values
 
     fetch = fetch or fetch_openalex_works
@@ -629,11 +668,18 @@ def enrich_from_openalex(conn, limit: int, fetch=None, sleep=None) -> dict[str, 
     window_start = (dt.date.today() - dt.timedelta(days=_RECHECK_WINDOW_DAYS)).isoformat()
     ids = [r["id"] for r in conn.execute(_SELECT_ENRICH, (_RECHECK_DAYS, window_start, limit)).fetchall()]
 
-    counts = {"checked": 0, "reviewed": 0, "not_found": 0}
+    counts: dict = {"checked": 0, "reviewed": 0, "not_found": 0, "error": None}
     cur = conn.raw_cursor()
     for i in range(0, len(ids), _OPENALEX_BATCH):
         chunk = ids[i : i + _OPENALEX_BATCH]
-        works = fetch(chunk)
+        try:
+            works = fetch(chunk)
+        except (requests.RequestException, ValueError) as exc:
+            # An OpenAlex outage or exhausted budget must not stop run-all
+            # before the graph stages. Earlier batches are committed and this
+            # one isn't stamped, so the next run resumes here.
+            counts["error"] = _redact(f"{type(exc).__name__}: {exc}")
+            break
         reviewed = []
         for pid in chunk:
             work = works.get(pid)
@@ -658,7 +704,8 @@ def cmd_venue_enrich(args):
     from . import config
     from .db import connect
 
-    limit = args.limit if getattr(args, "limit", None) else config.OPENALEX_MAX_PER_RUN
+    limit = getattr(args, "limit", None)
+    limit = config.OPENALEX_MAX_PER_RUN if limit is None else limit
     conn = connect(args.db)
     try:
         print(f"{BLUE}venue-enrich:{RESET} checking up to {limit} unknown papers against OpenAlex")
@@ -667,5 +714,7 @@ def cmd_venue_enrich(args):
             f"{GREEN}venue-enrich:{RESET} checked {counts['checked']}, {counts['reviewed']} newly reviewed, "
             f"{counts['not_found']} not in OpenAlex"
         )
+        if counts["error"]:
+            print(f"{YELLOW}venue-enrich:{RESET} stopped early, OpenAlex request failed: {counts['error']}")
     finally:
         conn.close()

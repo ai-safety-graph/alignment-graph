@@ -173,3 +173,31 @@ def test_enrich_never_touches_papers_the_rules_marked_reviewed(conn, committed_p
     enrich_from_openalex(conn, limit=100_000, fetch=lambda ids: seen.extend(ids) or {}, sleep=lambda s: None)
     assert aid not in seen
     assert _checked(conn, aid)["venue_source"] == "journal_ref"
+
+
+def test_an_openalex_failure_stops_enrichment_softly(conn, committed_papers, monkeypatch):
+    """An outage or exhausted budget ends the stage without raising (run-all
+    goes on to the graph stages); finished batches stay committed and the
+    failed batch isn't stamped, so the next run resumes there."""
+    import requests
+
+    from aisafety_pipeline import venue
+
+    ids = [committed_papers(f"2401.3010{i}", comments="15 pages", llm_relevant=True) for i in range(3)]
+    derive_venues(conn)
+    calls = []
+
+    def flaky_fetch(chunk):
+        calls.append(list(chunk))
+        if len(calls) > 1:
+            raise requests.HTTPError("429 Client Error for url: https://api.openalex.org/works?api_key=SECRET")
+        return {}
+
+    monkeypatch.setattr(venue, "_OPENALEX_BATCH", 1)
+    counts = venue.enrich_from_openalex(conn, limit=100_000, fetch=flaky_fetch, sleep=lambda s: None)
+
+    assert counts["error"] and "SECRET" not in counts["error"]
+    first, failed = calls[0][0], calls[1][0]
+    assert _checked(conn, first)["openalex_checked_at"] is not None
+    assert _checked(conn, failed)["openalex_checked_at"] is None
+    assert all(i in {first, failed} or _checked(conn, i)["openalex_checked_at"] is None for i in ids)
