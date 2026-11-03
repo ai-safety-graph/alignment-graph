@@ -339,7 +339,17 @@ export default function ArxivGraph() {
   // there, or where it settled earlier in this layout (see layoutMemory); the
   // live simulation separates overlaps (see useForceConfig) and freezes nodes
   // once it settles (onEngineStop).
-  const layoutKey = `${sourceKey}#${pageIndex}`
+  // A layout is a recipe's page (or a recipe-less graph), not a source, so
+  // saving a draft (draft → saved, same recipe) keeps its layout and camera.
+  const recipe =
+    source.kind === 'draft'
+      ? source.filters
+      : source.kind === 'saved'
+        ? source.graph.filters
+        : null
+  const layoutKey = recipe
+    ? `recipe:${JSON.stringify(recipe)}#${pageIndex}`
+    : `${sourceKey}#${pageIndex}`
   const layoutKeyRef = useRef(layoutKey)
   layoutKeyRef.current = layoutKey
   const toSimNode = useCallback(
@@ -349,20 +359,23 @@ export default function ArxivGraph() {
       ay,
       x: ax,
       y: ay,
+      fx: undefined,
+      fy: undefined,
       ...(layoutMemory.key === layoutKeyRef.current
         ? layoutMemory.byAid.get(n.aid)
         : undefined),
     }),
     [],
   )
+  // Replaces the memory with the nodes on the canvas now: a node that left
+  // (e.g. a related ghost after deselecting) mustn't come back frozen on a
+  // spot another node has settled into since, where collide can't move
+  // either of them.
   const rememberLayout = (nodes: SimNode[]) => {
-    if (layoutMemory.key !== layoutKey) {
-      layoutMemory.key = layoutKey
-      layoutMemory.byAid = new Map()
-    }
-    for (const n of nodes) {
-      layoutMemory.byAid.set(n.aid, { x: n.x, y: n.y, fx: n.fx, fy: n.fy })
-    }
+    layoutMemory.key = layoutKey
+    layoutMemory.byAid = new Map(
+      nodes.map((n) => [n.aid, { x: n.x, y: n.y, fx: n.fx, fy: n.fy }]),
+    )
   }
 
   const simNodes = useMemo(() => {
@@ -482,8 +495,12 @@ export default function ArxivGraph() {
     const wanted = new Set(
       apiResults.map((r) => r.aid).filter((aid) => !inGraph.has(aid)),
     )
-    // Kept ghosts are reused as-is, so they keep their settled position
-    const kept = ghostSimNodesRef.current.filter((g) => wanted.has(g.aid))
+    // Kept ghosts keep their id. Placing them again keeps their settled
+    // position while the layout is the same (layoutMemory), and re-anchors
+    // them against a new graph's coords after a switch.
+    const kept = place(
+      ghostSimNodesRef.current.filter((g) => wanted.has(g.aid)),
+    )
     for (const g of kept) wanted.delete(g.aid)
     setGhostSimNodes(kept)
     if (wanted.size === 0) return
@@ -710,8 +727,11 @@ export default function ArxivGraph() {
   // Forces are configured only once it's mounted: on a remount with cached
   // data the first render has no width yet, so fgRef is still unset, and
   // configuring then would leave force-graph's default forces.
+  // Cleared as soon as another source renders unloaded, so coming back to a
+  // source that is reloading waits for it again.
   const loadedSourceRef = useRef<string | null>(null)
   if (data && !showLoading) loadedSourceRef.current = sourceKey
+  else if (loadedSourceRef.current !== sourceKey) loadedSourceRef.current = null
   const canvasReady =
     !!data &&
     (!showLoading || loadedSourceRef.current === sourceKey) &&
@@ -719,12 +739,16 @@ export default function ArxivGraph() {
     height > 0
   useForceConfig(fgRef, canvasReady, !!data?.meta.coords.included)
 
-  // Autofit once per graph source and page: pages of a broad recipe can sit
-  // in different parts of the map
+  // Autofit once per layout (recipe page): pages of a broad recipe can sit in
+  // different parts of the map. Also whenever the canvas mounts afresh (e.g.
+  // switching to a graph that loads), since it starts at the default camera.
   const didAutoFit = useRef(false)
   useEffect(() => {
     didAutoFit.current = false
-  }, [sourceKey, pageIndex])
+  }, [layoutKey])
+  useEffect(() => {
+    if (!canvasReady) didAutoFit.current = false
+  }, [canvasReady])
 
   // ESC unlock (global). Off while the modal is open, which handles its own Esc.
   useEffect(() => {
