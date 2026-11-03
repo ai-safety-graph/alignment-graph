@@ -59,7 +59,7 @@ def _is_bad_request(exc: Exception) -> bool:
 def fetch_resilient(
     ids: list[str],
     fetch: Callable[[list[str]], dict[str, dict]] | None = None,
-    sleep: Callable[[float], None] = time.sleep,
+    sleep: Callable[[float], None] | None = None,
     retry: bool = True,
 ) -> tuple[dict[str, dict], list[str]]:
     """Fetch venue fields for `ids`, returning (found, missing).
@@ -73,6 +73,7 @@ def fetch_resilient(
     hasn't moved, so a rerun redoes this batch.
     """
     fetch = fetch or fetch_arxiv_venue_fields
+    sleep = sleep or time.sleep  # resolved per call so tests can patch it
     try:
         found = fetch(ids)
     except Exception as exc:
@@ -154,15 +155,17 @@ def main() -> None:
             print(f"backfill: {done}/{len(ids)} fetched, {with_any} with any field, {len(missing)} missing so far")
             if empty_streak >= _MAX_EMPTY_CHUNKS and not args.retry_missing:
                 # A single empty chunk (all bad ids) is recorded and passed;
-                # several in a row look like an outage. Their ids are already
-                # in `missing`, so stopping loses nothing.
+                # several in a row look like an outage. Outside a dry run
+                # their ids are already in `missing`, so stopping loses nothing.
                 raise SystemExit(
-                    f"backfill: arXiv returned nothing for {empty_streak} chunks in a row; "
-                    "stopping. Rerun later, then use --retry-missing."
+                    f"backfill: arXiv returned nothing for {empty_streak} chunks in a row; stopping. "
+                    + ("Dry run, so nothing was recorded." if args.dry_run
+                       else "Rerun later, then use --retry-missing.")
                 )
 
         if missing:
-            print(f"backfill: {len(missing)} papers not returned by arXiv; rerun with --retry-missing")
+            print(f"backfill: {len(missing)} papers not returned by arXiv"
+                  + ("" if args.dry_run else "; rerun with --retry-missing"))
         print("backfill: done" + (" (dry run, nothing written)" if args.dry_run else ""))
     finally:
         conn.close()
