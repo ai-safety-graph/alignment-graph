@@ -228,7 +228,9 @@ def _cmd_run_all(args) -> None:
     """Chain every pipeline stage in the order above, for unattended/cron
     use. Stops immediately on the first stage failure (non-zero exit) --
     running a later stage after e.g. a failed embed-topic would just
-    lay out a corpus missing its newest relevant papers."""
+    lay out a corpus missing its newest relevant papers. venue-enrich is
+    the exception: it never stops the run (OpenAlex is optional enrichment),
+    but a permanent OpenAlex error makes run-all exit non-zero at the end."""
     ns = argparse.Namespace(
         db=args.db,
         # stage1 / filter / compute-layout: always incremental in run-all
@@ -246,6 +248,9 @@ def _cmd_run_all(args) -> None:
         # compute-layout
         coords=args.coords, umap_n_neighbors=15, umap_min_dist=0.10, umap_rand=42, pca_rand=42,
         canvas_w=1000, canvas_h=700, canvas_pad=24, knn_k=10,
+        # venue-enrich: never stops the run; permanent errors land here and
+        # fail run-all after the last stage
+        run_all=True, deferred_failures=[],
     )
 
     started_at = dt.datetime.now(dt.UTC)
@@ -261,6 +266,10 @@ def _cmd_run_all(args) -> None:
             raise
 
     _record_latest_batch_safely(args.db, started_at)
+    if ns.deferred_failures:
+        for failure in ns.deferred_failures:
+            print(f"{RED}run-all: completed with a failure:{RESET} {failure}")
+        raise SystemExit(1)
     print(f"{GREEN}run-all: complete{RESET}")
 
 
