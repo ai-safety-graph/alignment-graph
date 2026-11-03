@@ -702,13 +702,21 @@ export default function ArxivGraph() {
   }, [selected?.aid, buildRelatedGhosts])
 
   // Force configuration
-  // The canvas mounts once the graph has fully loaded: `data` is already set
-  // when only one of its queries (page or pins) has returned, and the first
-  // tick would frame just those nodes. Forces are configured only once it's
-  // mounted: on a remount with cached data the first render has no width yet,
-  // so fgRef is still unset, and configuring then would leave force-graph's
-  // default forces.
-  const canvasReady = !!data && !showLoading && width > 0 && height > 0
+  // The canvas first mounts once the graph has fully loaded: `data` is
+  // already set when only one of its queries (page or pins) has returned, and
+  // the first tick would frame just those nodes. After that it stays mounted
+  // for the source: pinning the first paper starts a pins query with no
+  // placeholder, and unmounting then would drop the camera framing.
+  // Forces are configured only once it's mounted: on a remount with cached
+  // data the first render has no width yet, so fgRef is still unset, and
+  // configuring then would leave force-graph's default forces.
+  const loadedSourceRef = useRef<string | null>(null)
+  if (data && !showLoading) loadedSourceRef.current = sourceKey
+  const canvasReady =
+    !!data &&
+    (!showLoading || loadedSourceRef.current === sourceKey) &&
+    width > 0 &&
+    height > 0
   useForceConfig(fgRef, canvasReady, !!data?.meta.coords.included)
 
   // Autofit once per graph source and page: pages of a broad recipe can sit
@@ -1224,7 +1232,12 @@ export default function ArxivGraph() {
             // With stored coords, nodes settle within a few px of where they
             // start, so frame them on the first tick: they spread apart in
             // place instead of the camera jumping once they've settled.
-            if (!didAutoFit.current && data.meta.coords.included) {
+            // Not while the previous page stands in for the next one
+            if (
+              !didAutoFit.current &&
+              !content.isPaging &&
+              data.meta.coords.included
+            ) {
               fitView(0)
               didAutoFit.current = true
             }
@@ -1239,6 +1252,9 @@ export default function ArxivGraph() {
                 n.fy = n.y
               }
             }
+            // While a page change is in flight the nodes shown are still the
+            // previous page's, but layoutKey already names the next one
+            if (content.isPaging) return
             rememberLayout(allSimNodes)
             // Without coords the layout grows from the origin, so it can
             // only be framed once it has settled
