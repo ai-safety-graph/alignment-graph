@@ -46,6 +46,10 @@ _UPDATE = """
     FROM (VALUES %s) AS v(id, journal_ref, doi, comments)
     WHERE r.id = v.id
 """
+# The backfill doesn't move harvested_at, so the venue stage's incremental
+# query wouldn't see these papers again; clearing venue_derived_at queues them.
+# Needs papers.venue_derived_at: run init-db / migrations/add_peer_review_columns.sql first.
+_REQUEUE_VENUE = "UPDATE papers SET venue_derived_at = NULL WHERE id = ANY(%s)"
 
 
 def _is_bad_request(exc: Exception) -> bool:
@@ -147,6 +151,7 @@ def main() -> None:
             if not args.dry_run:
                 if values:
                     execute_values(cur, _UPDATE, values)
+                    cur.execute(_REQUEUE_VENUE, ([v[0] for v in values],))
                 if not args.retry_missing:
                     last_id = chunk[-1]
                 # Commits the UPDATE and the checkpoint together.

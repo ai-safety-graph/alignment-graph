@@ -7,7 +7,7 @@
 Its core job is to manage a staged literature-processing pipeline:
 
 ```text
-harvest -> stage1 -> embed -> filter -> llm-classify(-run) -> embed-topic -> compute-layout -> compute-related -> serve
+harvest -> stage1 -> embed -> filter -> llm-classify(-run) -> venue -> embed-topic -> compute-layout -> compute-related -> serve
 ```
 
 The package is PostgreSQL + pgvector only — every pipeline command and the API require `DATABASE_URL` to be set.
@@ -77,6 +77,12 @@ LLM-based combined relevance + taxonomy classification (post stage-2), via OpenA
 
 Eligible papers are `ai_stage2_keep = TRUE` rows not yet classified and not in flight (`llm_batch_id IS NULL`), unless `--force`. In-flight batches are tracked under the `llm_batches` key in `pipeline_state`. Each submitted batch is capped at 50k requests, ~190 MB of JSONL, and `LLM_BATCH_MAX_ENQUEUED_TOKENS` estimated tokens (OpenAI's org-wide enqueued-token limit); `llm-classify-submit` refuses to submit while other tracked batches are still processing unless `--allow-concurrent`.
 
+### `venue.py`
+
+Peer-review status for `llm_relevant` papers (CLI `venue`), derived by rules from `papers_raw.journal_ref` / `doi` / `comments`. In order: a journal-ref means reviewed, then a publisher DOI (arXiv's own `10.48550/` and preprint-server DOIs don't count), then the comments. In the comments, an explicit acceptance phrase ("accepted at", "to appear in", "published in", "in proceedings of", "camera-ready") wins. Without one, "submitted to" / "under review" means unknown, and a known venue with a year ("ICLR 2026", "AAAI-23") means reviewed. Writes `peer_reviewed` (NULL = unknown, not "not reviewed"), `venue` (display name, e.g. "NeurIPS 2025 Workshop"), `venue_type` (`conference`/`workshop`/`journal`/`unknown`; workshops count as reviewed but are labelled), `venue_source` and `venue_derived_at`. Incremental: relevant papers never derived, plus relevant papers re-harvested since the `venue_watermark` in `pipeline_state` (an author adding a journal-ref re-issues the OAI record). `--full` re-derives everything after a rule change. A result with `venue_source = 'openalex'` is never downgraded to unknown.
+
+Acceptance words that don't report an acceptance ("not accepted", "will appear in X if accepted", "code published on GitHub") don't count and also rule out the venue-mention fallback. The fallback also skips clauses that name a venue for something else: a preprint template, a keynote or invited talk, a competition. `scripts/backfill_arxiv_venue_fields.py` clears `venue_derived_at` on the papers it fills, because a backfill doesn't move `harvested_at`, so the next `venue` run re-derives them.
+
 ### `compute_layout.py`
 
 Places `llm_relevant` papers in 2D from their topic embeddings — incrementally (new papers at the mean of their nearest placed neighbours) by default, or a full umap/pca refit with `--full` — and persists `graph_x` / `graph_y` back to the `papers` table. No JSON output — purely a DB-persistence stage consumed live by `api/routes/graph.py`.
@@ -105,6 +111,7 @@ aisafety-pipeline stage1            # regex filter
 aisafety-pipeline embed             # SPECTER2 vectors
 aisafety-pipeline filter            # semantic stage-2
 aisafety-pipeline llm-classify-run  # LLM relevance + taxonomy tags (live source, into llm_relevant/llm_tags)
+aisafety-pipeline venue             # peer-review status from arXiv journal-ref/DOI/comments
 aisafety-pipeline embed-topic       # BGE topic vectors (relevant rows only, after llm-classify)
 aisafety-pipeline compute-layout    # persists graph_x/y to DB
 aisafety-pipeline compute-related   # precomputes related papers into paper_related
@@ -133,7 +140,7 @@ Raw upstream metadata from OAI harvest. Columns: `id`, `title`, `authors`, `publ
 
 Working set and pipeline state.
 
-Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `ai_regex_hit`, `ai_sem_sim`, `ai_stage2_keep`, `ai_stage2_reason`, `domain_tag`, `graph_x`, `graph_y`, `embedding vector(768)` (SPECTER2), `embedding_topic vector(768)` (BGE), plus LLM classification columns `llm_relevant`, `llm_confidence`, `llm_tags`, `llm_reason`, `llm_model`, `llm_classified_at`, `llm_batch_id` (written by `llm_classify.py`; these are what the API reads)
+Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `ai_regex_hit`, `ai_sem_sim`, `ai_stage2_keep`, `ai_stage2_reason`, `domain_tag`, `graph_x`, `graph_y`, `embedding vector(768)` (SPECTER2), `embedding_topic vector(768)` (BGE), plus LLM classification columns `llm_relevant`, `llm_confidence`, `llm_tags`, `llm_reason`, `llm_model`, `llm_classified_at`, `llm_batch_id` (written by `llm_classify.py`; these are what the API reads), and peer-review columns `peer_reviewed`, `venue`, `venue_type`, `venue_source`, `venue_derived_at` (written by `venue.py`)
 
 ### `paper_related`
 
@@ -153,7 +160,8 @@ Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `ai_regex_hit
 
 - Partial HNSW indexes (`vector_cosine_ops`), both `WHERE llm_relevant = TRUE AND <col> IS NOT NULL` so they only match API queries that gate on `llm_relevant`: `idx_papers_embedding_llm` on `embedding`, `idx_papers_embedding_topic_llm` on `embedding_topic`. The older non-partial `idx_papers_embedding`/`idx_papers_embedding_topic` are dropped.
 - `idx_papers_llm_relevant`, GIN `idx_papers_llm_tags`, partial `idx_papers_llm_batch_id`, `idx_papers_keep`, `idx_papers_domain`.
-- "Work queue" partial indexes for the incremental stages: `idx_papers_missing_embedding`, `idx_papers_unscored`, `idx_papers_missing_topic`, `idx_papers_unplaced`.
+- "Work queue" partial indexes for the incremental stages: `idx_papers_missing_embedding`, `idx_papers_unscored`, `idx_papers_missing_topic`, `idx_papers_unplaced`, `idx_papers_venue_pending`.
+- Partial `idx_papers_relevant_published` and `idx_papers_reviewed_published` (`WHERE llm_relevant AND peer_reviewed`): keyset order for graph range pages and the peer-reviewed filter.
 - Partial `idx_papers_raw_harvested_at` (backs stage 1's watermark scan) and `idx_search_log_ts`.
 
 ---
