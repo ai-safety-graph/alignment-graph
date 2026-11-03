@@ -15,7 +15,7 @@ the AI review finds.
 | `schema` | `src/aisafety_pipeline/db.py` (`init_db()`), `migrations/**` | Schema change is backward compatible with the live DB; a migration exists for anything `init_db()` won't apply to an existing table |
 | `cors` | `src/aisafety_pipeline/config.py` (`API_CORS_ORIGINS`), `src/aisafety_pipeline/api/main.py` | Origins list and middleware order (rate limiter added before CORS so CORS stays outermost) |
 | `route-order` | `src/aisafety_pipeline/api/routes/papers.py` | `GET /related` is still registered before `GET /{arxiv_id:path}` |
-| `compact-fields` | Diff hunks adding, renaming or removing compact node fields (`id`, `aid`, `t`, `au`, `pd`, `dm`, `ln`, `tags`, `x`, `y`, `rx`, `ry`, `sm`, `lr`, `sim`) in `src/aisafety_pipeline/api/routes/*.py`, `ui/src/lib/types.ts`, `ui/src/lib/api.ts` | API and UI agree on every field name |
+| `compact-fields` | Diff hunks adding, renaming or removing compact node fields (`id`, `aid`, `t`, `au`, `pd`, `dm`, `ln`, `tags`, `pr`, `vn`, `x`, `y`, `rx`, `ry`, `sm`, `lr`, `sim`) in `src/aisafety_pipeline/api/routes/*.py`, `ui/src/lib/types.ts`, `ui/src/lib/api.ts` | API and UI agree on every field name |
 | `pgvector` | Any added or changed SQL using `<=>` | Operator, operand order and which embedding column (`embedding` vs `embedding_topic`) |
 | `infra` | `.github/workflows/**`, `Dockerfile*`, `docker-compose.yml`, `netlify.toml`, `.env*` | Build/deploy still works; no secrets committed |
 | `rate-limit` | `src/aisafety_pipeline/api/ratelimit.py` | Client IP still taken from the leftmost `X-Forwarded-For` (Railway's `X-Real-IP` is a shared edge IP) |

@@ -19,6 +19,8 @@ def list_papers(
     from_date: str | None = Query(None, alias="from"),
     to_date: str | None = Query(None, alias="to"),
     q: str | None = Query(None),
+    # Only papers known to be peer-reviewed (unknown status is excluded).
+    peer_reviewed: bool = Query(False),
     conn=Depends(get_conn),
 ):
     offset = (page - 1) * limit
@@ -42,6 +44,10 @@ def list_papers(
         where.append("(title ILIKE %s OR authors ILIKE %s)")
         like = f"%{q}%"
         params.extend([like, like])
+    if peer_reviewed:
+        # Bare column (not `IS TRUE`) so it matches the predicate of
+        # idx_papers_reviewed_published.
+        where.append("peer_reviewed")
 
     where_sql = "WHERE " + " AND ".join(where)
 
@@ -49,7 +55,8 @@ def list_papers(
     rows = conn.execute(
         f"""
         SELECT id, title, authors, published, link, domain_tag,
-               llm_tags AS tags, count(*) OVER () AS total
+               llm_tags AS tags, count(*) OVER () AS total,
+               peer_reviewed IS TRUE AS pr, venue AS vn
         FROM papers {where_sql}
         ORDER BY published DESC, id
         LIMIT %s OFFSET %s
@@ -69,7 +76,7 @@ def list_papers(
 
     # Log each search once: later pages are infinite-scroll of the same query.
     if q and page == 1:
-        has_filters = bool(tags or domain or from_date or to_date)
+        has_filters = bool(tags or domain or from_date or to_date or peer_reviewed)
         background_tasks.add_task(log_search, q, "keyword", total, has_filters)
 
     items = [
@@ -81,6 +88,8 @@ def list_papers(
             "ln": r[4] or r[0],
             "dm": r[5] or "unknown",
             "tags": list(r[6]) if r[6] else [],
+            "pr": bool(r[8]),
+            "vn": r[9],
         }
         for r in rows
     ]
@@ -95,7 +104,8 @@ def list_papers(
 # some are skipped as no longer relevant.
 _RELATED_PRECOMPUTED = """
     SELECT p.id, p.title, p.authors, p.published, p.link, p.domain_tag,
-           p.graph_x, p.graph_y, n.sim, p.llm_tags AS tags
+           p.graph_x, p.graph_y, n.sim, p.llm_tags AS tags,
+           p.peer_reviewed IS TRUE AS pr, p.venue AS vn
     FROM paper_related r
     JOIN papers s ON s.id = r.paper_id AND s.llm_relevant = TRUE AND s.embedding IS NOT NULL
     CROSS JOIN LATERAL (
@@ -116,7 +126,7 @@ _RELATED_SPARE = 5
 _RELATED_HNSW = """
     SELECT id, title, authors, published, link, domain_tag,
            graph_x, graph_y, 1 - (embedding <=> %s) AS sim,
-           llm_tags AS tags
+           llm_tags AS tags, peer_reviewed IS TRUE AS pr, venue AS vn
     FROM papers
     WHERE id != %s
       AND llm_relevant = TRUE
@@ -138,6 +148,8 @@ def _related_row(r) -> dict:
         "ry": float(r[7]) if r[7] is not None else None,
         "sim": float(r[8]),
         "tags": list(r[9]) if r[9] else [],
+        "pr": bool(r[10]),
+        "vn": r[11],
     }
 
 
@@ -181,7 +193,7 @@ def get_paper(arxiv_id: str, conn=Depends(get_conn)):
     row = conn.execute(
         """
         SELECT id, title, authors, published, summary, link, domain_tag,
-               llm_tags AS tags, llm_reason
+               llm_tags AS tags, llm_reason, peer_reviewed IS TRUE AS pr, venue AS vn
         FROM papers WHERE id = %s AND llm_relevant = TRUE
         """,
         (arxiv_id,),
@@ -200,4 +212,6 @@ def get_paper(arxiv_id: str, conn=Depends(get_conn)):
         "dm": row[6] or "unknown",
         "tags": list(row[7]) if row[7] else [],
         "lr": row[8] or "",
+        "pr": bool(row[9]),
+        "vn": row[10],
     }

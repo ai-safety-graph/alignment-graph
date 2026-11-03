@@ -134,6 +134,8 @@ def insert_paper(
     graph_y: float | None = 0.0,
     tags: list[tuple[str, float]] | None = None,
     llm_relevant: bool | None = None,
+    peer_reviewed: bool | None = None,
+    venue: str | None = None,
 ) -> str:
     """Insert a minimal fixture row into `papers` (and its `papers_raw` parent
     row, required by the FK) and return the canonical `aid` (paper id).
@@ -183,5 +185,10 @@ def insert_paper(
             [t for t, _ in sorted(tags, key=lambda p: -p[1])] if tags else [],
         ),
     )
+    if peer_reviewed is not None or venue is not None:
+        conn.execute(
+            "UPDATE papers SET peer_reviewed = %s, venue = %s WHERE id = %s",
+            (peer_reviewed, venue, aid),
+        )
 
     return aid

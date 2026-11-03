@@ -40,7 +40,8 @@ class SubsetRequest(BaseModel):
 _GRAPH_COLUMNS = """
     id, title, authors, published, link, domain_tag,
     graph_x, graph_y,
-    llm_tags AS tags
+    llm_tags AS tags,
+    peer_reviewed IS TRUE AS pr, venue AS vn
 """
 
 
@@ -64,6 +65,7 @@ def _build_range_graph(
     domains: list[str],
     exclude: list[str] | None = None,
     before: tuple[dt.date, str] | None = None,
+    peer_reviewed: bool = False,
 ) -> dict:
     # `published` is TEXT (YYYY-MM-DD), so compare as ISO strings.
     where = ["llm_relevant = TRUE"]
@@ -83,6 +85,9 @@ def _build_range_graph(
     if exclude:
         where.append("id <> ALL(%s)")
         params.append(exclude)
+    if peer_reviewed:
+        # Bare column so it matches idx_papers_reviewed_published's predicate.
+        where.append("peer_reviewed")
     match = " AND ".join(where)
     total = conn.execute(
         f"SELECT count(*) FROM papers WHERE {match}", params
@@ -168,6 +173,7 @@ def _graph_from_rows(rows, bounds: dict | None = None) -> dict:
             "aid": r[0], "t": r[1] or "", "au": r[2] or "",
             "pd": str(r[3]) if r[3] else "", "dm": r[5] or "unknown",
             "ln": r[4] or r[0], "tags": tags,
+            "pr": bool(r[9]), "vn": r[10],
             "raw_x": float(r[6]) if r[6] is not None else None,
             "raw_y": float(r[7]) if r[7] is not None else None,
         })
@@ -202,6 +208,7 @@ def _graph_from_rows(rows, bounds: dict | None = None) -> dict:
     nodes = [
         {"id": i, "aid": p["aid"], "t": p["t"], "au": p["au"],
          "pd": p["pd"], "dm": p["dm"], "ln": p["ln"], "tags": p["tags"],
+         "pr": p["pr"], "vn": p["vn"],
          "x": p["x"], "y": p["y"], "rx": p["raw_x"], "ry": p["raw_y"]}
         for i, p in enumerate(papers)
     ]
@@ -255,10 +262,12 @@ def get_range_graph(
     exclude: list[str] = Query(default=[]),
     before_date: dt.date | None = Query(None),
     before_id: str | None = Query(None),
+    peer_reviewed: bool = Query(False),
     conn=Depends(get_conn),
 ):
     """Graph of relevant papers matching the filters (any of `tags`, any of
-    `domain`, published in [from, to], not in `exclude`), newest first, one
+    `domain`, published in [from, to], not in `exclude`, known peer-reviewed
+    when `peer_reviewed`), newest first, one
     page of _MAX_RANGE. Pass `meta.next` back as `before_date`/`before_id`
     for the following page."""
     if (before_date is None) != (before_id is None):
@@ -272,4 +281,4 @@ def get_range_graph(
             detail=f"exclude must contain at most {_MAX_EXCLUDE} items",
         )
     before = (before_date, before_id) if before_date and before_id else None
-    return _build_range_graph(conn, from_date, to_date, tags, domain, exclude, before)
+    return _build_range_graph(conn, from_date, to_date, tags, domain, exclude, before, peer_reviewed)
