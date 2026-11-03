@@ -58,6 +58,31 @@ COMMENT_CASES = [
     ("Submitted to JMIR AI and currently under peer review", None, None, "unknown"),
     ("9 pages; ancillary evaluation artefacts. Previously submitted to NLLP 2026", None, None, "unknown"),
     ("Will be updated if accepted at NeurIPS (synthetic)", None, None, "unknown"),
+    # Acceptance words that don't report an acceptance
+    ("This conference paper was not accepted. It has been withdrawn because it was subsequently revised",
+     None, None, "unknown"),
+    ("Not yet accepted (synthetic)", None, None, "unknown"),
+    ("Paper not accepted at ICML 2024; resubmission planned (synthetic)", None, None, "unknown"),
+    ("Will appear in ICML 2025 if accepted (synthetic)", None, None, "unknown"),
+    ("19 pages. Under Review. Please cite published version, if available", None, None, "unknown"),
+    ("Accepted and published at Findings of NAACL 2025: cite published version whenever possible",
+     True, "NAACL 2025 Findings", "conference"),
+    ("Preprint of ACL 2025 paper", True, "ACL 2025", "conference"),
+    ("OpenAI Red-teaming Challenge Winner and Oral Presentation | COLM 2026", True, "COLM 2026", "conference"),
+    ("Submitted to ICML 2025. Code is published at https://github.com/x/y (synthetic)", None, None, "unknown"),
+    ("Also published on the AI Alignment Forum (synthetic)", None, None, "unknown"),
+    ("Accepted at ICRA 2026 (Vienna); published on arxiv for archival purposes",
+     True, "ICRA 2026", "conference"),
+    ("Accepted at NeurIPS 2025, code published at https://github.com/x/y (synthetic)",
+     True, "NeurIPS 2025", "conference"),
+    ("Rejected by AAAI25-AIA. Accepted by ICML25", True, "ICML 2025", "conference"),
+    # A venue named for something other than this paper
+    ("26 pages, 13 tables, 2 figures. Planning to submit to NeurIPS 2026", None, None, "unknown"),
+    ("9-page NeurIPS 2025 preprint including 3 figures and 1 table. Prepared using the NeurIPS 2025 preprint template",
+     None, None, "unknown"),
+    ("This paper is a curated version of my keynote at the Web Conference 2022", None, None, "unknown"),
+    ("2nd Place Winner, ICCV 2025 2COOOL Competition", None, None, "unknown"),
+    ("Winning solution to the NeurIPS 2023 LLM Efficiency Challenge (synthetic)", None, None, "unknown"),
     # No signal
     ("15 pages, 4 figures", None, None, "unknown"),
     ("ICML 12 pages (synthetic: 12 is not a year)", None, None, "unknown"),
@@ -107,6 +132,18 @@ def test_publisher_doi_means_reviewed_and_takes_venue_from_comments():
 )
 def test_preprint_dois_are_not_evidence(doi):
     assert classify_venue(None, doi, "15 pages").peer_reviewed is None
+
+
+@pytest.mark.parametrize(
+    "doi", ["https://doi.org/10.48550/arXiv.2401.00001", "doi:10.48550/arXiv.2401.00001",
+            "http://dx.doi.org/10.5281/zenodo.1"],
+)
+def test_preprint_dois_with_a_url_prefix_are_not_evidence(doi):
+    assert classify_venue(None, doi, "15 pages").peer_reviewed is None
+
+
+def test_publisher_doi_with_a_url_prefix_still_counts():
+    assert classify_venue(None, "https://doi.org/10.1109/ACCESS.2024.1", None).peer_reviewed is True
 
 
 def test_nothing_at_all_is_unknown():

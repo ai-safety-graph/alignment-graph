@@ -82,11 +82,11 @@ def test_full_rederives_everything(conn, committed_papers):
     assert _venue(conn, aid)["venue"] == "ICLR 2026"
 
 
-def test_does_not_erase_a_semantic_scholar_result(conn, committed_papers):
+def test_does_not_erase_an_openalex_result(conn, committed_papers):
     aid = committed_papers("2401.30031", comments="15 pages", llm_relevant=True)
     conn.execute(
         "UPDATE papers SET peer_reviewed = TRUE, venue = 'AIES 2025', venue_type = 'conference', "
-        "venue_source = 's2' WHERE id = %s",
+        "venue_source = 'openalex' WHERE id = %s",
         (aid,),
     )
     conn.commit()
@@ -94,6 +94,6 @@ def test_does_not_erase_a_semantic_scholar_result(conn, committed_papers):
     counts = derive_venues(conn)
 
     row = _venue(conn, aid)
-    assert (row["peer_reviewed"], row["venue"], row["venue_source"]) == (True, "AIES 2025", "s2")
+    assert (row["peer_reviewed"], row["venue"], row["venue_source"]) == (True, "AIES 2025", "openalex")
     assert row["venue_derived_at"] is not None
-    assert counts["kept_s2"] >= 1
+    assert counts["kept_openalex"] >= 1
