@@ -40,7 +40,7 @@ def _work(*locs, year=2020, doi="https://doi.org/10.1109/itsc45102.2020.9294590"
         (_work(_loc("Natural Legal Language Processing Workshop (NLLP)", "conference"), _ARXIV_LOC, year=2026),
          "NLLP 2026 Workshop", "workshop"),
         (_work(_loc("Lecture notes in computer science", "book series"), _ARXIV_LOC, year=2022),
-         "Lecture notes in computer science", "conference"),
+         "Springer LNCS", "conference"),
         # The published location needn't be the primary one
         (_work(_ARXIV_LOC, _loc("AI & Society", "journal")), "AI & Society", "journal"),
     ],
@@ -229,3 +229,55 @@ def test_enrich_errors_by_context(monkeypatch, run_all, status, raises, deferred
     else:
         venue.cmd_venue_enrich(args)
         assert bool(args.deferred_failures) is deferred
+
+
+@pytest.mark.parametrize(
+    ("name", "stype", "year", "venue_name", "venue_type"),
+    [
+        # Real OpenAlex source names
+        ("Proceedings of the conference - Association for Computational Linguistics. Meeting",
+         "conference", 2024, "ACL 2024", "conference"),
+        ("Conference of the European Chapter of the Association for Computational Linguistics",
+         "conference", 2024, "EACL 2024", "conference"),
+        ("Transactions of the Association for Computational Linguistics", "journal", 2024,
+         "Transactions of the Association for Computational Linguistics", "journal"),
+        ("Proceedings - IEEE International Conference on Robotics and Automation/Proceedings - "
+         "IEEE International Conference on Robotics and Automation", "conference", 2023, "ICRA 2023", "conference"),
+        ("IEEE Computer Society Conference on Computer Vision and Pattern Recognition/Proceedings of the IEEE "
+         "Computer Society Conference on Computer Vision and Pattern Recognition", "conference", 2024,
+         "CVPR 2024", "conference"),
+        ("International Joint Conference on Artificial Intelligence", "conference", 2023, "IJCAI 2023", "conference"),
+        ("IEEE International Conference on Acoustics Speech and Signal Processing", "conference", 2025,
+         "ICASSP 2025", "conference"),
+        ("Proceedings of the International AAAI Conference on Web and Social Media", "journal", 2024,
+         "ICWSM 2024", "conference"),
+        ("Network and Distributed System Security Symposium", "conference", 2025, "NDSS 2025", "conference"),
+        ("Adaptive Agents and Multi-Agents Systems", "conference", 2024, "AAMAS 2024", "conference"),
+        ("IEEE International Conference on Computer Vision Workshops", "conference", 2023,
+         "ICCV 2023 Workshop", "workshop"),
+        ("IEEE ... International Conference on Data Mining workshops", "conference", 2024,
+         "ICDM 2024 Workshop", "workshop"),
+        ("International Conference on Machine Learning and Applications", "conference", 2024,
+         "ICMLA 2024", "conference"),
+        ("Communications in computer and information science", "book series", 2024, "Springer CCIS", "conference"),
+        ("Lecture notes in networks and systems", "book series", 2024, "Springer LNNS", "conference"),
+        # Lower- / upper-case names are title-cased; real capitals are kept
+        ("Machine learning for signal processing", "conference", 2024,
+         "Machine Learning for Signal Processing", "conference"),
+        ("Frontiers in artificial intelligence and applications", "journal", 2024,
+         "Frontiers in Artificial Intelligence and Applications", "journal"),
+        ("npj Digital Medicine", "journal", 2024, "npj Digital Medicine", "journal"),
+        ("IEEE Transactions on Information Forensics and Security", "journal", 2024,
+         "IEEE Transactions on Information Forensics and Security", "journal"),
+        ("Proceedings of the National Academy of Sciences", "journal", 2024,
+         "Proceedings of the National Academy of Sciences", "journal"),
+        ("Globecom", "conference", 2024, "Globecom", "conference"),
+        ("NEJM AI", "journal", 2024, "NEJM AI", "journal"),
+        ("IEEE RO-MAN", "conference", 2024, "IEEE RO-MAN", "conference"),
+        ("INTERNATIONAL SYMPOSIUM ON SOFTWARE RELIABILITY", "conference", 2024,
+         "International Symposium on Software Reliability", "conference"),
+    ],
+)
+def test_openalex_venue_names_are_normalised(name, stype, year, venue_name, venue_type):
+    res = classify_openalex_work(_work(_loc(name, stype), _ARXIV_LOC, year=year))
+    assert (res.venue, res.venue_type) == (venue_name, venue_type)

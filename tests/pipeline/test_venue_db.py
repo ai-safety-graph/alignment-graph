@@ -201,3 +201,36 @@ def test_an_openalex_failure_stops_enrichment_softly(conn, committed_papers, mon
     assert _checked(conn, first)["openalex_checked_at"] is not None
     assert _checked(conn, failed)["openalex_checked_at"] is None
     assert all(i in {first, failed} or _checked(conn, i)["openalex_checked_at"] is None for i in ids)
+
+
+def test_refresh_names_rewrites_only_openalex_venues(conn, committed_papers):
+    from aisafety_pipeline.venue import refresh_openalex_names
+
+    lncs = committed_papers("2401.30071", comments="15 pages", llm_relevant=True)
+    rules = committed_papers("2401.30072", journal_ref="ICLR 2023", llm_relevant=True)
+    derive_venues(conn)
+    conn.execute(
+        "UPDATE papers SET peer_reviewed = TRUE, venue = 'Lecture notes in computer science', "
+        "venue_type = 'conference', venue_source = 'openalex' WHERE id = %s",
+        (lncs,),
+    )
+    conn.commit()
+    work = {
+        "publication_year": 2024,
+        "primary_location": {"source": {"display_name": "Lecture notes in computer science", "type": "book series"},
+                             "version": "publishedVersion"},
+        "locations": [],
+    }
+    seen = []
+
+    def fake_fetch(ids):
+        seen.extend(ids)
+        return {pid: work for pid in ids}
+
+    counts = refresh_openalex_names(conn, fetch=fake_fetch, sleep=lambda s: None)
+
+    assert lncs in seen and rules not in seen
+    assert counts["renamed"] >= 1
+    row = _checked(conn, lncs)
+    assert (row["peer_reviewed"], row["venue"], row["venue_source"]) == (True, "Springer LNCS", "openalex")
+    assert _checked(conn, rules)["venue"] == "ICLR 2023"
