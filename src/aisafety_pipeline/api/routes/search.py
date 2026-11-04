@@ -26,6 +26,8 @@ class SearchRequest(BaseModel):
     limit: int = Field(20, ge=1, le=100)
     domain: str | None = None
     tag: str | None = None
+    # Only papers known to be peer-reviewed.
+    peer_reviewed: bool = False
 
 
 @router.post("")
@@ -55,6 +57,8 @@ def semantic_search(
     if req.tag is not None:
         filter_clauses.append("%s = ANY(llm_tags)")
         filter_params.append(req.tag)
+    if req.peer_reviewed:
+        filter_clauses.append("peer_reviewed")
 
     where_sql = "WHERE " + " AND ".join(filter_clauses)
 
@@ -63,7 +67,7 @@ def semantic_search(
     sql = f"""
         SELECT id, title, authors, published, link, domain_tag,
                1 - (embedding_topic <=> %s::vector) AS similarity,
-               llm_tags AS tags
+               llm_tags AS tags, peer_reviewed IS TRUE AS pr, venue AS vn
         FROM papers
         {where_sql}
         ORDER BY embedding_topic <=> %s::vector
@@ -73,7 +77,7 @@ def semantic_search(
 
     rows = conn.execute(sql, params).fetchall()
     background_tasks.add_task(
-        log_search, req.query, "semantic", len(rows), bool(req.domain or req.tag)
+        log_search, req.query, "semantic", len(rows), bool(req.domain or req.tag or req.peer_reviewed)
     )
 
     return {
@@ -88,6 +92,8 @@ def semantic_search(
                 "dm": r[5] or "unknown",
                 "sim": round(float(r[6]), 4) if r[6] is not None else None,
                 "tags": list(r[7]) if r[7] else [],
+                "pr": bool(r[8]),
+                "vn": r[9],
             }
             for r in rows
         ],

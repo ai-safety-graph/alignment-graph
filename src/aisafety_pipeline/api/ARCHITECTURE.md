@@ -92,6 +92,12 @@ All endpoints gate on the LLM classification stage (`llm_classify.py`): a paper 
 
 Response items carry no numeric `id` except graph nodes (`/subset`, `/range`); the UI assigns `id` by index for everything else.
 
+Every node-shaped item (graph nodes, `/api/papers` items, related, search, single paper) also carries peer-review status, written by the pipeline's `venue` / `venue-enrich` stages:
+- `pr`: `true` only when the paper is known to be peer-reviewed (`peer_reviewed IS TRUE`). Unknown status is served as `false`.
+- `vn`: venue display name (e.g. `"ICLR 2026"`, `"NeurIPS 2025 Workshop"`), or `null`.
+
+The `peer_reviewed=true` filter (query param on `/api/papers` and `/api/graph/range`, body field on `/api/search`) keeps only papers known to be reviewed. It is written as a bare `peer_reviewed` predicate so it matches the partial index `idx_papers_reviewed_published`.
+
 ### `POST /api/graph/subset`
 
 Returns a compact graph for a specific list of paper IDs. See also `GET /api/graph/range` below; there is no full-graph endpoint.
@@ -122,6 +128,7 @@ Query params (all optional; with none, every relevant paper matches):
 - `domain` — repeatable; OR-ed (`domain_tag = ANY(%s)`)
 - `from` / `to` (`YYYY-MM-DD`, inclusive). Malformed dates return 422.
 - `exclude` — repeatable paper IDs left out of both the page and `meta.total` (at most `_MAX_EXCLUDE` = 500, else 422)
+- `peer_reviewed` — `true` keeps only papers known to be peer-reviewed (default `false`, no filtering)
 - `before_date` + `before_id` — keyset cursor: return rows after this one in page order. Pass the previous response's `meta.next` back as-is. Giving only one of them returns 422.
 
 Implementation:
@@ -141,8 +148,9 @@ Query params:
 - `domain` — repeatable; multiple values are OR-ed (`domain_tag IN (...)`)
 - `from` / `to` — `published` date bounds (plain strings compared against the TEXT column; not validated, unlike `/range`)
 - `q` — keyword substring match on `title`/`authors` (`ILIKE`)
+- `peer_reviewed` — `true` keeps only papers known to be peer-reviewed (default `false`)
 
-Ordered by `published DESC, id` (stable across pages). `total` comes from `count(*) OVER ()` on the page query (one round trip); only a page past the end, which has no row to carry it, runs a separate `COUNT(*)`. Returns: `{ total, page, limit, items }` where items have `aid, t, au, pd, ln, dm, tags` — no `id`, coords or `sm` (summary); fetch a single paper for the summary.
+Ordered by `published DESC, id` (stable across pages). `total` comes from `count(*) OVER ()` on the page query (one round trip); only a page past the end, which has no row to carry it, runs a separate `COUNT(*)`. Returns: `{ total, page, limit, items }` where items have `aid, t, au, pd, ln, dm, tags, pr, vn` — no `id`, coords or `sm` (summary); fetch a single paper for the summary.
 
 ### `GET /api/papers/related`
 
@@ -156,13 +164,13 @@ Implementation:
 - `limit`'s cap of 20 matches `related.RELATED_K`, the neighbours stored per paper. Raise both together.
 - No embedding inference at query time
 
-Returns: an array of `{ aid, t, au, pd, ln, dm, tags, sim, rx, ry }` — `sim` is cosine similarity (0–1), `rx`/`ry` the raw stored coords (= `graph_x`/`graph_y`, nullable); no `id`. The UI uses `rx`/`ry` together with the main graph's `meta.coords.bounds` to place related papers as ghost nodes in the correct position.
+Returns: an array of `{ aid, t, au, pd, ln, dm, tags, pr, vn, sim, rx, ry }` — `sim` is cosine similarity (0–1), `rx`/`ry` the raw stored coords (= `graph_x`/`graph_y`, nullable); no `id`. The UI uses `rx`/`ry` together with the main graph's `meta.coords.bounds` to place related papers as ghost nodes in the correct position.
 
 ### `GET /api/papers/{arxiv_id:path}`
 
 Single paper detail. The `:path` type handles both bare IDs (`2503.01694`) and full URLs (`https://arxiv.org/abs/2503.01694`).
 
-Returns `{ aid, t, au, pd, sm, ln, dm, tags, lr }` (`sm` = summary, `lr` = the LLM classifier's one-line relevance reason, `""` if none), or 404 if no such paper.
+Returns `{ aid, t, au, pd, sm, ln, dm, tags, lr, pr, vn }` (`sm` = summary, `lr` = the LLM classifier's one-line relevance reason, `""` if none), or 404 if no such paper.
 
 ### `POST /api/search`
 
@@ -170,14 +178,14 @@ Semantic search using pgvector ANN over the BGE topic embeddings (`embedding_top
 
 **Disabled by default**: returns 503 unless `ENABLE_SEMANTIC_SEARCH=true`. It loads a transformer model into the API process, so only self-hosted deployments that install the pipeline extras enable it; the Railway API image doesn't. `GET /health` reports the flag so the UI can hide the semantic toggle.
 
-Request body: `{ query: str (1–1000 chars), limit: int = 20 (max 100), domain?: str, tag?: str }` — `domain` is a single exact match on `domain_tag`; `tag` matches via `= ANY(llm_tags)`.
+Request body: `{ query: str (1–1000 chars), limit: int = 20 (max 100), domain?: str, tag?: str, peer_reviewed?: bool = false }` — `domain` is a single exact match on `domain_tag`; `tag` matches via `= ANY(llm_tags)`; `peer_reviewed: true` keeps only known-reviewed papers.
 
 Implementation:
 - Embeds `query` with a lazily-initialized `TopicEmbeddingGenerator(batch_size=1)` singleton (`_generator`, model `config.TOPIC_EMB_MODEL` = `BAAI/bge-base-en-v1.5`) via `encode_queries`
 - SQL: `SELECT ..., 1 - (embedding_topic <=> %s::vector) AS similarity FROM papers WHERE llm_relevant = TRUE AND embedding_topic IS NOT NULL ... ORDER BY embedding_topic <=> %s::vector LIMIT %s` — served by `idx_papers_embedding_topic_llm`
 - Parameters: `[query_vec] + filter_params + [query_vec, limit]` — `query_vec` is passed twice, once for the SELECT similarity value and once for ORDER BY
 
-Returns: `{ query: str, results: [{ aid, t, au, pd, ln, dm, sim, tags }] }` — `sim` is cosine similarity rounded to 4 decimals (nullable); no `id` or coords.
+Returns: `{ query: str, results: [{ aid, t, au, pd, ln, dm, sim, tags, pr, vn }] }` — `sim` is cosine similarity rounded to 4 decimals (nullable); no `id` or coords.
 
 ### `GET /api/tags`
 

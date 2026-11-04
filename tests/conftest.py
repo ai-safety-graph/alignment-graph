@@ -141,6 +141,8 @@ def insert_paper(
     graph_y: float | None = 0.0,
     tags: list[tuple[str, float]] | None = None,
     llm_relevant: bool | None = None,
+    peer_reviewed: bool | None = None,
+    venue: str | None = None,
 ) -> str:
     """Insert a minimal fixture row into `papers` (and its `papers_raw` parent
     row, required by the FK) and return the canonical `aid` (paper id).
@@ -189,6 +191,12 @@ def insert_paper(
             ai_stage2_keep if llm_relevant is None else llm_relevant,
             [t for t, _ in sorted(tags, key=lambda p: -p[1])] if tags else [],
         ),
+    )
+    # Always written, so a fixture id that already exists in a local DB with
+    # a derived venue is reset to what the test asked for.
+    conn.execute(
+        "UPDATE papers SET peer_reviewed = %s, venue = %s WHERE id = %s",
+        (peer_reviewed, venue, aid),
     )
 
     return aid
