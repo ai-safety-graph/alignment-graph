@@ -528,15 +528,129 @@ def _arxiv_ids_in_work(work: dict) -> set[str]:
     return ids
 
 
+# Springer and similar book series hold many conferences' proceedings; the
+# series name says nothing about which, so show a short series label.
+_BOOK_SERIES = [
+    (label, re.compile(rx, re.I))
+    for label, rx in (
+        ("Springer LNCS", r"^lecture\s+notes\s+in\s+computer\s+science$"),
+        ("Springer LNAI", r"^lecture\s+notes\s+in\s+artificial\s+intelligence$"),
+        ("Springer CCIS", r"^communications\s+in\s+computer\s+and\s+information\s+science$"),
+        ("Springer LNNS", r"^lecture\s+notes\s+in\s+networks\s+and\s+systems$"),
+        ("Springer LNEE", r"^lecture\s+notes\s+in\s+electrical\s+engineering$"),
+        ("Springer LNICST", r"^lecture\s+notes\s+of\s+the\s+institute\s+for\s+computer\s+sciences"),
+        ("IFIP AICT", r"^ifip\s+advances\s+in\s+information\s+and\s+communication\s+technology$"),
+    )
+]
+# Full conference names as OpenAlex spells them, for venues the acronym
+# table (_CONFERENCES) doesn't catch. Only used on OpenAlex source names, so
+# the arXiv-comment rules are unaffected. Order matters: the chapter names
+# come before ACL.
+# Each name must end there (or run into "Workshops", a year, a "(", "/",
+# punctuation), so "International Conference on Computer Vision Theory and
+# Applications" (VISAPP) isn't ICCV.
+_NAME_END = r"(?=\s*(?:$|workshops?\b|(?:19|20)\d\d\b|[(/:,.;]))"
+_OPENALEX_CONFERENCES = [
+    (canon, re.compile(rx + _NAME_END, re.I))
+    for canon, rx in (
+        ("EACL", r"european\s+chapter\s+of\s+the\s+association\s+for\s+computational\s+linguistics"),
+        ("NAACL", r"north\s+american\s+chapter\s+of\s+the\s+association\s+for\s+computational\s+linguistics"),
+        ("ACL", r"association\s+for\s+computational\s+linguistics\W+(?:annual\s+)?meeting"
+                r"|annual\s+meeting\s+of\s+the\s+association\s+for\s+computational\s+linguistics"),
+        ("AIES", r"conference\s+on\s+ai,?\s+ethics,?\s+and\s+society"),
+        ("HRI", r"international\s+conference\s+on\s+human-robot\s+interaction"),
+        ("CVPR", r"computer\s+vision\s+and\s+pattern\s+recognition"),
+        ("ICCV", r"international\s+conference\s+on\s+computer\s+vision"),
+        ("WACV", r"winter\s+conference\s+on\s+applications\s+of\s+computer\s+vision"),
+        ("ICRA", r"international\s+conference\s+on\s+robotics\s+and\s+automation"),
+        ("IROS", r"international\s+conference\s+on\s+intelligent\s+robots\s+and\s+systems"),
+        ("RSS", r"robotics:\s*science\s+and\s+systems"),
+        ("IJCAI", r"international\s+joint\s+conference\s+on\s+artificial\s+intelligence"),
+        ("ICASSP", r"international\s+conference\s+on\s+acoustics,?\s+speech,?\s+and\s+signal\s+processing"),
+        ("ICWSM", r"conference\s+on\s+web\s+and\s+social\s+media"),
+        ("NDSS", r"network\s+and\s+distributed\s+system\s+security(?:\s+symposium)?"),
+        ("AAMAS", r"(?:adaptive|autonomous)\s+agents\s+and\s+multi-?agents?\s+systems"),
+        ("ACSAC", r"annual\s+computer\s+security\s+applications\s+conference"),
+        ("EuroS&P", r"european\s+symposium\s+on\s+security\s+and\s+privacy"),
+        ("SDM", r"siam\s+international\s+conference\s+on\s+data\s+mining"),
+        ("ICDM", r"(?<!siam\s)international\s+conference\s+on\s+data\s+mining"),
+        ("ESEC/FSE", r"joint\s+european\s+software\s+engineering\s+conference\b.*"),
+        ("CoNLL", r"conference\s+on\s+computational\s+natural\s+language\s+learning"),
+        ("RANLP", r"recent\s+advances\s+in\s+natural\s+language\s+processing"),
+        ("ICMI", r"international\s+conference\s+on\s+multimodal\s+interaction"),
+        ("DSN", r"conference\s+on\s+dependable\s+systems\s*(?:and|&)\s*networks"),
+        ("KR", r"principles\s+of\s+knowledge\s+representation\s+and\s+reasoning"),
+        ("ICIP", r"international\s+conference\s+on\s+image\s+processing"),
+        ("ICMLA", r"international\s+conference\s+on\s+machine\s+learning\s+and\s+applications"),
+        ("ACC", r"american\s+control\s+conference"),
+    )
+]
+# Kept upper-case when title-casing a lower- or upper-case name.
+_KEEP_UPPER = {"IEEE", "ACM", "AAAI", "IFIP", "SIAM", "USENIX", "AI", "ML", "NLP", "IJCNN", "ICT"}
+_PROCEEDINGS_RE = re.compile(r"\bproceedings\b|\bconference\b|\bsymposium\b", re.I)
+_SMALL_WORDS = {"a", "an", "and", "as", "at", "by", "for", "from", "in", "of", "on", "or", "the", "to", "via", "with"}
+
+
+def _dedup_key(text: str) -> str:
+    """Letters and digits of a name minus "Proceedings (of the)" wording and
+    years, for spotting "A/Proceedings of A" duplicates."""
+    text = re.sub(r"\b(?:conference\s+)?proceedings\b(?:\s+of\s+the)?|\b(?:19|20)\d\d\b", " ", text, flags=re.I)
+    return re.sub(r"[^a-z0-9]", "", text.lower())
+
+
+def _title_word(word: str, first: bool) -> str:
+    if word.startswith("(") or word.strip("(),.:;").upper() in _KEEP_UPPER:
+        return word.upper() if not word.startswith("(") else word
+    if not first and word.lower() in _SMALL_WORDS:
+        return word.lower()
+    return word[:1].upper() + word[1:].lower()
+
+
+def _clean_openalex_name(name: str) -> str:
+    """Tidy an OpenAlex source name: keep one side of "A/Proceedings of A"
+    duplicates, drop "..." gaps and a "Proceedings - " prefix, and title-case
+    names OpenAlex stores in lower or upper case."""
+    first, sep, rest = name.partition("/")
+    if sep:
+        a, b = _dedup_key(first), _dedup_key(rest)
+        if not b or (len(a) >= 10 and a in b):
+            name = first  # "A/Proceedings", "A/Proceedings of A"
+        elif not a or (len(b) >= 10 and b in a):
+            name = rest  # "Proceedings/Proceedings - A"
+    name = re.sub(r"\s*\.\.\.\s*", " ", name)
+    name = re.sub(r"^(?:conference\s+)?proceedings\s*[-–]\s*", "", name, flags=re.I).strip()
+    words = name.split()
+    # Short all-caps names are usually acronyms ("NEJM AI", "IEEE RO-MAN").
+    shouting = name.isupper() and len(words) >= 4
+    if len(words) >= 2 and (shouting or not any(c.isupper() for c in name[1:])):
+        name = " ".join(_title_word(w, i == 0) for i, w in enumerate(words))
+    return name
+
+
 def _openalex_venue(name: str, year: int | None, source_type: str) -> tuple[str | None, str]:
+    for label, rx in _BOOK_SERIES:
+        if rx.search(name):
+            return label, "conference"
+    name = _clean_openalex_name(name)
     workshop = bool(_WORKSHOP_RE.search(name))
-    if source_type == "journal":
-        return _clip(name), "workshop" if workshop else "journal"
-    # Conferences: prefer a short "ACRONYM year" name, as the rules produce.
-    m = _VENUE_ANY_RE.search(name)
-    paren = _TRAILING_ACRONYM_RE.search(name)
-    base = paren.group(1) if paren else (_canonical(m["venue"]) if m else None)
+    # Prefer a short "ACRONYM year" name, as the rules produce: a trailing
+    # "(ACRONYM)", then a full conference name (more specific than an acronym
+    # scan, which would read "AAAI/ACM Conference on AI, Ethics, and Society"
+    # as AAAI), then the acronym table. Journals keep their full name unless
+    # it's a conference's proceedings (ICWSM); "Autonomous Agents and
+    # Multi-Agent Systems" is the journal, not AAMAS.
+    base = None
+    if source_type != "journal":
+        paren = _TRAILING_ACRONYM_RE.search(name)
+        base = paren.group(1) if paren else None
+    if base is None and (source_type != "journal" or _PROCEEDINGS_RE.search(name)):
+        base = next((canon for canon, rx in _OPENALEX_CONFERENCES if rx.search(name)), None)
+    if base is None and source_type != "journal":
+        m = _VENUE_ANY_RE.search(name)
+        base = _canonical(m["venue"]) if m else None
     if base is None:
+        if source_type == "journal":
+            return _clip(name), "workshop" if workshop else "journal"
         return _clip(name), "workshop" if workshop else "conference"
     venue = f"{_canonical(base)} {year}" if year else _canonical(base)
     if re.search(r"\bfindings\b", name, re.I):
@@ -755,6 +869,55 @@ def enrich_from_openalex(conn, limit: int, fetch=None, sleep=None) -> dict[str, 
     return counts
 
 
+_SELECT_OPENALEX_SOURCED = "SELECT id FROM papers WHERE llm_relevant AND venue_source = 'openalex' ORDER BY id"
+# Names only: peer_reviewed is left alone, and a row a rule result took over
+# in the meantime is skipped.
+_UPDATE_OPENALEX_NAME = """
+    UPDATE papers AS p SET venue = v.venue, venue_type = v.venue_type
+    FROM (VALUES %s) AS v(id, venue, venue_type)
+    WHERE p.id = v.id AND p.venue_source = 'openalex'
+      AND (p.venue IS DISTINCT FROM v.venue OR p.venue_type IS DISTINCT FROM v.venue_type)
+"""
+
+
+def refresh_openalex_names(conn, fetch=None, sleep=None) -> dict:
+    """Re-fetch every OpenAlex-sourced paper and rewrite its venue name with
+    the current naming rules (the raw OpenAlex name isn't stored). One-off,
+    after a naming change; `fetch` / `sleep` are injectable for tests."""
+    import time
+
+    import requests
+    from psycopg2.extras import execute_values
+
+    fetch = fetch or fetch_openalex_works
+    sleep = sleep or time.sleep
+    ids = [r["id"] for r in conn.execute(_SELECT_OPENALEX_SOURCED).fetchall()]
+    counts: dict = {"checked": 0, "renamed": 0, "error": None, "transient": False}
+    cur = conn.raw_cursor()
+    for i in range(0, len(ids), _OPENALEX_BATCH):
+        chunk = ids[i : i + _OPENALEX_BATCH]
+        try:
+            works = fetch(chunk)
+        except requests.RequestException as exc:
+            counts["error"] = _redact(f"{type(exc).__name__}: {exc}")
+            counts["transient"] = _is_transient(exc)
+            break
+        rows = []
+        for pid in chunk:
+            work = works.get(pid)
+            res = classify_openalex_work(work) if work else UNKNOWN
+            if res.peer_reviewed:
+                rows.append((pid, res.venue, res.venue_type))
+        if rows:
+            execute_values(cur, _UPDATE_OPENALEX_NAME, rows)
+            counts["renamed"] += cur.rowcount
+        conn.commit()
+        counts["checked"] += len(chunk)
+        if i + _OPENALEX_BATCH < len(ids):
+            sleep(_OPENALEX_SLEEP_SEC)
+    return counts
+
+
 def _report_enrich_error(args, counts: dict) -> None:
     """A manual run fails loudly on any OpenAlex error. Inside run-all the
     graph stages matter more, so the stage never stops the run: a transient
@@ -778,6 +941,13 @@ def cmd_venue_enrich(args):
     limit = config.OPENALEX_MAX_PER_RUN if limit is None else limit
     conn = connect(args.db)
     try:
+        if getattr(args, "refresh_names", False):
+            print(f"{BLUE}venue-enrich:{RESET} re-fetching OpenAlex-sourced papers to refresh venue names")
+            counts = refresh_openalex_names(conn)
+            print(f"{GREEN}venue-enrich:{RESET} checked {counts['checked']}, renamed {counts['renamed']}")
+            if counts["error"]:
+                _report_enrich_error(args, counts)
+            return
         print(f"{BLUE}venue-enrich:{RESET} checking up to {limit} unknown papers against OpenAlex")
         counts = enrich_from_openalex(conn, limit)
         print(

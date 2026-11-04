@@ -112,6 +112,9 @@ def build_parser() -> argparse.ArgumentParser:
     ve.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
     ve.add_argument("--limit", type=int, default=None,
                     help="Papers to check this run (default: $OPENALEX_MAX_PER_RUN, 5000)")
+    ve.add_argument("--refresh-names", action="store_true",
+                    help="Instead: re-fetch papers already marked reviewed from OpenAlex and rewrite their "
+                         "venue names with the current naming rules (one-off, after a naming change)")
     ve.set_defaults(func=venue.cmd_venue_enrich)
 
     lc = sp.add_parser("llm-classify", help="LLM-based combined relevance + taxonomy classification (post stage-2)")
