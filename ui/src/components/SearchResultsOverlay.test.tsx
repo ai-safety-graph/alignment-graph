@@ -48,4 +48,18 @@ describe('SearchResultsOverlay', () => {
     await userEvent.click(screen.getByLabelText('Unpin from Mine'))
     expect(onRemove).toHaveBeenCalledWith('a')
   })
+
+  it('shows the venue badge only for known peer-reviewed papers', () => {
+    render(
+      <SearchResultsOverlay
+        results={[
+          { n: { ...node('r'), pr: true, vn: 'ICLR 2026' }, score: 1, deg: 0 },
+          { n: { ...node('u'), pr: false, vn: null }, score: 1, deg: 0 },
+        ]}
+        onSelect={() => {}}
+      />,
+    )
+    expect(screen.getByText('ICLR 2026')).toBeTruthy()
+    expect(screen.getAllByTitle(/Peer-reviewed/)).toHaveLength(1)
+  })
 })

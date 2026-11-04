@@ -111,7 +111,7 @@ Responsibilities:
   Pin/Unpin (`withAdded`/`withRemoved`) shows on every list and in the details panels while a graph is selected, disabled at `MAX_PINNED`
 - Tags legend + available domains via the shared `useTagCatalog` hook (one fetch of `fetchTags`; domains are a hardcoded fixed set, see `useTagCatalog.ts`)
 - Query debounce via `useDebouncedValue` (300ms)
-- Filter state managed by the `useServerFilters` hook. Changing any filter triggers a fresh fetch inside `usePaperBrowser`
+- Filter state managed by the `useServerFilters` hook (tags, domains, date preset, and the "Peer-reviewed only" toggle, sent as `peer_reviewed=true`). Changing any filter triggers a fresh fetch inside `usePaperBrowser`
 - Filter UI via `FilterBar`. Results are rendered by `PaperList`
 - Selected-paper detail via `usePaperDetail`; related papers via `useRelatedPapers`
 - Breadcrumb navigation through related-paper links via `useNavHistory`
@@ -147,9 +147,9 @@ Summaries: graph nodes carry no `sm`, so `GraphPaperDetails` loads it lazily via
 
 ## Client State and Caching
 
-- **React Query** (`lib/queryClient.ts`): a single `QueryClient` with `staleTime: Infinity`. Data only changes when the pipeline runs, so a page reload is the only refresh. Query keys: `['graphRange', filters, hidden, cursor]`, `['graphPins', graphKey, pinned]`, `['graphCount', filters]`, `['papers', q, from, tags, domains]`, `['paper', aid]`, `['related', aid]`, `['tag-catalog']`, `['health']`, `['latest-batch']`, `['coverage']`.
-- **Saved graphs** (`lib/storage.ts`): stored in `localStorage` with an id index under `ais_graphs` and each graph under `ais_graph_<id>`. A graph is an optional `filters` recipe (`GraphFilters`: tags, domains, relative `datePreset`) plus `pinned` (added by hand) and `hidden` (recipe matches removed by hand; older builds only, the UI no longer adds to it) paper IDs, so a recipe graph picks up new papers on every visit. Limits: 50 graphs, `MAX_PINNED` = 500 pins, `MAX_HIDDEN` = 500 hides (≤ the backend's `_MAX_EXCLUDE`), 40-character names; the recipe itself is uncapped (it's paged). Graphs saved before pins existed carry a `paperIds` snapshot, read as pins when there's no recipe and dropped when there is one (the recipe reproduces it). The active graph id, shared by both views, is stored under `ais_active_graph` (cleared by "All papers" in Browse and when that graph is deleted). Shared by `GraphView` and `useSubgraphManager`.
-- **Analytics** (`lib/analytics.ts`): `initAnalytics()` injects the Umami Cloud script only in production builds with `VITE_UMAMI_WEBSITE_ID` set (`data-domains=alignmentgraph.com`). `track(event, data)` is a no-throw wrapper around `window.umami.track`. Events: `paper_open` (`view`, `source`), `search_mode` (`mode`), `filter_change` (`kind`, `value`), `graph_generate` (`tags`, `domains` counts, `date`, `mode`), `graph_save` (`kind`: `new` | `update`), `graph_edit`, `graph_discard`, `graph_page` (`direction`: `older` | `newer`). Server-side search logging is separate (see `api/ARCHITECTURE.md`).
+- **React Query** (`lib/queryClient.ts`): a single `QueryClient` with `staleTime: Infinity`. Data only changes when the pipeline runs, so a page reload is the only refresh. Query keys: `['graphRange', filters, hidden, cursor]`, `['graphPins', graphKey, pinned]`, `['graphCount', filters]`, `['papers', q, from, tags, domains, peerReviewed]`, `['paper', aid]`, `['related', aid]`, `['tag-catalog']`, `['health']`, `['latest-batch']`, `['coverage']`.
+- **Saved graphs** (`lib/storage.ts`): stored in `localStorage` with an id index under `ais_graphs` and each graph under `ais_graph_<id>`. A graph is an optional `filters` recipe (`GraphFilters`: tags, domains, relative `datePreset`, optional `peerReviewed`, absent on recipes saved before the toggle and read as false) plus `pinned` (added by hand) and `hidden` (recipe matches removed by hand; older builds only, the UI no longer adds to it) paper IDs, so a recipe graph picks up new papers on every visit. Limits: 50 graphs, `MAX_PINNED` = 500 pins, `MAX_HIDDEN` = 500 hides (≤ the backend's `_MAX_EXCLUDE`), 40-character names; the recipe itself is uncapped (it's paged). Graphs saved before pins existed carry a `paperIds` snapshot, read as pins when there's no recipe and dropped when there is one (the recipe reproduces it). The active graph id, shared by both views, is stored under `ais_active_graph` (cleared by "All papers" in Browse and when that graph is deleted). Shared by `GraphView` and `useSubgraphManager`.
+- **Analytics** (`lib/analytics.ts`): `initAnalytics()` injects the Umami Cloud script only in production builds with `VITE_UMAMI_WEBSITE_ID` set (`data-domains=alignmentgraph.com`). `track(event, data)` is a no-throw wrapper around `window.umami.track`. Events: `paper_open` (`view`, `source`), `search_mode` (`mode`), `filter_change` (`kind`, `value`; kinds include `peer_reviewed` with `on` | `off`), `graph_generate` (`tags`, `domains` counts, `date`, `peer_reviewed`, `mode`), `graph_save` (`kind`: `new` | `update`), `graph_edit`, `graph_discard`, `graph_page` (`direction`: `older` | `newer`). Server-side search logging is separate (see `api/ARCHITECTURE.md`).
 
 ---
 
@@ -160,7 +160,7 @@ Summaries: graph nodes carry no `sm`, so `GraphPaperDetails` loads it lazily via
 ### `NodeCompact`
 
 Required fields: `id`, `aid`, `t`, `au`, `pd`, `dm`, `ln`, `tags`
-Optional: `sm`, `x`, `y` (canvas-normalised coords), `rx`, `ry` (raw stored `graph_x`/`graph_y`, nullable; used to place ghost nodes)
+Optional: `sm`, `x`, `y` (canvas-normalised coords), `rx`, `ry` (raw stored `graph_x`/`graph_y`, nullable; used to place ghost nodes), `pr` (known peer-reviewed; `false` also covers unknown), `vn` (venue name or null). `VenueBadge` renders `pr`/`vn` in list rows, search results and the detail panels, and renders nothing for unknown status so it never reads as "not reviewed"
 
 Only graph responses include `id` from the server. For `fetchPapers`, `searchPapers` and `fetchRelated` results, the UI assigns `id` by index.
 

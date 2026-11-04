@@ -3,6 +3,7 @@ import { domainLabel } from '../lib/domain'
 import type { NodeCompact } from '../lib/types'
 import type { PaperDetail } from '../lib/api'
 import TagChips from './TagChips'
+import VenueBadge from './VenueBadge'
 import { MAX_PINNED } from '../lib/storage'
 import { useRef, useLayoutEffect } from 'react'
 
@@ -130,6 +131,12 @@ export default function BrowsePaperDetails({
           <div className='text-[13px] mb-1.5'>
             <strong>Published:</strong> {paper.pd || '—'}
           </div>
+          {paper.pr && (
+            <div className='text-[13px] mb-1.5 flex items-center gap-1.5'>
+              <strong>Peer review:</strong>
+              <VenueBadge pr={paper.pr} vn={paper.vn} />
+            </div>
+          )}
           <div className='text-[13px] mb-1.5'>
             <strong>arXiv domain:</strong> {domainLabel(paper.dm)}
           </div>

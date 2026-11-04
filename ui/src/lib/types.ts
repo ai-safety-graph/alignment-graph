@@ -11,6 +11,10 @@ export type NodeCompact = {
   sm?: string
   /** LLM classifier's one-line reason the paper counts as AI safety (single-paper endpoint only). */
   lr?: string
+  /** Known to be peer-reviewed (accepted at a journal, conference or workshop). False also means unknown. */
+  pr?: boolean
+  /** Venue display name, e.g. "ICLR 2026" or "NeurIPS 2025 Workshop"; null when unknown. */
+  vn?: string | null
   x?: number
   y?: number
   rx?: number | null

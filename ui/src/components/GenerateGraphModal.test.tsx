@@ -97,6 +97,24 @@ describe('GenerateGraphModal', () => {
     expect(countUrl.searchParams.getAll('domain')).toEqual(['gov'])
   })
 
+  it('applies the peer-review toggle to the count and the recipe', async () => {
+    mockApi((url) => (url.searchParams.get('peer_reviewed') === 'true' ? 2 : 12))
+    const { onGenerate } = renderModal()
+
+    await userEvent.click(await screen.findByRole('button', { name: /Peer-reviewed only/ }))
+    expect(await screen.findByText('2 papers match')).toBeInTheDocument()
+    const generate = screen.getByRole('button', { name: 'Generate graph' })
+    await waitFor(() => expect(generate).toBeEnabled())
+    await userEvent.click(generate)
+
+    expect(onGenerate).toHaveBeenCalledWith({
+      tags: [],
+      domains: [],
+      datePreset: 'all',
+      peerReviewed: true,
+    })
+  })
+
   it('disables Generate when nothing matches', async () => {
     mockApi(() => 0)
     renderModal()

@@ -5,6 +5,7 @@ import { usePaperSummary } from '../hooks/usePaperSummary'
 import { useRef, useLayoutEffect } from 'react'
 import type { RelatedPaper } from '../lib/api'
 import TagChips from './TagChips'
+import VenueBadge from './VenueBadge'
 import { MAX_PINNED } from '../lib/storage'
 
 interface Props {
@@ -113,6 +114,12 @@ export default function GraphPaperDetails({
         <div className='text-[13px] mb-1.5'>
           <strong>Published:</strong> {paper.pd || '—'}
         </div>
+        {paper.pr && (
+          <div className='text-[13px] mb-1.5 flex items-center gap-1.5'>
+            <strong>Peer review:</strong>
+            <VenueBadge pr={paper.pr} vn={paper.vn} />
+          </div>
+        )}
         <div className='text-[13px] mb-1.5'>
           <strong>arXiv domain:</strong> {domainLabel(paper.dm)}
         </div>

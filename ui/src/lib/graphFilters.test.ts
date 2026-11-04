@@ -3,11 +3,17 @@ import { defaultGraphName, EMPTY_FILTERS, toRangeParams } from './graphFilters'
 
 describe('toRangeParams', () => {
   it('omits `from` for any-time and passes tags/domains through', () => {
+    // A recipe saved before the peer-review toggle existed means all papers
     expect(toRangeParams({ tags: ['rlhf'], domains: ['gov'], datePreset: 'all' })).toEqual({
       from: undefined,
       tags: ['rlhf'],
       domains: ['gov'],
+      peerReviewed: false,
     })
+  })
+
+  it('passes the peer-review toggle through', () => {
+    expect(toRangeParams({ ...EMPTY_FILTERS, peerReviewed: true }).peerReviewed).toBe(true)
   })
 
   it('resolves the preset to an ISO date', () => {
@@ -21,6 +27,12 @@ describe('defaultGraphName', () => {
     expect(
       defaultGraphName({ tags: ['rlhf', 'evals'], domains: [], datePreset: '1m' }, 40),
     ).toBe('Rlhf +1 · past month')
+  })
+
+  it('marks peer-reviewed recipes', () => {
+    expect(
+      defaultGraphName({ tags: ['rlhf'], domains: [], datePreset: '1m', peerReviewed: true }, 60),
+    ).toBe('Rlhf · past month · peer-reviewed')
   })
 
   it('falls back to domains, then all papers', () => {
