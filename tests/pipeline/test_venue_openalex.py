@@ -195,6 +195,9 @@ def test_transient_errors():
     assert venue._is_transient(_http_error(429))
     assert venue._is_transient(_http_error(503))
     assert venue._is_transient(requests.ConnectionError("refused"))
+    assert venue._is_transient(requests.exceptions.RetryError("too many 503s"))
+    assert venue._is_transient(requests.exceptions.ChunkedEncodingError("connection dropped mid-body"))
+    assert venue._is_transient(requests.exceptions.JSONDecodeError("Expecting value", "<html>", 0))
     assert not venue._is_transient(_http_error(401))
     assert not venue._is_transient(_http_error(400))
 
