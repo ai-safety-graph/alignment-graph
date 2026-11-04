@@ -546,13 +546,19 @@ _BOOK_SERIES = [
 # table (_CONFERENCES) doesn't catch. Only used on OpenAlex source names, so
 # the arXiv-comment rules are unaffected. Order matters: the chapter names
 # come before ACL.
+# Each name must end there (or run into "Workshops", a year, a "(", "/",
+# punctuation), so "International Conference on Computer Vision Theory and
+# Applications" (VISAPP) isn't ICCV.
+_NAME_END = r"(?=\s*(?:$|workshops?\b|(?:19|20)\d\d\b|[(/:,.;]))"
 _OPENALEX_CONFERENCES = [
-    (canon, re.compile(rx, re.I))
+    (canon, re.compile(rx + _NAME_END, re.I))
     for canon, rx in (
         ("EACL", r"european\s+chapter\s+of\s+the\s+association\s+for\s+computational\s+linguistics"),
         ("NAACL", r"north\s+american\s+chapter\s+of\s+the\s+association\s+for\s+computational\s+linguistics"),
         ("ACL", r"association\s+for\s+computational\s+linguistics\W+(?:annual\s+)?meeting"
                 r"|annual\s+meeting\s+of\s+the\s+association\s+for\s+computational\s+linguistics"),
+        ("AIES", r"conference\s+on\s+ai,?\s+ethics,?\s+and\s+society"),
+        ("HRI", r"international\s+conference\s+on\s+human-robot\s+interaction"),
         ("CVPR", r"computer\s+vision\s+and\s+pattern\s+recognition"),
         ("ICCV", r"international\s+conference\s+on\s+computer\s+vision"),
         ("WACV", r"winter\s+conference\s+on\s+applications\s+of\s+computer\s+vision"),
@@ -562,12 +568,13 @@ _OPENALEX_CONFERENCES = [
         ("IJCAI", r"international\s+joint\s+conference\s+on\s+artificial\s+intelligence"),
         ("ICASSP", r"international\s+conference\s+on\s+acoustics,?\s+speech,?\s+and\s+signal\s+processing"),
         ("ICWSM", r"conference\s+on\s+web\s+and\s+social\s+media"),
-        ("NDSS", r"network\s+and\s+distributed\s+system\s+security"),
+        ("NDSS", r"network\s+and\s+distributed\s+system\s+security(?:\s+symposium)?"),
         ("AAMAS", r"(?:adaptive|autonomous)\s+agents\s+and\s+multi-?agents?\s+systems"),
         ("ACSAC", r"annual\s+computer\s+security\s+applications\s+conference"),
         ("EuroS&P", r"european\s+symposium\s+on\s+security\s+and\s+privacy"),
-        ("ICDM", r"international\s+conference\s+on\s+data\s+mining"),
-        ("ESEC/FSE", r"joint\s+european\s+software\s+engineering\s+conference"),
+        ("SDM", r"siam\s+international\s+conference\s+on\s+data\s+mining"),
+        ("ICDM", r"(?<!siam\s)international\s+conference\s+on\s+data\s+mining"),
+        ("ESEC/FSE", r"joint\s+european\s+software\s+engineering\s+conference\b.*"),
         ("CoNLL", r"conference\s+on\s+computational\s+natural\s+language\s+learning"),
         ("RANLP", r"recent\s+advances\s+in\s+natural\s+language\s+processing"),
         ("ICMI", r"international\s+conference\s+on\s+multimodal\s+interaction"),
@@ -578,26 +585,45 @@ _OPENALEX_CONFERENCES = [
         ("ACC", r"american\s+control\s+conference"),
     )
 ]
+# Kept upper-case when title-casing a lower- or upper-case name.
+_KEEP_UPPER = {"IEEE", "ACM", "AAAI", "IFIP", "SIAM", "USENIX", "AI", "ML", "NLP", "IJCNN", "ICT"}
+_PROCEEDINGS_RE = re.compile(r"\bproceedings\b|\bconference\b|\bsymposium\b", re.I)
 _SMALL_WORDS = {"a", "an", "and", "as", "at", "by", "for", "from", "in", "of", "on", "or", "the", "to", "via", "with"}
 
 
+def _dedup_key(text: str) -> str:
+    """Letters and digits of a name minus "Proceedings (of the)" wording and
+    years, for spotting "A/Proceedings of A" duplicates."""
+    text = re.sub(r"\b(?:conference\s+)?proceedings\b(?:\s+of\s+the)?|\b(?:19|20)\d\d\b", " ", text, flags=re.I)
+    return re.sub(r"[^a-z0-9]", "", text.lower())
+
+
+def _title_word(word: str, first: bool) -> str:
+    if word.startswith("(") or word.strip("(),.:;").upper() in _KEEP_UPPER:
+        return word.upper() if not word.startswith("(") else word
+    if not first and word.lower() in _SMALL_WORDS:
+        return word.lower()
+    return word[:1].upper() + word[1:].lower()
+
+
 def _clean_openalex_name(name: str) -> str:
-    """Tidy an OpenAlex source name: keep the first of "A/Proceedings of A"
-    pairs, drop "..." gaps and a "Proceedings - " prefix, and title-case
+    """Tidy an OpenAlex source name: keep one side of "A/Proceedings of A"
+    duplicates, drop "..." gaps and a "Proceedings - " prefix, and title-case
     names OpenAlex stores in lower or upper case."""
     first, sep, rest = name.partition("/")
-    if sep and len(first) >= 10 and len(rest) >= 10:
-        name = first
+    if sep:
+        a, b = _dedup_key(first), _dedup_key(rest)
+        if not b or (len(a) >= 10 and a in b):
+            name = first  # "A/Proceedings", "A/Proceedings of A"
+        elif not a or (len(b) >= 10 and b in a):
+            name = rest  # "Proceedings/Proceedings - A"
     name = re.sub(r"\s*\.\.\.\s*", " ", name)
-    name = re.sub(r"^proceedings\s*[-–]\s*", "", name, flags=re.I).strip()
+    name = re.sub(r"^(?:conference\s+)?proceedings\s*[-–]\s*", "", name, flags=re.I).strip()
     words = name.split()
     # Short all-caps names are usually acronyms ("NEJM AI", "IEEE RO-MAN").
     shouting = name.isupper() and len(words) >= 4
     if len(words) >= 2 and (shouting or not any(c.isupper() for c in name[1:])):
-        name = " ".join(
-            w.lower() if i and w.lower() in _SMALL_WORDS else w[:1].upper() + w[1:].lower()
-            for i, w in enumerate(words)
-        )
+        name = " ".join(_title_word(w, i == 0) for i, w in enumerate(words))
     return name
 
 
@@ -607,15 +633,21 @@ def _openalex_venue(name: str, year: int | None, source_type: str) -> tuple[str 
             return label, "conference"
     name = _clean_openalex_name(name)
     workshop = bool(_WORKSHOP_RE.search(name))
-    # Prefer a short "ACRONYM year" name, as the rules produce. Journals keep
-    # their full name unless it's really a conference's proceedings (ICWSM).
+    # Prefer a short "ACRONYM year" name, as the rules produce: a trailing
+    # "(ACRONYM)", then a full conference name (more specific than an acronym
+    # scan, which would read "AAAI/ACM Conference on AI, Ethics, and Society"
+    # as AAAI), then the acronym table. Journals keep their full name unless
+    # it's a conference's proceedings (ICWSM); "Autonomous Agents and
+    # Multi-Agent Systems" is the journal, not AAMAS.
     base = None
     if source_type != "journal":
         paren = _TRAILING_ACRONYM_RE.search(name)
-        m = _VENUE_ANY_RE.search(name)
-        base = paren.group(1) if paren else (_canonical(m["venue"]) if m else None)
-    if base is None:
+        base = paren.group(1) if paren else None
+    if base is None and (source_type != "journal" or _PROCEEDINGS_RE.search(name)):
         base = next((canon for canon, rx in _OPENALEX_CONFERENCES if rx.search(name)), None)
+    if base is None and source_type != "journal":
+        m = _VENUE_ANY_RE.search(name)
+        base = _canonical(m["venue"]) if m else None
     if base is None:
         if source_type == "journal":
             return _clip(name), "workshop" if workshop else "journal"
