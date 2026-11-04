@@ -218,7 +218,7 @@ export default function BrowseView() {
 
   const items = useMemo(() => (papers ?? []).map((n) => ({ n })), [papers])
 
-  const resetKey = `${listMode}|${selectedSubgraphId ?? ''}|${debouncedQuery}|${listParams.fromDate ?? ''}|${[...listParams.activeTags].sort()}|${[...listParams.activeDomains].sort()}`
+  const resetKey = `${listMode}|${selectedSubgraphId ?? ''}|${debouncedQuery}|${listParams.fromDate ?? ''}|${[...listParams.activeTags].sort()}|${[...listParams.activeDomains].sort()}|${listParams.peerReviewed ? 1 : 0}`
 
   useLayoutEffect(() => {
     if (listRef.current) listRef.current.scrollTop = 0

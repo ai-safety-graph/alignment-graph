@@ -723,6 +723,8 @@ export default function ArxivGraph() {
             dm: r.dm,
             ln: r.ln,
             tags: r.tags,
+            pr: r.pr,
+            vn: r.vn,
           }
           built.push(toSimNode(node, x, y))
         })
