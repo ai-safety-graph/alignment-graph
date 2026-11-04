@@ -635,7 +635,11 @@ def _is_transient(exc) -> bool:
     (a 4xx from a bad key or request) is a configuration problem."""
     import requests
 
-    if isinstance(exc, (requests.ConnectionError, requests.Timeout, requests.exceptions.RetryError)):
+    # A body cut off mid-transfer, or a 200 that isn't JSON (a proxy or
+    # maintenance page), is as transient as a 503.
+    if isinstance(exc, (requests.ConnectionError, requests.Timeout, requests.exceptions.RetryError,
+                        requests.exceptions.ChunkedEncodingError, requests.exceptions.ContentDecodingError,
+                        requests.exceptions.JSONDecodeError)):
         return True
     status = getattr(getattr(exc, "response", None), "status_code", None)
     return status is not None and (status == 429 or status >= 500)

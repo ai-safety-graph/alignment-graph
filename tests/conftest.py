@@ -192,10 +192,11 @@ def insert_paper(
             [t for t, _ in sorted(tags, key=lambda p: -p[1])] if tags else [],
         ),
     )
-    if peer_reviewed is not None or venue is not None:
-        conn.execute(
-            "UPDATE papers SET peer_reviewed = %s, venue = %s WHERE id = %s",
-            (peer_reviewed, venue, aid),
-        )
+    # Always written, so a fixture id that already exists in a local DB with
+    # a derived venue is reset to what the test asked for.
+    conn.execute(
+        "UPDATE papers SET peer_reviewed = %s, venue = %s WHERE id = %s",
+        (peer_reviewed, venue, aid),
+    )
 
     return aid

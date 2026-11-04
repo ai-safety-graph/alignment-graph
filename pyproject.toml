@@ -47,6 +47,8 @@ dev = [
 test = [
   "pytest>=8",
   "httpx>=0.27",
+  # venue-enrich's error handling tests build real requests exceptions
+  "requests==2.32.4",
 ]
 
 [project.scripts]
