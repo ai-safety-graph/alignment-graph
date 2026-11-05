@@ -202,8 +202,9 @@ export default function BrowseView() {
 
   const listRef = useRef<HTMLDivElement | null>(null)
   const autoSelectedRef = useRef(false)
-  // Below Tailwind's md (768px), so it agrees with the md: classes
-  const isSmall = useMediaQuery('(max-width: 767px)')
+  // Tailwind's md is width >= 48rem; the exact complement agrees with
+  // the md: classes at every width, fractional ones included
+  const isSmall = useMediaQuery('(width < 48rem)')
 
   useEffect(() => {
     if (
