@@ -147,12 +147,12 @@ export default function AboutView() {
           <Section title='How to use'>
             <p>
               <span className='text-white'>Graph view</span> (desktop): start
-              with <span className='text-white'>Generate graph</span> and pick
-              topic tags, research domains and a date window. Each dot is a
-              matching paper, and papers on similar topics are placed near each
-              other. Click a paper to open its details, summary and related
-              papers. Press <Kbd>/</Kbd> or <Kbd>⌘/Ctrl</Kbd>+<Kbd>K</Kbd> to
-              search and <Kbd>Esc</Kbd> to clear the search.
+              with <span className='text-white'>New graph</span> and pick topic
+              tags, research domains and a date window. Each dot is a matching
+              paper, and papers on similar topics are placed near each other.
+              Click a paper to open its details, summary and related papers.
+              Press <Kbd>/</Kbd> or <Kbd>⌘/Ctrl</Kbd>+<Kbd>K</Kbd> to search and{' '}
+              <Kbd>Esc</Kbd> to clear the search.
             </p>
             <p>
               <span className='text-white'>Filters</span>: in the list view,
@@ -177,8 +177,8 @@ export default function AboutView() {
               from their detail panel. In the list view,{' '}
               <span className='text-white'>New Graph</span> starts an empty
               named collection. Pick a saved graph from the dropdown to see only
-              those papers. You can
-              keep up to 50 graphs of up to 500 papers each.
+              those papers. You can keep up to 50 graphs of up to 500 papers
+              each.
             </p>
             <p className='text-sm text-neutral-400'>
               Saved graphs live only in this browser. They don't sync to your
