@@ -285,7 +285,11 @@ export default function BrowseView() {
     </Dropdown>
   )
 
-  const editSubgraphButton = selectedSubgraph && (
+  // A graph is edited or deleted from its own lists (Matches, Pinned), not
+  // while browsing all papers to pin from
+  const showGraphActions = !!selectedSubgraph && listMode !== 'all'
+
+  const editSubgraphButton = showGraphActions && (
     <button
       type='button'
       onClick={() => setModal('edit')}
@@ -297,7 +301,7 @@ export default function BrowseView() {
     </button>
   )
 
-  const deleteSubgraphButton = selectedSubgraph && (
+  const deleteSubgraphButton = showGraphActions && (
     <button
       type='button'
       onClick={() => setIsConfirmingDelete(true)}
@@ -546,15 +550,14 @@ export default function BrowseView() {
     <button
       type='button'
       onClick={() => setModal('edit')}
-      className='flex items-center gap-1 text-neutral-500 hover:text-white underline underline-offset-2 cursor-pointer'
+      className='hidden md:flex items-center gap-1 text-neutral-500 hover:text-white underline underline-offset-2 cursor-pointer'
     >
       <Pencil size={11} />
       {recipe ? 'Edit' : 'Add filters'}
     </button>
   )
 
-  // Desktop sits here beside Edit; mobile keeps its trash button in the
-  // status row
+  // Desktop only: mobile has Edit and Delete buttons in its status row
   const recipeActions = (
     <div className='shrink-0 flex items-center gap-3'>
       {editRecipeButton}
@@ -568,6 +571,12 @@ export default function BrowseView() {
       </button>
     </div>
   )
+
+  // Whether the count line (or the pins-only summary) is already showing
+  // Edit/Delete, so the fallback row below it isn't needed
+  const graphActionsInline = isMatches
+    ? !recipe || !!papers
+    : listMode === 'pinned' && !!subgraphNodes?.length
 
   // A graph with a recipe shows it in the count line; a pins-only graph has
   // no matches to count, so it says so here
@@ -639,8 +648,9 @@ export default function BrowseView() {
 
               {/* One sticky block for both layouts' controls and the count
                   line, so a graph's filter chips and Edit/Delete stay in view
-                  while the list scrolls */}
-              <div className='sticky top-0 z-20 bg-neutral-950'>
+                  while the list scrolls. On desktop it stays below the top
+                  bar (z-20) so the graph picker's menu draws over it. */}
+              <div className='sticky top-0 z-20 md:z-10 bg-neutral-950'>
                 <div className='hidden md:block'>
                   {subgraphTitle}
                   {recipeSummary}
@@ -716,8 +726,10 @@ export default function BrowseView() {
                         <span className='h-3 w-3 shrink-0 rounded-full border-2 border-neutral-600 border-t-neutral-300 animate-spin' />
                       )}
                       {/* The modal starts from these filters (browseFilters),
-                          so offer it while they're set */}
-                      {!isMatches && hasActiveFilters && (
+                          so offer it while they're set. A keyword search
+                          isn't part of a graph, so with one typed the count
+                          wouldn't match what gets saved. */}
+                      {!isMatches && hasActiveFilters && !query.trim() && (
                         <button
                           type='button'
                           onClick={openNewGraph}
@@ -738,9 +750,21 @@ export default function BrowseView() {
                 )}
 
                 {!isBrowsing && subgraphNodes && subgraphNodes.length > 0 && (
-                  <div className='px-4 py-1.5 text-xs text-neutral-500'>
-                    Showing {subgraphItems.length} of {subgraphNodes.length}{' '}
-                    pinned papers
+                  <div className='px-4 py-1.5 text-xs text-neutral-500 flex items-center gap-x-2'>
+                    <span className='flex-1 min-w-0'>
+                      Showing {subgraphItems.length} of {subgraphNodes.length}{' '}
+                      pinned papers
+                    </span>
+                    {recipeActions}
+                  </div>
+                )}
+
+                {/* Edit/Delete normally ride on the count line; keep them
+                    reachable while it's absent (loading, a failed fetch, no
+                    pins yet) */}
+                {showGraphActions && !graphActionsInline && (
+                  <div className='hidden md:flex px-4 py-1.5 text-xs justify-end'>
+                    {recipeActions}
                   </div>
                 )}
               </div>
