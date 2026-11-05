@@ -263,7 +263,7 @@ export default function FilterBar({
               >
                 <BadgeCheck
                   size={12}
-                  className={peerReviewedOnly ? 'text-[#4ea8de]' : ''}
+                  className={peerReviewedOnly ? 'text-purple-400' : ''}
                   aria-hidden
                 />
                 Peer-reviewed only
