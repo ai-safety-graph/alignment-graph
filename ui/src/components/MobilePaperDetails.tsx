@@ -244,6 +244,11 @@ export default function MobilePaperDetails({
             <ul className='list-none p-0 m-0'>
               {neighbors.map(({ n }) => (
                 <li key={n.aid} className='py-1.5 border-b border-neutral-800'>
+                  {n.pr && (
+                    <div className='mb-0.5 flex'>
+                      <VenueBadge pr={n.pr} vn={n.vn} />
+                    </div>
+                  )}
                   <div className='flex justify-between gap-2'>
                     <a
                       onClick={(e) => {

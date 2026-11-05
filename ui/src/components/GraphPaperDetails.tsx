@@ -198,6 +198,11 @@ export default function GraphPaperDetails({
                   >
                     <div className='flex gap-2'>
                       <div className='flex-1 min-w-0'>
+                        {r.pr && (
+                          <div className='mb-0.5 flex'>
+                            <VenueBadge pr={r.pr} vn={r.vn} />
+                          </div>
+                        )}
                         <a
                           onClick={(e) => {
                             e.preventDefault()

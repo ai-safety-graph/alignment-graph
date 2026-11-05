@@ -202,6 +202,11 @@ export default function BrowsePaperDetails({
                     >
                       <div className='flex gap-2'>
                         <div className='flex-1 min-w-0'>
+                          {n.pr && (
+                            <div className='mb-0.5 flex'>
+                              <VenueBadge pr={n.pr} vn={n.vn} />
+                            </div>
+                          )}
                           <a
                             onClick={(e) => {
                               e.preventDefault()
