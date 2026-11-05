@@ -491,10 +491,51 @@ export default function BrowseView() {
     </div>
   )
 
+  // Phones have no room for the tabs beside the graph picker, so the same
+  // three modes become a compact menu there
+  const listModeLabels = {
+    matches: 'Matches',
+    pinned: 'Pinned',
+    all: 'All papers',
+  } as const
+  const listModeSelect = selectedSubgraph && (
+    <Dropdown
+      align='right'
+      className='max-w-[140px]'
+      label={
+        <span className='flex items-center gap-1'>
+          {listMode === 'pinned' && <Pin size={12} />}
+          {listModeLabels[listMode]}
+          {listMode === 'pinned' && !!pinnedCount && (
+            <span className='tabular-nums'>{pinnedCount}</span>
+          )}
+        </span>
+      }
+    >
+      {(['matches', 'pinned', 'all'] as const).map((mode) => (
+        <button
+          key={mode}
+          type='button'
+          onClick={() => setViewMode(mode)}
+          aria-current={listMode === mode || undefined}
+          className={`flex w-full items-center gap-1.5 text-left px-3 py-2 text-sm hover:bg-[#333333] hover:text-neutral-100 cursor-pointer ${
+            listMode === mode ? 'text-[#4ea8de]' : 'text-neutral-300'
+          }`}
+        >
+          {mode === 'pinned' && <Pin size={12} />}
+          {listModeLabels[mode]}
+          {mode === 'pinned' && !!pinnedCount && (
+            <span className='tabular-nums'>{pinnedCount}</span>
+          )}
+        </button>
+      ))}
+    </Dropdown>
+  )
+
   // The dropdown above already names the graph, so this row is just the
   // list-mode tabs (or a plain label) and the Filters toggle.
   const subgraphTitle = (
-    <div className='shrink-0 px-4 pt-3 md:pt-4 pb-2 flex items-center justify-between gap-3 text-sm text-neutral-400'>
+    <div className='shrink-0 px-4 pt-4 pb-2 flex items-center justify-between gap-3 text-sm text-neutral-400'>
       {listModeTabs || (
         <span className='min-w-0 truncate text-lg font-medium text-neutral-200'>
           All papers
@@ -505,10 +546,9 @@ export default function BrowseView() {
   )
 
   // Only the all-papers list mentions the latest update (About does too);
-  // not at md, where the half-width list column has no room (phones get the
-  // full width, and the line wraps)
+  // wide screens only, as the half-width list column at md has no room
   const batchNote = listMode === 'all' && (
-    <LatestBatchBadge className="md:hidden lg:inline before:content-['·'] before:mr-2" />
+    <LatestBatchBadge className="hidden lg:inline before:content-['·'] before:mr-2" />
   )
 
   // The graph's recipe, read-only: Edit changes it, as on the graph view
@@ -612,30 +652,44 @@ export default function BrowseView() {
             className='flex-1 overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent [scrollbar-gutter:stable_both-edges] md:[scrollbar-gutter:stable] md:[direction:rtl]'
           >
             <div className='md:[direction:ltr] md:px-8'>
+              <div className='md:hidden relative px-4 pt-4 pb-2 flex flex-col items-center gap-1'>
+                {listMode === 'all' && (
+                  <div className='absolute top-4 left-4 flex items-center h-[30px]'>
+                    <LatestBatchBadge />
+                  </div>
+                )}
+                <div className='absolute top-4 right-4 flex items-center h-[30px]'>
+                  {aboutLink}
+                </div>
+                <HeaderLogo current='list' />
+              </div>
+
               {/* One sticky block for both layouts' controls and the count
                   line, so a graph's filter chips and Edit/Delete stay in view
                   while the list scrolls. On desktop it stays below the top
                   bar (z-20) so the graph picker's menu draws over it. */}
               <div className='sticky top-0 z-20 md:z-10 bg-neutral-950'>
-                {/* Phones have no top bar, so the desktop header's pieces
-                    stack here: logo, picker and About, then search. The
-                    view switch is left out as phones only get the list. */}
+                <div className='hidden md:block'>
+                  {subgraphTitle}
+                  {recipeSummary}
+                  {filterBar}
+                </div>
+
+                {/* Phones: graph picker and list mode, then search with the
+                    Filters toggle; the count line below carries Edit/Delete */}
                 <div className='md:hidden'>
-                  <div className='px-4 pt-3 flex items-center gap-3'>
-                    <HeaderLogo current='list' />
+                  <div className='px-4 pt-2 flex items-center gap-2'>
                     <div className='flex-1 min-w-0 flex items-center'>
                       {renderGraphPicker('max-w-full')}
                     </div>
-                    {aboutLink}
+                    {listModeSelect}
                   </div>
-                  <div className='px-4 pt-3 flex items-center gap-2'>
+                  <div className='px-4 pt-2 pb-1 flex items-center gap-2'>
                     {isBrowsing ? searchControls : subgraphSearchControls}
+                    {filterBar && filterToggleButton}
                   </div>
+                  {recipeSummary}
                 </div>
-
-                {subgraphTitle}
-                {recipeSummary}
-                <div className='hidden md:block'>{filterBar}</div>
 
                 {isBrowsing &&
                   !semantic &&
@@ -650,13 +704,24 @@ export default function BrowseView() {
                               two lines with an ellipsis; the full list is in
                               the tooltip */}
                           <p
-                            className='min-w-0 line-clamp-2'
+                            className='min-w-0 line-clamp-1 md:line-clamp-2'
                             title={recipeLabels.join(', ') || undefined}
                           >
                             <span className='mr-1.5'>
                               {total.toLocaleString()}{' '}
                               {total === 1 ? 'paper' : 'papers'}
-                              {matchesPhrase}
+                              {/* Phones get one line, so with filters to show
+                                  the chips follow a bare colon */}
+                              {recipeLabels.length > 0 ? (
+                                <>
+                                  <span className='md:hidden'>:</span>
+                                  <span className='hidden md:inline'>
+                                    {matchesPhrase}
+                                  </span>
+                                </>
+                              ) : (
+                                matchesPhrase
+                              )}
                             </span>
                             {recipeLabels.map((label) => (
                               <span
