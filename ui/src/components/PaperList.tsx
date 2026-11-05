@@ -80,14 +80,18 @@ export default function PaperList({
               onClick={() => onSelectId(n.aid)}
               className='flex-1 min-w-0 text-left px-4 py-3 cursor-pointer'
             >
-              <div className='text-[13px] text-neutral-400 truncate'>
+              {n.pr && (
+                <div className='mb-1 flex'>
+                  <VenueBadge pr={n.pr} vn={n.vn} />
+                </div>
+              )}
+              <div className='text-[15px] leading-snug'>{n.t}</div>
+              <div className='mt-0.5 text-[13px] text-neutral-400 truncate'>
                 {n.au}
               </div>
-              <div className='mt-0.5 text-[15px] leading-snug'>{n.t}</div>
               <div className='mt-1 text-[12px] text-neutral-400'>
                 <div className='flex flex-wrap items-center gap-x-2 gap-y-1 mb-0.5'>
                   <TagChips tags={n.tags} max={2} />
-                  <VenueBadge pr={n.pr} vn={n.vn} />
                 </div>
               </div>
             </button>
