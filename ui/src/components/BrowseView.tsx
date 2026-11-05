@@ -291,30 +291,6 @@ export default function BrowseView() {
   // while browsing all papers to pin from
   const showGraphActions = !!selectedSubgraph && listMode !== 'all'
 
-  const editSubgraphButton = showGraphActions && (
-    <button
-      type='button'
-      onClick={() => setModal('edit')}
-      aria-label={`Edit “${selectedSubgraph.name}”`}
-      title='Edit graph filters'
-      className='shrink-0 p-1.5 rounded-md bg-neutral-950 border border-neutral-700 text-neutral-300 hover:text-white hover:border-neutral-500 cursor-pointer transition-colors'
-    >
-      <Pencil size={14} />
-    </button>
-  )
-
-  const deleteSubgraphButton = showGraphActions && (
-    <button
-      type='button'
-      onClick={() => setIsConfirmingDelete(true)}
-      aria-label={`Delete “${selectedSubgraph.name}”`}
-      title='Delete graph'
-      className='shrink-0 p-1.5 rounded-md bg-neutral-950 border border-neutral-700 text-neutral-300 hover:text-red-400 hover:border-neutral-500 cursor-pointer transition-colors'
-    >
-      <Trash2 size={14} />
-    </button>
-  )
-
   // Picking a graph and starting a new one share the dropdown. With no
   // graphs yet there's nothing to pick, so a New graph button stands in.
   const renderGraphPicker = (className: string) =>
@@ -518,7 +494,7 @@ export default function BrowseView() {
   // The dropdown above already names the graph, so this row is just the
   // list-mode tabs (or a plain label) and the Filters toggle.
   const subgraphTitle = (
-    <div className='shrink-0 px-4 pt-4 pb-2 flex items-center justify-between gap-3 text-sm text-neutral-400'>
+    <div className='shrink-0 px-4 pt-3 md:pt-4 pb-2 flex items-center justify-between gap-3 text-sm text-neutral-400'>
       {listModeTabs || (
         <span className='min-w-0 truncate text-lg font-medium text-neutral-200'>
           All papers
@@ -529,9 +505,10 @@ export default function BrowseView() {
   )
 
   // Only the all-papers list mentions the latest update (About does too);
-  // wide screens only, as the half-width list column at md has no room
+  // not at md, where the half-width list column has no room (phones get the
+  // full width, and the line wraps)
   const batchNote = listMode === 'all' && (
-    <LatestBatchBadge className="hidden lg:inline before:content-['·'] before:mr-2" />
+    <LatestBatchBadge className="md:hidden lg:inline before:content-['·'] before:mr-2" />
   )
 
   // The graph's recipe, read-only: Edit changes it, as on the graph view
@@ -552,21 +529,20 @@ export default function BrowseView() {
     <button
       type='button'
       onClick={() => setModal('edit')}
-      className='hidden md:flex items-center gap-1 text-neutral-500 hover:text-white underline underline-offset-2 cursor-pointer'
+      className='flex items-center gap-1 text-neutral-500 hover:text-white underline underline-offset-2 cursor-pointer'
     >
       <Pencil size={11} />
       {recipe ? 'Edit' : 'Add filters'}
     </button>
   )
 
-  // Desktop only: mobile has Edit and Delete buttons in its status row
   const recipeActions = (
     <div className='shrink-0 flex items-center gap-3'>
       {editRecipeButton}
       <button
         type='button'
         onClick={() => setIsConfirmingDelete(true)}
-        className='hidden md:flex items-center gap-1 text-neutral-500 hover:text-red-400 underline underline-offset-2 cursor-pointer'
+        className='flex items-center gap-1 text-neutral-500 hover:text-red-400 underline underline-offset-2 cursor-pointer'
       >
         <Trash2 size={11} />
         Delete
@@ -636,60 +612,30 @@ export default function BrowseView() {
             className='flex-1 overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent [scrollbar-gutter:stable_both-edges] md:[scrollbar-gutter:stable] md:[direction:rtl]'
           >
             <div className='md:[direction:ltr] md:px-8'>
-              <div className='md:hidden relative px-4 pt-4 pb-2 flex flex-col items-center gap-1'>
-                {listMode === 'all' && (
-                  <div className='absolute top-4 left-4 flex items-center h-[34px]'>
-                    <LatestBatchBadge />
-                  </div>
-                )}
-                <div className='absolute top-4 right-4 flex items-center h-[34px]'>
-                  {aboutLink}
-                </div>
-                <a
-                  target='_blank'
-                  href='https://github.com/ai-safety-graph/alignment-graph'
-                  className='flex items-center justify-center'
-                >
-                  <img
-                    src='/ag-logo.svg'
-                    alt='Alignment Graph Logo'
-                    className='h-[34px] w-auto opacity-50 saturate-70'
-                  />
-                </a>
-              </div>
-
               {/* One sticky block for both layouts' controls and the count
                   line, so a graph's filter chips and Edit/Delete stay in view
                   while the list scrolls. On desktop it stays below the top
                   bar (z-20) so the graph picker's menu draws over it. */}
               <div className='sticky top-0 z-20 md:z-10 bg-neutral-950'>
-                <div className='hidden md:block'>
-                  {subgraphTitle}
-                  {recipeSummary}
-                  {filterBar}
-                </div>
-
+                {/* Phones have no top bar, so the desktop header's pieces
+                    stack here: logo, picker and About, then search. The
+                    view switch is left out as phones only get the list. */}
                 <div className='md:hidden'>
-                  <div className='p-3 flex items-center gap-2'>
-                    {isBrowsing ? searchControls : subgraphSearchControls}
-                  </div>
-                  <div className='px-3 pb-2 flex items-center gap-2 text-sm text-neutral-400'>
+                  <div className='px-4 pt-3 flex items-center gap-3'>
+                    <HeaderLogo current='list' />
                     <div className='flex-1 min-w-0 flex items-center'>
                       {renderGraphPicker('max-w-full')}
                     </div>
-                    <div className='ml-auto flex items-center gap-2'>
-                      {filterBar && filterToggleButton}
-                      {editSubgraphButton}
-                      {deleteSubgraphButton}
-                    </div>
+                    {aboutLink}
                   </div>
-                  {listModeTabs && (
-                    <div className='px-3 pb-2 flex'>{listModeTabs}</div>
-                  )}
-                  {recipeSummary && (
-                    <div className='-mx-1 pb-1'>{recipeSummary}</div>
-                  )}
+                  <div className='px-4 pt-3 flex items-center gap-2'>
+                    {isBrowsing ? searchControls : subgraphSearchControls}
+                  </div>
                 </div>
+
+                {subgraphTitle}
+                {recipeSummary}
+                <div className='hidden md:block'>{filterBar}</div>
 
                 {isBrowsing &&
                   !semantic &&
@@ -771,7 +717,7 @@ export default function BrowseView() {
                     reachable while it's absent (loading, a failed fetch, no
                     pins yet) */}
                 {showGraphActions && !graphActionsInline && (
-                  <div className='hidden md:flex px-4 py-1.5 text-xs justify-end'>
+                  <div className='flex px-4 py-1.5 text-xs justify-end'>
                     {recipeActions}
                   </div>
                 )}
