@@ -202,7 +202,8 @@ export default function BrowseView() {
 
   const listRef = useRef<HTMLDivElement | null>(null)
   const autoSelectedRef = useRef(false)
-  const isSmall = useMediaQuery('(max-width: 768px)')
+  // Below Tailwind's md (768px), so it agrees with the md: classes
+  const isSmall = useMediaQuery('(max-width: 767px)')
 
   useEffect(() => {
     if (
@@ -572,6 +573,16 @@ export default function BrowseView() {
     </div>
   )
 
+  // The count follows the debounced search, so the wording does too
+  const searching = !!debouncedQuery.trim()
+  const matchVerb = total === 1 ? 'matches' : 'match'
+  const matchesPhrase =
+    recipeLabels.length > 0
+      ? ` ${matchVerb} ${searching ? 'your search and ' : ''}these filters:`
+      : searching
+        ? ` ${matchVerb} your search`
+        : ' (no filters)'
+
   // Whether the count line (or the pins-only summary) is already showing
   // Edit/Delete, so the fallback row below it isn't needed
   const graphActionsInline = isMatches
@@ -698,11 +709,7 @@ export default function BrowseView() {
                             <span className='mr-1.5'>
                               {total.toLocaleString()}{' '}
                               {total === 1 ? 'paper' : 'papers'}
-                              {recipeLabels.length > 0
-                                ? total === 1
-                                  ? ' matches these filters:'
-                                  : ' match these filters:'
-                                : ' (no filters)'}
+                              {matchesPhrase}
                             </span>
                             {recipeLabels.map((label) => (
                               <span
