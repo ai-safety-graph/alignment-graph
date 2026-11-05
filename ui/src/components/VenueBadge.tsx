@@ -14,9 +14,9 @@ export default function VenueBadge({
   return (
     <span
       title={vn ? `Peer-reviewed: ${vn}` : 'Peer-reviewed'}
-      className='inline-flex min-w-0 max-w-full items-center gap-1 px-1.5 py-px rounded border border-neutral-600 text-[11px] leading-4 text-neutral-200'
+      className='inline-flex min-w-0 max-w-full items-center gap-1 text-[11px] leading-4 text-neutral-200'
     >
-      <BadgeCheck size={11} className='shrink-0 text-[#4ea8de]' aria-hidden />
+      <BadgeCheck size={11} className='shrink-0 text-purple-400' aria-hidden />
       <span className='truncate'>{label}</span>
     </span>
   )

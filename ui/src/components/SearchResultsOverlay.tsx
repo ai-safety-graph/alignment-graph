@@ -53,6 +53,11 @@ export default function SearchResultsOverlay({
             <li key={n.aid} className='py-2 border-b border-neutral-800'>
               <div className='flex items-start gap-2'>
                 <div className='flex-1 min-w-0'>
+                  {n.pr && (
+                    <div className='mb-1 flex'>
+                      <VenueBadge pr={n.pr} vn={n.vn} />
+                    </div>
+                  )}
                   <a
                     href='#'
                     onClick={(e) => {
@@ -69,7 +74,6 @@ export default function SearchResultsOverlay({
                   </div>
                   <div className='text-[12px] text-neutral-400 flex flex-wrap items-center gap-x-2 gap-y-1 mb-0.5'>
                     <TagChips tags={n.tags} max={2} />
-                    <VenueBadge pr={n.pr} vn={n.vn} />
                   </div>
                 </div>
                 {(onAddToSubgraph || onRemoveFromSubgraph) && (
