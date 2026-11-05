@@ -18,7 +18,6 @@ import {
   Trash,
   Trash2,
   Search,
-  Library,
   Sparkles,
   Plus,
   Pencil,
@@ -74,6 +73,8 @@ import GraphPager from './GraphPager'
 import GenerateGraphModal from './GenerateGraphModal'
 import LoadingIndicator from './LoadingIndicator'
 import LatestBatchBadge from './LatestBatchBadge'
+import { HeaderLogo, ViewSwitch } from './HeaderNav'
+import { NewGraphButton, NewGraphMenuItem } from './NewGraph'
 import { track } from '../lib/analytics'
 import { useCapabilities } from '../hooks/useCapabilities'
 
@@ -195,7 +196,7 @@ export default function ArxivGraph() {
     listSavedGraphs().sort(byUpdatedDesc),
   )
   // Returning visitors land on the graph last opened in either view (else the
-  // most recently updated one); first visitors get the Generate graph modal.
+  // most recently updated one); first visitors get the new-graph modal.
   const [source, setSource] = useState<GraphSource>(() => {
     const active = getActiveGraphId()
     const graph = savedGraphs.find((g) => g.id === active) ?? savedGraphs[0]
@@ -207,9 +208,9 @@ export default function ArxivGraph() {
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   // Where the user asked to go while a draft is open (a saved graph or
   // another route), waiting on "discard the draft?"
-  const [pendingExit, setPendingExit] = useState<
-    SavedGraph | ExitRoute | null
-  >(null)
+  const [pendingExit, setPendingExit] = useState<SavedGraph | ExitRoute | null>(
+    null,
+  )
   const navigate = useNavigate()
   const activeSavedGraph = source.kind === 'saved' ? source.graph : null
   const setActiveSavedGraph = (graph: SavedGraph) =>
@@ -400,7 +401,8 @@ export default function ArxivGraph() {
       }
       if (layoutMemory.key !== layoutKeyRef.current) return node
       const live = layoutMemory.live.get(n.aid)
-      if (live) return { ...node, x: live.x, y: live.y, fx: live.fx, fy: live.fy }
+      if (live)
+        return { ...node, x: live.x, y: live.y, fx: live.fx, fy: live.fy }
       const left = layoutMemory.left.get(n.aid)
       if (!left) return node
       const overlaps = (o: { x: number; y: number }) =>
@@ -1018,7 +1020,8 @@ export default function ArxivGraph() {
     }
     track('graph_save', { kind: target ? 'update' : 'new' })
     const pins = queryClient.getQueryData(graphPinsKey('draft', source.pinned))
-    if (pins) queryClient.setQueryData(graphPinsKey(saved.id, saved.pinned), pins)
+    if (pins)
+      queryClient.setQueryData(graphPinsKey(saved.id, saved.pinned), pins)
     setSavedGraphs((prev) => [saved, ...prev.filter((s) => s.id !== saved.id)])
     showSource({ kind: 'saved', graph: saved })
     return null
@@ -1222,8 +1225,8 @@ export default function ArxivGraph() {
             &ldquo;{activeSavedGraph?.name}&rdquo; is empty
           </p>
           <p className='text-sm text-neutral-500 max-w-sm'>
-            Search for papers above and use &ldquo;Pin to graph&rdquo; to
-            start building it out.
+            Search for papers above and use &ldquo;Pin to graph&rdquo; to start
+            building it out.
           </p>
         </div>
       )}
@@ -1247,7 +1250,7 @@ export default function ArxivGraph() {
             className='mt-1 flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#4ea8de] text-sm font-medium text-neutral-950 hover:bg-[#6bb8e6] cursor-pointer'
           >
             <Plus size={15} />
-            Generate graph
+            New graph
           </button>
         </div>
       )}
@@ -1414,127 +1417,123 @@ export default function ArxivGraph() {
           at narrower breakpoints. It stays one row tall, which the overlays'
           top offsets rely on. */}
       <div className='fixed top-3 inset-x-4 z-10 flex items-center gap-3 pointer-events-none'>
-        {/* Browse link + generate button + saved-graph controls */}
-        <div className='shrink-0 flex items-center gap-2 pointer-events-auto'>
-          <Link
-            to='/browse'
-            aria-label='Browse papers'
-            onClick={confirmLeaveTo('/browse')}
-            className='flex items-center gap-1.5 px-2.5 py-1 rounded-md cursor-pointer bg-neutral-950 border border-neutral-700 hover:border-neutral-500 text-[13px] text-neutral-300 hover:text-white transition-colors'
-          >
-            <Library size={14} />
-            Browse
-          </Link>
+        {/* Logo, then the graph picker and its controls. The two sides split
+            the leftover width equally (but never below their content), which
+            keeps the search centred; they stay click-through outside their
+            controls so the canvas behind still gets clicks. */}
+        <div className='flex-1 basis-0 min-w-fit pr-4 flex'>
+          <div className='flex items-center gap-2 pointer-events-auto'>
+            <HeaderLogo current='graph' />
+            {/* A little more room after the logo than between controls */}
+            <div aria-hidden className='w-1' />
 
-          <button
-            type='button'
-            onClick={() => setModal(NEW_GRAPH_MODAL)}
-            aria-label='Generate graph'
-            className='flex items-center gap-1.5 px-2.5 py-1 rounded-md cursor-pointer bg-[#4ea8de] border border-[#4ea8de] text-[13px] font-medium text-neutral-950 hover:bg-[#6bb8e6] transition-colors'
-          >
-            <Plus size={14} />
-            <span className='hidden lg:inline'>Generate graph</span>
-          </button>
-
-          <Dropdown
-            className='max-w-[140px] lg:max-w-[240px]'
-            label={
-              source.kind === 'draft'
-                ? 'Unsaved graph'
-                : (activeSavedGraph?.name ??
-                  (savedGraphs.length ? 'Saved graphs' : 'No saved graphs'))
-            }
-          >
-            {savedGraphs.map((g) => (
-              <button
-                key={g.id}
-                type='button'
-                onClick={() => openSavedGraph(g)}
-                title={g.name}
-                className={`w-full truncate text-left px-4 py-2 text-sm hover:bg-[#333333] cursor-pointer transition-colors ${
-                  activeSavedGraph?.id === g.id
-                    ? 'text-[#4ea8de]'
-                    : 'text-neutral-300'
-                }`}
-              >
-                {g.name}
-              </button>
-            ))}
-          </Dropdown>
-
-          {pendingExit && (
-            <div className='flex items-center gap-1.5 text-[13px] text-neutral-300 whitespace-nowrap'>
-              Discard unsaved graph?
-              {/* Keep first, as with Delete below */}
-              <button
-                type='button'
-                onClick={() => setPendingExit(null)}
-                className='px-2 py-0.5 rounded-md border border-neutral-700 hover:border-neutral-500 hover:text-white cursor-pointer'
-              >
-                Keep
-              </button>
-              <button
-                type='button'
-                onClick={confirmExit}
-                title={
-                  typeof pendingExit === 'string'
-                    ? EXIT_ROUTES[pendingExit]
-                    : `Discard it and open “${pendingExit.name}”`
+            {/* Picking a graph and starting a new one share the dropdown;
+              until there's something to pick, a button stands in */}
+            {savedGraphs.length === 0 && source.kind !== 'draft' ? (
+              <NewGraphButton onClick={() => setModal(NEW_GRAPH_MODAL)} />
+            ) : (
+              <Dropdown
+                className='max-w-[140px] lg:max-w-[240px]'
+                label={
+                  source.kind === 'draft'
+                    ? 'Unsaved graph'
+                    : (activeSavedGraph?.name ??
+                      (savedGraphs.length ? 'Saved graphs' : 'No saved graphs'))
                 }
-                className='px-2 py-0.5 rounded-md border border-red-500/60 text-red-400 hover:text-red-300 hover:border-red-400 cursor-pointer'
               >
-                Discard
-              </button>
-            </div>
-          )}
+                {savedGraphs.map((g) => (
+                  <button
+                    key={g.id}
+                    type='button'
+                    onClick={() => openSavedGraph(g)}
+                    title={g.name}
+                    className={`w-full truncate text-left px-4 py-2 text-sm hover:bg-[#333333] cursor-pointer transition-colors ${
+                      activeSavedGraph?.id === g.id
+                        ? 'text-[#4ea8de]'
+                        : 'text-neutral-300'
+                    }`}
+                  >
+                    {g.name}
+                  </button>
+                ))}
+                <NewGraphMenuItem onClick={() => setModal(NEW_GRAPH_MODAL)} />
+              </Dropdown>
+            )}
 
-          {activeSavedGraph &&
-            (confirmingDelete ? (
+            {pendingExit && (
               <div className='flex items-center gap-1.5 text-[13px] text-neutral-300 whitespace-nowrap'>
-                Delete?
-                {/* Keep comes first so it lands under the cursor that just
-                    clicked the trash icon, making a double click harmless. */}
+                Discard unsaved graph?
+                {/* Keep first, as with Delete below */}
                 <button
                   type='button'
-                  onClick={() => setConfirmingDelete(false)}
+                  onClick={() => setPendingExit(null)}
                   className='px-2 py-0.5 rounded-md border border-neutral-700 hover:border-neutral-500 hover:text-white cursor-pointer'
                 >
                   Keep
                 </button>
                 <button
                   type='button'
-                  onClick={deleteActiveSavedGraph}
+                  onClick={confirmExit}
+                  title={
+                    typeof pendingExit === 'string'
+                      ? EXIT_ROUTES[pendingExit]
+                      : `Discard it and open “${pendingExit.name}”`
+                  }
                   className='px-2 py-0.5 rounded-md border border-red-500/60 text-red-400 hover:text-red-300 hover:border-red-400 cursor-pointer'
                 >
-                  Delete
+                  Discard
                 </button>
               </div>
-            ) : (
-              <>
-                <button
-                  type='button'
-                  onClick={openEdit}
-                  aria-label={`Edit “${activeSavedGraph.name}”`}
-                  title='Edit graph filters'
-                  className='p-1.5 rounded-md bg-neutral-950 border border-neutral-700 text-neutral-300 hover:text-white hover:border-neutral-500 cursor-pointer transition-colors'
-                >
-                  <Pencil size={14} />
-                </button>
-                <button
-                  type='button'
-                  onClick={() => setConfirmingDelete(true)}
-                  aria-label={`Delete “${activeSavedGraph.name}”`}
-                  title='Delete graph'
-                  className='p-1.5 rounded-md bg-neutral-950 border border-neutral-700 text-neutral-300 hover:text-red-400 hover:border-neutral-500 cursor-pointer transition-colors'
-                >
-                  <Trash2 size={14} />
-                </button>
-              </>
-            ))}
+            )}
+
+            {activeSavedGraph &&
+              (confirmingDelete ? (
+                <div className='flex items-center gap-1.5 text-[13px] text-neutral-300 whitespace-nowrap'>
+                  Delete?
+                  {/* Keep comes first so it lands under the cursor that just
+                    clicked the trash icon, making a double click harmless. */}
+                  <button
+                    type='button'
+                    onClick={() => setConfirmingDelete(false)}
+                    className='px-2 py-0.5 rounded-md border border-neutral-700 hover:border-neutral-500 hover:text-white cursor-pointer'
+                  >
+                    Keep
+                  </button>
+                  <button
+                    type='button'
+                    onClick={deleteActiveSavedGraph}
+                    className='px-2 py-0.5 rounded-md border border-red-500/60 text-red-400 hover:text-red-300 hover:border-red-400 cursor-pointer'
+                  >
+                    Delete
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <button
+                    type='button'
+                    onClick={openEdit}
+                    aria-label={`Edit “${activeSavedGraph.name}”`}
+                    title='Edit graph filters'
+                    className='p-1.5 rounded-md bg-neutral-950 border border-neutral-700 text-neutral-300 hover:text-white hover:border-neutral-500 cursor-pointer transition-colors'
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button
+                    type='button'
+                    onClick={() => setConfirmingDelete(true)}
+                    aria-label={`Delete “${activeSavedGraph.name}”`}
+                    title='Delete graph'
+                    className='p-1.5 rounded-md bg-neutral-950 border border-neutral-700 text-neutral-300 hover:text-red-400 hover:border-neutral-500 cursor-pointer transition-colors'
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </>
+              ))}
+          </div>
         </div>
 
         {/* Search bar */}
-        <div className='flex-1 min-w-0 flex justify-center'>
+        <div className='flex-[0_1_42rem] min-w-0 flex justify-center'>
           <div className='w-full min-w-0 flex items-center justify-center gap-2 pointer-events-auto'>
             <div className='flex-1 min-w-0 max-w-[550px] bg-[#2a2a2a] backdrop-blur-xs rounded-md'>
               <div className='flex items-center gap-2'>
@@ -1617,26 +1616,19 @@ export default function ArxivGraph() {
           </div>
         </div>
 
-        <div className='shrink-0 flex items-center gap-4 xl:gap-10 pointer-events-auto'>
-          <Link
-            to='/about'
-            onClick={confirmLeaveTo('/about')}
-            className='flex items-center gap-1.5 cursor-pointer text-[13px] text-neutral-300 hover:text-white underline underline-offset-2 transition-colors'
-          >
-            <Info size={14} />
-            About
-          </Link>
-          <LatestBatchBadge className='hidden lg:inline' />
-          <a
-            target='_blank'
-            href='https://github.com/ai-safety-graph/alignment-graph'
-          >
-            <img
-              src='/ag-logo.svg'
-              alt='Alignment Graph Logo'
-              className='h-[34px] w-auto opacity-50 saturate-70'
-            />
-          </a>
+        <div className='flex-1 basis-0 min-w-fit pl-4 flex justify-end'>
+          <div className='flex items-center gap-4 xl:gap-10 pointer-events-auto'>
+            <ViewSwitch current='graph' onLeave={confirmLeaveTo('/browse')} />
+            <Link
+              to='/about'
+              onClick={confirmLeaveTo('/about')}
+              className='flex items-center gap-1.5 cursor-pointer text-[13px] text-neutral-300 hover:text-white underline underline-offset-2 transition-colors'
+            >
+              <Info size={14} />
+              About
+            </Link>
+            <LatestBatchBadge className='hidden lg:inline' />
+          </div>
         </div>
       </div>
     </div>

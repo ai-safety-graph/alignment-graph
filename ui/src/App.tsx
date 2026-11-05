@@ -8,7 +8,9 @@ const BrowsePage = lazy(() => import('./components/BrowseView'))
 const AboutPage = lazy(() => import('./components/AboutView'))
 
 export default function App() {
-  const isSmall = useMediaQuery('(max-width: 768px)')
+  // Tailwind's md is width >= 48rem; the exact complement agrees with
+  // the md: classes at every width, fractional ones included
+  const isSmall = useMediaQuery('(width < 48rem)')
 
   if (isSmall === null) return <div className='h-screen bg-neutral-950' />
 
