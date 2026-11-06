@@ -11,6 +11,10 @@ import {
   Sparkles,
   SlidersHorizontal,
   Info,
+  Check,
+  Layers,
+  Library,
+  ListChecks,
 } from 'lucide-react'
 import BrowsePaperDetails from './BrowsePaperDetails'
 import MobilePaperDetails from './MobilePaperDetails'
@@ -58,6 +62,8 @@ export default function BrowseView() {
   // show as a summary row while collapsed.
   const [filterExpanded, setFilterExpanded] = useState(false)
   const [modal, setModal] = useState<'generate' | 'edit' | null>(null)
+  // Phones pick a graph (and edit or delete it) from a bottom sheet
+  const [graphSheetOpen, setGraphSheetOpen] = useState(false)
 
   const {
     subgraphs,
@@ -205,6 +211,9 @@ export default function BrowseView() {
   // Tailwind's md is width >= 48rem; the exact complement agrees with
   // the md: classes at every width, fractional ones included
   const isSmall = useMediaQuery('(width < 48rem)')
+  // The graph sheet is phone-only: widening the screen closes it, so it
+  // doesn't pop back up untapped if the screen narrows again
+  if (graphSheetOpen && isSmall === false) setGraphSheetOpen(false)
 
   useEffect(() => {
     if (
@@ -290,30 +299,6 @@ export default function BrowseView() {
   // A graph is edited or deleted from its own lists (Matches, Pinned), not
   // while browsing all papers to pin from
   const showGraphActions = !!selectedSubgraph && listMode !== 'all'
-
-  const editSubgraphButton = showGraphActions && (
-    <button
-      type='button'
-      onClick={() => setModal('edit')}
-      aria-label={`Edit “${selectedSubgraph.name}”`}
-      title='Edit graph filters'
-      className='shrink-0 p-1.5 rounded-md bg-neutral-950 border border-neutral-700 text-neutral-300 hover:text-white hover:border-neutral-500 cursor-pointer transition-colors'
-    >
-      <Pencil size={14} />
-    </button>
-  )
-
-  const deleteSubgraphButton = showGraphActions && (
-    <button
-      type='button'
-      onClick={() => setIsConfirmingDelete(true)}
-      aria-label={`Delete “${selectedSubgraph.name}”`}
-      title='Delete graph'
-      className='shrink-0 p-1.5 rounded-md bg-neutral-950 border border-neutral-700 text-neutral-300 hover:text-red-400 hover:border-neutral-500 cursor-pointer transition-colors'
-    >
-      <Trash2 size={14} />
-    </button>
-  )
 
   // Picking a graph and starting a new one share the dropdown. With no
   // graphs yet there's nothing to pick, so a New graph button stands in.
@@ -515,6 +500,149 @@ export default function BrowseView() {
     </div>
   )
 
+  // Phones keep the list modes and the graph in a bottom bar, as a native
+  // app would; the graph slot opens a sheet to switch, edit or delete
+  const bottomTabs = [
+    ['matches', 'Matches', ListChecks],
+    ['pinned', 'Pinned', Pin],
+    ['all', 'All papers', Library],
+  ] as const
+  const bottomBar = (
+    <nav
+      aria-label='Papers and graphs'
+      className='md:hidden fixed inset-x-0 bottom-0 z-10 flex items-stretch border-t border-neutral-800 bg-neutral-950 text-[11px]'
+    >
+      {selectedSubgraph && (
+        <div
+          role='tablist'
+          aria-label={`Papers in ${selectedSubgraph.name}`}
+          className='flex flex-[3] min-w-0'
+        >
+          {bottomTabs.map(([mode, label, Icon]) => (
+            <button
+              key={mode}
+              type='button'
+              role='tab'
+              aria-selected={listMode === mode}
+              onClick={() => setViewMode(mode)}
+              className={`flex-1 min-w-0 h-14 flex flex-col items-center justify-center gap-1 cursor-pointer transition-colors ${
+                listMode === mode
+                  ? 'text-[#4ea8de]'
+                  : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              <Icon size={18} />
+              <span className='max-w-full truncate'>
+                {label}
+                {/* No count until something's pinned */}
+                {mode === 'pinned' && !!pinnedCount && (
+                  <span className='tabular-nums'> {pinnedCount}</span>
+                )}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+      {subgraphs.length > 0 ? (
+        <button
+          type='button'
+          aria-haspopup='dialog'
+          aria-expanded={graphSheetOpen}
+          aria-label={`Graph: ${selectedSubgraph?.name ?? 'All papers'}`}
+          onClick={() => setGraphSheetOpen(true)}
+          className={`flex-1 min-w-0 h-14 px-2 flex flex-col items-center justify-center gap-1 cursor-pointer text-neutral-300 hover:text-white ${selectedSubgraph ? 'border-l border-neutral-800' : ''}`}
+        >
+          <Layers size={18} />
+          <span className='max-w-full truncate'>
+            {selectedSubgraph?.name ?? 'All papers'}
+          </span>
+        </button>
+      ) : (
+        <button
+          type='button'
+          onClick={openNewGraph}
+          className='flex-1 h-14 flex flex-col items-center justify-center gap-1 cursor-pointer text-[#4ea8de] hover:text-[#6bb8e6]'
+        >
+          <Plus size={18} />
+          New graph
+        </button>
+      )}
+    </nav>
+  )
+
+  const closeSheetThen = (action: () => void) => () => {
+    setGraphSheetOpen(false)
+    action()
+  }
+  const sheetRowClass =
+    'flex w-full items-center gap-3 px-5 py-3 text-left text-[15px] cursor-pointer hover:bg-neutral-900'
+  const graphSheet = graphSheetOpen && isSmall && (
+    <div className='md:hidden fixed inset-0 z-30 bg-black/70 flex items-end'>
+      <button
+        aria-label='Close graphs'
+        onClick={() => setGraphSheetOpen(false)}
+        className='absolute inset-0'
+      />
+      <div
+        role='dialog'
+        aria-label='Graphs'
+        className='relative z-10 w-full max-h-[80dvh] overflow-y-auto overscroll-contain rounded-t-2xl border-t border-[#333333] bg-neutral-950 shadow-2xl'
+      >
+        <div className='mx-auto mt-2 mb-1 h-1 w-10 rounded-full bg-neutral-700' />
+        {[{ id: null, name: 'All papers' }, ...subgraphs].map((subgraph) => {
+          const current = selectedSubgraphId === subgraph.id
+          return (
+            <button
+              key={subgraph.id ?? ''}
+              type='button'
+              aria-current={current || undefined}
+              onClick={closeSheetThen(() => setSelectedSubgraphId(subgraph.id))}
+              className={`${sheetRowClass} ${current ? 'text-[#4ea8de]' : 'text-neutral-200'}`}
+            >
+              <Check
+                size={16}
+                className={`shrink-0 ${current ? '' : 'invisible'}`}
+              />
+              <span className='min-w-0 truncate'>{subgraph.name}</span>
+            </button>
+          )
+        })}
+        <button
+          type='button'
+          onClick={closeSheetThen(openNewGraph)}
+          className={`${sheetRowClass} text-[#4ea8de]`}
+        >
+          <Plus size={16} className='shrink-0' />
+          New graph
+        </button>
+        {selectedSubgraph && (
+          <div className='mt-1 border-t border-neutral-800 py-1'>
+            <button
+              type='button'
+              onClick={closeSheetThen(() => setModal('edit'))}
+              className={`${sheetRowClass} text-neutral-200`}
+            >
+              <Pencil size={16} className='shrink-0' />
+              <span className='min-w-0 truncate'>
+                {recipe ? 'Edit filters' : 'Add filters'}
+              </span>
+            </button>
+            <button
+              type='button'
+              onClick={closeSheetThen(() => setIsConfirmingDelete(true))}
+              className={`${sheetRowClass} text-red-400`}
+            >
+              <Trash2 size={16} className='shrink-0' />
+              <span className='min-w-0 truncate'>
+                Delete “{selectedSubgraph.name}”
+              </span>
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+
   // The dropdown above already names the graph, so this row is just the
   // list-mode tabs (or a plain label) and the Filters toggle.
   const subgraphTitle = (
@@ -559,7 +687,7 @@ export default function BrowseView() {
     </button>
   )
 
-  // Desktop only: mobile has Edit and Delete buttons in its status row
+  // Desktop only: phones edit and delete from the graph sheet
   const recipeActions = (
     <div className='shrink-0 flex items-center gap-3'>
       {editRecipeButton}
@@ -635,31 +763,21 @@ export default function BrowseView() {
             ref={listRef}
             className='flex-1 overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent [scrollbar-gutter:stable_both-edges] md:[scrollbar-gutter:stable] md:[direction:rtl]'
           >
-            <div className='md:[direction:ltr] md:px-8'>
+            <div className='md:[direction:ltr] md:px-8 pb-14 md:pb-0'>
               <div className='md:hidden relative px-4 pt-4 pb-2 flex flex-col items-center gap-1'>
                 {listMode === 'all' && (
-                  <div className='absolute top-4 left-4 flex items-center h-[34px]'>
+                  <div className='absolute top-4 left-4 flex items-center h-[30px]'>
                     <LatestBatchBadge />
                   </div>
                 )}
-                <div className='absolute top-4 right-4 flex items-center h-[34px]'>
+                <div className='absolute top-4 right-4 flex items-center h-[30px]'>
                   {aboutLink}
                 </div>
-                <a
-                  target='_blank'
-                  href='https://github.com/ai-safety-graph/alignment-graph'
-                  className='flex items-center justify-center'
-                >
-                  <img
-                    src='/ag-logo.svg'
-                    alt='Alignment Graph Logo'
-                    className='h-[34px] w-auto opacity-50 saturate-70'
-                  />
-                </a>
+                <HeaderLogo current='list' />
               </div>
 
               {/* One sticky block for both layouts' controls and the count
-                  line, so a graph's filter chips and Edit/Delete stay in view
+                  line, so a graph's filter chips (and Edit/Delete on desktop) stay in view
                   while the list scrolls. On desktop it stays below the top
                   bar (z-20) so the graph picker's menu draws over it. */}
               <div className='sticky top-0 z-20 md:z-10 bg-neutral-950'>
@@ -669,26 +787,14 @@ export default function BrowseView() {
                   {filterBar}
                 </div>
 
+                {/* Phones: search with the Filters toggle, then the count
+                    line; list modes and the graph live in the bottom bar */}
                 <div className='md:hidden'>
-                  <div className='p-3 flex items-center gap-2'>
+                  <div className='px-4 pt-2 pb-1 flex items-center gap-2'>
                     {isBrowsing ? searchControls : subgraphSearchControls}
+                    {filterBar && filterToggleButton}
                   </div>
-                  <div className='px-3 pb-2 flex items-center gap-2 text-sm text-neutral-400'>
-                    <div className='flex-1 min-w-0 flex items-center'>
-                      {renderGraphPicker('max-w-full')}
-                    </div>
-                    <div className='ml-auto flex items-center gap-2'>
-                      {filterBar && filterToggleButton}
-                      {editSubgraphButton}
-                      {deleteSubgraphButton}
-                    </div>
-                  </div>
-                  {listModeTabs && (
-                    <div className='px-3 pb-2 flex'>{listModeTabs}</div>
-                  )}
-                  {recipeSummary && (
-                    <div className='-mx-1 pb-1'>{recipeSummary}</div>
-                  )}
+                  {recipeSummary}
                 </div>
 
                 {isBrowsing &&
@@ -700,17 +806,29 @@ export default function BrowseView() {
                     >
                       {isMatches ? (
                         <>
-                          {/* Badges flow inline so a long recipe clamps to
-                              two lines with an ellipsis; the full list is in
-                              the tooltip */}
+                          {/* Badges flow inline so a long recipe clamps with
+                              an ellipsis (one line on phones, two on
+                              desktop); the full list is in the tooltip and,
+                              on phones, the Edit filters modal */}
                           <p
-                            className='min-w-0 line-clamp-2'
+                            className='min-w-0 line-clamp-1 md:line-clamp-2'
                             title={recipeLabels.join(', ') || undefined}
                           >
                             <span className='mr-1.5'>
                               {total.toLocaleString()}{' '}
                               {total === 1 ? 'paper' : 'papers'}
-                              {matchesPhrase}
+                              {/* Phones get one line, so with filters to show
+                                  the chips follow a bare colon */}
+                              {recipeLabels.length > 0 ? (
+                                <>
+                                  <span className='md:hidden'>:</span>
+                                  <span className='hidden md:inline'>
+                                    {matchesPhrase}
+                                  </span>
+                                </>
+                              ) : (
+                                matchesPhrase
+                              )}
                             </span>
                             {recipeLabels.map((label) => (
                               <span
@@ -948,6 +1066,9 @@ export default function BrowseView() {
           </div>
         </div>
       </div>
+
+      {bottomBar}
+      {graphSheet}
 
       {filterBar && filterExpanded && isSmall && (
         <div className='md:hidden fixed inset-0 z-30 bg-black/70 flex items-center justify-center p-3'>
