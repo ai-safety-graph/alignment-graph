@@ -1329,6 +1329,20 @@ export default function ArxivGraph() {
                 </button>
               </span>
             )}
+            {/* Starting another graph doesn't act on this one, so it sits
+                apart from Edit/Delete */}
+            <span
+              aria-hidden
+              className='shrink-0 h-4 border-l border-neutral-700'
+            />
+            <button
+              type='button'
+              onClick={() => setModal(NEW_GRAPH_MODAL)}
+              className='shrink-0 flex items-center gap-1 whitespace-nowrap text-xs text-[#4ea8de] hover:text-[#6bb8e6] underline underline-offset-2 cursor-pointer'
+            >
+              <Plus size={11} />
+              New graph
+            </button>
           </div>
         </div>
       )}
