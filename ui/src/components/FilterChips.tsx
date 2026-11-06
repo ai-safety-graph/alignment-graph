@@ -1,5 +1,6 @@
 // A graph's recipe as small read-only chips on one line. A long recipe ends
-// in an ellipsis; the full list is in the tooltip. Chips are spaced from the
+// in an ellipsis, as does a single chip wider than the space; the full list
+// is in the tooltip. Chips are spaced from the
 // left, as a trailing margin on the last one would wrap it a few px early.
 export default function FilterChips({
   labels,
@@ -17,7 +18,7 @@ export default function FilterChips({
       {labels.map((label) => (
         <span
           key={label}
-          className='inline-block px-1.5 leading-4 rounded-full border border-neutral-700 whitespace-nowrap'
+          className='inline-block max-w-full truncate align-bottom px-1.5 leading-4 rounded-full border border-neutral-700'
         >
           {label}
         </span>
