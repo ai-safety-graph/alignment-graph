@@ -28,12 +28,18 @@ const SWATCHES: { color: string; label: string; ring?: string }[] = [
 
 // Explains the node colours and what position means. Starts expanded; a
 // collapse is remembered across visits.
-export default function GraphLegend() {
+export default function GraphLegend({
+  onCollapsedChange,
+}: {
+  // Lets the graph view keep its bottom bar clear of the expanded card
+  onCollapsedChange?: (collapsed: boolean) => void
+} = {}) {
   const [collapsed, setCollapsed] = useState(getLegendCollapsed)
 
   const toggle = () => {
     setLegendCollapsed(!collapsed)
     setCollapsed(!collapsed)
+    onCollapsedChange?.(!collapsed)
   }
 
   if (collapsed)

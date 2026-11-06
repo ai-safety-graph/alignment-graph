@@ -4,15 +4,18 @@
 // left, as a trailing margin on the last one would wrap it a few px early.
 export default function FilterChips({
   labels,
+  title = labels.join(', '),
   className = '',
 }: {
   labels: string[]
+  // Defaults to the labels; a summary passes the full recipe
+  title?: string
   className?: string
 }) {
   if (labels.length === 0) return null
   return (
     <span
-      title={labels.join(', ')}
+      title={title}
       className={`min-w-0 line-clamp-1 text-xs text-neutral-500 [&>span+span]:ml-1.5 ${className}`}
     >
       {labels.map((label) => (

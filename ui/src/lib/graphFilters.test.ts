@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { defaultGraphName, EMPTY_FILTERS, toRangeParams } from './graphFilters'
+import {
+  defaultGraphName,
+  EMPTY_FILTERS,
+  filterSummary,
+  toRangeParams,
+} from './graphFilters'
 
 describe('toRangeParams', () => {
   it('omits `from` for any-time and passes tags/domains through', () => {
@@ -47,5 +52,25 @@ describe('defaultGraphName', () => {
     )
     expect(name).toHaveLength(20)
     expect(name.endsWith('…')).toBe(true)
+  })
+})
+
+describe('filterSummary', () => {
+  it('lists peer review, the date window, then a topic count', () => {
+    expect(
+      filterSummary({
+        tags: ['rlhf', 'interpretability'],
+        domains: ['gov'],
+        datePreset: '1w',
+        peerReviewed: true,
+      }),
+    ).toEqual(['Peer-reviewed', 'Past week', '2 topics'])
+  })
+
+  it('says "1 topic" and leaves out filters that are not set', () => {
+    expect(
+      filterSummary({ tags: ['rlhf'], domains: [], datePreset: 'all' }),
+    ).toEqual(['1 topic'])
+    expect(filterSummary(EMPTY_FILTERS)).toEqual([])
   })
 })

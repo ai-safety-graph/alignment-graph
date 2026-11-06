@@ -16,6 +16,7 @@ export default function DraftGraphBar({
   defaultName,
   basedOnName,
   chips,
+  chipsTitle,
   onSave,
   onUpdate,
   onEdit,
@@ -28,8 +29,9 @@ export default function DraftGraphBar({
   defaultName: string
   // Name of the saved graph this draft was edited from, if any
   basedOnName?: string
-  // The draft's recipe as chip labels
+  // The draft's recipe in short (filterSummary), and in full for the tooltip
   chips: string[]
+  chipsTitle: string
   // Returns an error message when the graph can't be saved
   onSave: (name: string) => string | null
   onUpdate: () => string | null
@@ -96,7 +98,11 @@ export default function DraftGraphBar({
             {/* The picker already says it's unsaved, so the bar leads with
                 the count and the recipe */}
             {pager}
-            <FilterChips labels={chips} className='grow basis-0 min-w-28' />
+            <FilterChips
+              labels={chips}
+              title={chipsTitle}
+              className='grow basis-0 min-w-28'
+            />
             {basedOnName ? (
               <>
                 <button

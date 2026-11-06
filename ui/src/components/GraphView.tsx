@@ -50,6 +50,7 @@ import {
   createSavedGraph,
   deleteSavedGraph,
   getActiveGraphId,
+  getLegendCollapsed,
   listSavedGraphs,
   MAX_GRAPH_NAME_LENGTH,
   MAX_PINNED,
@@ -63,6 +64,7 @@ import {
   defaultGraphName,
   EMPTY_FILTERS,
   filterLabels,
+  filterSummary,
 } from '../lib/graphFilters'
 import type { GraphFilters } from '../lib/graphFilters'
 import { GRAPH_PAGE_SIZE, pageLabel } from '../lib/graphContent'
@@ -210,6 +212,8 @@ export default function ArxivGraph() {
     savedGraphs.length ? null : NEW_GRAPH_MODAL,
   )
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  // Mirrors GraphLegend's own state, to keep the bottom bar clear of it
+  const [legendCollapsed, setLegendCollapsed] = useState(getLegendCollapsed)
   // Where the user asked to go while a draft is open (a saved graph or
   // another route), waiting on "discard the draft?"
   const [pendingExit, setPendingExit] = useState<SavedGraph | ExitRoute | null>(
@@ -1147,12 +1151,18 @@ export default function ArxivGraph() {
   const graphName = activeSavedGraph?.name ?? 'Unsaved graph'
 
   // The bottom bar centres in the space the side overlays leave: the Legend
-  // button or the search results column (360px at left-4) on the left, and
+  // (its button, or the 280px card while expanded) or the search results
+  // column (360px at left-4, which holds the Legend too) on the left, and
   // the paper details panel (440px at right-4, GraphPaperDetails) while one
   // is open. When both are open on a narrow screen there's no room left, and
   // the overlays draw over it.
   const showSearchResults = !!query && (searchResults.length > 0 || isSearching)
-  const bottomBarInset = `${showSearchResults ? 'left-[392px]' : 'left-28'} ${selected ? 'right-[472px]' : 'right-28'}`
+  const bottomBarLeft = showSearchResults
+    ? 'left-[392px]'
+    : legendCollapsed
+      ? 'left-28'
+      : 'left-[312px]'
+  const bottomBarInset = `${bottomBarLeft} ${selected ? 'right-[472px]' : 'right-28'}`
 
   // Rendering helpers
   const nodeCanvasObject = (
@@ -1281,7 +1291,8 @@ export default function ArxivGraph() {
                 MAX_GRAPH_NAME_LENGTH,
               )}
               basedOnName={source.basedOn?.name}
-              chips={filterLabels(source.filters)}
+              chips={filterSummary(source.filters)}
+              chipsTitle={filterLabels(source.filters).join(', ')}
               onSave={(name) => saveDraft(null, name)}
               onUpdate={() => saveDraft(source.basedOn)}
               onEdit={openEdit}
@@ -1300,7 +1311,8 @@ export default function ArxivGraph() {
             {pager}
             {source.graph.filters && (
               <FilterChips
-                labels={filterLabels(source.graph.filters)}
+                labels={filterSummary(source.graph.filters)}
+                title={filterLabels(source.graph.filters).join(', ')}
                 className='grow basis-0 min-w-28'
               />
             )}
@@ -1465,7 +1477,7 @@ export default function ArxivGraph() {
           </div>
         )}
         <div className='pointer-events-auto'>
-          <GraphLegend />
+          <GraphLegend onCollapsedChange={setLegendCollapsed} />
         </div>
       </div>
 
@@ -1542,7 +1554,7 @@ export default function ArxivGraph() {
             {pendingExit && (
               <div className='flex items-center gap-1.5 text-[13px] text-neutral-300 whitespace-nowrap'>
                 Discard unsaved graph?
-                {/* Keep first, as with Delete below */}
+                {/* Keep first, as with the bottom bar's Delete confirm */}
                 <button
                   type='button'
                   onClick={() => setPendingExit(null)}
