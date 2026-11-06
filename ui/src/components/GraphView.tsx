@@ -1146,6 +1146,14 @@ export default function ArxivGraph() {
   )
   const graphName = activeSavedGraph?.name ?? 'Unsaved graph'
 
+  // The bottom bar centres in the space the side overlays leave: the Legend
+  // button or the search results column (360px at left-4) on the left, and
+  // the paper details panel (440px at right-4, GraphPaperDetails) while one
+  // is open. When both are open on a narrow screen there's no room left, and
+  // the overlays draw over it.
+  const showSearchResults = !!query && (searchResults.length > 0 || isSearching)
+  const bottomBarInset = `${showSearchResults ? 'left-[392px]' : 'left-28'} ${selected ? 'right-[472px]' : 'right-28'}`
+
   // Rendering helpers
   const nodeCanvasObject = (
     node: NodeObject<NodeCompact>,
@@ -1259,8 +1267,10 @@ export default function ArxivGraph() {
         </div>
       )}
       {source.kind === 'draft' && data && (
-        <div className='fixed bottom-4 inset-x-0 z-10 flex justify-center pointer-events-none'>
-          <div className='pointer-events-auto'>
+        <div
+          className={`fixed bottom-4 ${bottomBarInset} z-10 flex justify-center pointer-events-none`}
+        >
+          <div className='pointer-events-auto min-w-0'>
             <DraftGraphBar
               // Remount per draft so a half-typed name doesn't carry over
               key={sourceKey}
@@ -1281,13 +1291,18 @@ export default function ArxivGraph() {
         </div>
       )}
       {source.kind === 'saved' && data && (
-        <div className='fixed bottom-4 inset-x-0 z-10 flex justify-center pointer-events-none'>
+        <div
+          className={`fixed bottom-4 ${bottomBarInset} z-10 flex justify-center pointer-events-none`}
+        >
           {/* The graph's count, its recipe and what can be done with it, as
               on the list view's count line */}
-          <div className='pointer-events-auto max-w-[min(56rem,calc(100vw-2rem))] flex items-center gap-3 px-3 py-1.5 rounded-lg border border-neutral-700 bg-neutral-950/95 shadow-lg'>
+          <div className='pointer-events-auto min-w-0 max-w-[56rem] flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-3 py-1.5 rounded-lg border border-neutral-700 bg-neutral-950/95 shadow-lg'>
             {pager}
             {source.graph.filters && (
-              <FilterChips labels={filterLabels(source.graph.filters)} />
+              <FilterChips
+                labels={filterLabels(source.graph.filters)}
+                className='grow basis-0 min-w-28'
+              />
             )}
             {confirmingDelete ? (
               <span className='shrink-0 flex items-center gap-1.5 text-[13px] text-neutral-300 whitespace-nowrap'>
@@ -1435,7 +1450,7 @@ export default function ArxivGraph() {
       {/* Overlays */}
       {/* Search results overlay flexes to fill the left column. */}
       <div className='fixed left-4 top-[72px] bottom-4 z-10 flex flex-col items-start justify-end gap-3 pointer-events-none'>
-        {query && (searchResults.length > 0 || isSearching) && (
+        {showSearchResults && (
           <div className='flex-1 min-h-0 w-[360px] pointer-events-auto'>
             <SearchResultsOverlay
               results={searchResults}

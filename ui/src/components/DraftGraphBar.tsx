@@ -56,7 +56,7 @@ export default function DraftGraphBar({
 
   return (
     <div className='flex flex-col-reverse items-center gap-1'>
-      <div className='max-w-[min(56rem,calc(100vw-2rem))] flex items-center gap-3 px-3 py-1.5 rounded-lg border border-neutral-700 bg-neutral-950/95 shadow-lg'>
+      <div className='max-w-[56rem] flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-3 py-1.5 rounded-lg border border-neutral-700 bg-neutral-950/95 shadow-lg'>
         {naming ? (
           <>
             <input
@@ -96,7 +96,7 @@ export default function DraftGraphBar({
             {/* The picker already says it's unsaved, so the bar leads with
                 the count and the recipe */}
             {pager}
-            <FilterChips labels={chips} />
+            <FilterChips labels={chips} className='grow basis-0 min-w-28' />
             {basedOnName ? (
               <>
                 <button
