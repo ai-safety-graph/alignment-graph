@@ -1301,7 +1301,9 @@ export default function ArxivGraph() {
           </div>
         </div>
       )}
-      {source.kind === 'saved' && data && (
+      {/* Shown even with nothing loaded (an emptied pins-only graph, a
+          failed fetch), so the graph can still be edited or deleted */}
+      {source.kind === 'saved' && (
         <div
           className={`fixed bottom-4 ${bottomBarInset} z-10 flex justify-center pointer-events-none`}
         >

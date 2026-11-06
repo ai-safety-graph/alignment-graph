@@ -28,12 +28,7 @@ import { HeaderLogo, ViewSwitch } from './HeaderNav'
 import { NewGraphButton, NewGraphMenuItem } from './NewGraph'
 import GenerateGraphModal from './GenerateGraphModal'
 import type { NodeCompact } from '../lib/types'
-import {
-  DATE_PRESETS,
-  presetToFromDate,
-  useServerFilters,
-} from '../hooks/useServerFilters'
-import { domainLabel } from '../lib/domain'
+import { presetToFromDate, useServerFilters } from '../hooks/useServerFilters'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { useRelatedPapers } from '../hooks/useRelatedPapers'
 import { useTagCatalog } from '../hooks/useTagCatalog'
@@ -43,7 +38,7 @@ import { usePaperDetail } from '../hooks/usePaperDetail'
 import { useNavHistory } from '../hooks/useNavHistory'
 import { useCapabilities } from '../hooks/useCapabilities'
 import { useSubgraphManager } from '../hooks/useSubgraphManager'
-import { EMPTY_FILTERS } from '../lib/graphFilters'
+import { EMPTY_FILTERS, filterLabels } from '../lib/graphFilters'
 import type { GraphFilters } from '../lib/graphFilters'
 
 export default function BrowseView() {
@@ -663,19 +658,7 @@ export default function BrowseView() {
   )
 
   // The graph's recipe, read-only: Edit changes it, as on the graph view
-  const recipeLabels = recipe
-    ? [
-        ...recipe.tags,
-        ...recipe.domains.map(domainLabel),
-        ...(recipe.datePreset === 'all'
-          ? []
-          : [
-              DATE_PRESETS.find((p) => p.value === recipe.datePreset)?.label ??
-                recipe.datePreset,
-            ]),
-        ...(recipe.peerReviewed ? ['Peer-reviewed'] : []),
-      ]
-    : []
+  const recipeLabels = recipe ? filterLabels(recipe) : []
   const editRecipeButton = (
     <button
       type='button'
