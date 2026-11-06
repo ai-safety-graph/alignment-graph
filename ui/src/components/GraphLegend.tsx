@@ -16,18 +16,30 @@ const SWATCHES: { color: string; label: string; ring?: string }[] = [
     ring: PINNED_RING_COLOR,
     label: 'Pinned papers',
   },
-  { color: SEARCH_GHOST_NODE_COLOR, label: 'Search results outside this graph' },
-  { color: RELATED_GHOST_NODE_COLOR, label: 'Papers related to the selected one' },
+  {
+    color: SEARCH_GHOST_NODE_COLOR,
+    label: 'Search results outside this graph',
+  },
+  {
+    color: RELATED_GHOST_NODE_COLOR,
+    label: 'Papers related to the selected one',
+  },
 ]
 
 // Explains the node colours and what position means. Starts expanded; a
 // collapse is remembered across visits.
-export default function GraphLegend() {
+export default function GraphLegend({
+  onCollapsedChange,
+}: {
+  // Lets the graph view keep its bottom bar clear of the expanded card
+  onCollapsedChange?: (collapsed: boolean) => void
+} = {}) {
   const [collapsed, setCollapsed] = useState(getLegendCollapsed)
 
   const toggle = () => {
     setLegendCollapsed(!collapsed)
     setCollapsed(!collapsed)
+    onCollapsedChange?.(!collapsed)
   }
 
   if (collapsed)
@@ -73,8 +85,8 @@ export default function GraphLegend() {
       </ul>
       <p className='leading-snug'>
         Papers are placed near others on similar topics, so closer means more
-        alike. Use Generate graph to choose which papers are shown; a broad
-        choice is shown 500 papers at a time, newest first.
+        alike. Use New graph to choose which papers are shown; a broad choice is
+        shown 500 papers at a time, newest first.
       </p>
     </div>
   )

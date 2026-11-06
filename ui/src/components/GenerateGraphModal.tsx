@@ -12,7 +12,6 @@ import { useTagCatalog } from '../hooks/useTagCatalog'
 import { GRAPH_PAGE_SIZE } from '../lib/graphContent'
 import { MAX_GRAPH_NAME_LENGTH } from '../lib/storage'
 
-
 export default function GenerateGraphModal({
   initialFilters,
   mode,
@@ -70,10 +69,7 @@ export default function GenerateGraphModal({
   const name = typedName ?? defaultGraphName(filters, MAX_GRAPH_NAME_LENGTH)
   const [saveError, setSaveError] = useState<string | null>(null)
   const canGenerate =
-    total !== undefined &&
-    total > 0 &&
-    !isPending &&
-    (!onSave || !!name.trim())
+    total !== undefined && total > 0 && !isPending && (!onSave || !!name.trim())
 
   const panelRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
@@ -147,7 +143,7 @@ export default function GenerateGraphModal({
           </button>
         </div>
 
-        <div className='min-h-0 overflow-auto px-0'>
+        <div className='min-h-0 overflow-auto overscroll-contain scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent'>
           <FilterBar
             tagEntries={tagEntries}
             availableDomains={availableDomains}
@@ -193,11 +189,11 @@ export default function GenerateGraphModal({
           >
             {total === 0 ? 'No papers match these filters' : countLabel}
           </span>
-          <div className='flex items-center gap-2'>
+          <div className='shrink-0 flex items-center gap-2'>
             <button
               type='button'
               onClick={onClose}
-              className='px-3 py-1 rounded-md border border-neutral-700 text-sm text-neutral-300 hover:text-white hover:border-neutral-500 cursor-pointer'
+              className='whitespace-nowrap px-3 py-1 rounded-md border border-neutral-700 text-sm text-neutral-300 hover:text-white hover:border-neutral-500 cursor-pointer'
             >
               Cancel
             </button>
@@ -205,7 +201,7 @@ export default function GenerateGraphModal({
               type='button'
               onClick={generate}
               disabled={!canGenerate}
-              className='px-3 py-1 rounded-md bg-[#4ea8de] text-sm font-medium text-neutral-950 hover:bg-[#6bb8e6] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
+              className='whitespace-nowrap px-3 py-1 rounded-md border border-[#4ea8de]/50 bg-[#4ea8de]/15 text-sm font-medium text-[#8cc8ee] hover:bg-[#4ea8de]/25 hover:border-[#4ea8de]/70 hover:text-[#b3dbf5] cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
             >
               {onSave
                 ? 'Create graph'

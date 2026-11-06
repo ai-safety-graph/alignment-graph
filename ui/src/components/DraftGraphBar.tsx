@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { MAX_GRAPH_NAME_LENGTH } from '../lib/storage'
+import FilterChips from './FilterChips'
 
 const BUTTON =
-  'px-2.5 py-1 rounded-md border border-neutral-700 text-[13px] text-neutral-300 hover:text-white hover:border-neutral-500 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
+  'shrink-0 whitespace-nowrap px-2.5 py-1 rounded-md border border-neutral-700 text-[13px] text-neutral-300 hover:text-white hover:border-neutral-500 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
 const PRIMARY_BUTTON =
-  'px-2.5 py-1 rounded-md bg-[#4ea8de] text-[13px] font-medium text-neutral-950 hover:bg-[#6bb8e6] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
+  'shrink-0 whitespace-nowrap px-2.5 py-1 rounded-md border border-[#4ea8de]/50 bg-[#4ea8de]/15 text-[13px] font-medium text-[#8cc8ee] hover:bg-[#4ea8de]/25 hover:border-[#4ea8de]/70 hover:text-[#b3dbf5] cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
 
 // Action bar for an unsaved, filter-generated graph: save it (as new, or over
 // the saved graph it was edited from), edit its filters, or discard it.
@@ -14,6 +15,8 @@ export default function DraftGraphBar({
   empty,
   defaultName,
   basedOnName,
+  chips,
+  chipsTitle,
   onSave,
   onUpdate,
   onEdit,
@@ -26,6 +29,9 @@ export default function DraftGraphBar({
   defaultName: string
   // Name of the saved graph this draft was edited from, if any
   basedOnName?: string
+  // The draft's recipe in short (filterSummary), and in full for the tooltip
+  chips: string[]
+  chipsTitle: string
   // Returns an error message when the graph can't be saved
   onSave: (name: string) => string | null
   onUpdate: () => string | null
@@ -52,7 +58,7 @@ export default function DraftGraphBar({
 
   return (
     <div className='flex flex-col-reverse items-center gap-1'>
-      <div className='flex items-center gap-3 px-3 py-1.5 rounded-lg border border-neutral-700 bg-neutral-950/95 shadow-lg'>
+      <div className='max-w-[56rem] flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-3 py-1.5 rounded-lg border border-neutral-700 bg-neutral-950/95 shadow-lg'>
         {naming ? (
           <>
             <input
@@ -89,10 +95,14 @@ export default function DraftGraphBar({
           </>
         ) : (
           <>
-            <span className='text-[13px] text-neutral-300 whitespace-nowrap'>
-              Unsaved graph
-            </span>
+            {/* The picker already says it's unsaved, so the bar leads with
+                the count and the recipe */}
             {pager}
+            <FilterChips
+              labels={chips}
+              title={chipsTitle}
+              className='grow basis-0 min-w-28'
+            />
             {basedOnName ? (
               <>
                 <button

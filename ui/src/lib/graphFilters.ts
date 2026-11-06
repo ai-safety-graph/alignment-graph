@@ -34,6 +34,38 @@ export function toRangeParams(f: GraphFilters): {
   }
 }
 
+// One label per filter in a recipe, for showing it as chips
+export function filterLabels(f: GraphFilters): string[] {
+  return [
+    ...f.tags,
+    ...f.domains.map(domainLabel),
+    ...(f.datePreset === 'all'
+      ? []
+      : [
+          DATE_PRESETS.find((p) => p.value === f.datePreset)?.label ??
+            f.datePreset,
+        ]),
+    ...(f.peerReviewed ? ['Peer-reviewed'] : []),
+  ]
+}
+
+// A short form of a recipe for the graph view's bottom bar: peer review and
+// the date window if set, then how many topics. filterLabels has the lot.
+export function filterSummary(f: GraphFilters): string[] {
+  const date =
+    f.datePreset === 'all'
+      ? null
+      : (DATE_PRESETS.find((p) => p.value === f.datePreset)?.label ??
+        f.datePreset)
+  return [
+    ...(f.peerReviewed ? ['Peer-reviewed'] : []),
+    ...(date ? [date] : []),
+    ...(f.tags.length > 0
+      ? [`${f.tags.length} ${f.tags.length === 1 ? 'topic' : 'topics'}`]
+      : []),
+  ]
+}
+
 // e.g. "Interpretability and explainability +1 · past month · peer-reviewed"
 export function defaultGraphName(f: GraphFilters, maxLength: number): string {
   const subject =
