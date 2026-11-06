@@ -34,6 +34,21 @@ export function toRangeParams(f: GraphFilters): {
   }
 }
 
+// One label per filter in a recipe, for showing it as chips
+export function filterLabels(f: GraphFilters): string[] {
+  return [
+    ...f.tags,
+    ...f.domains.map(domainLabel),
+    ...(f.datePreset === 'all'
+      ? []
+      : [
+          DATE_PRESETS.find((p) => p.value === f.datePreset)?.label ??
+            f.datePreset,
+        ]),
+    ...(f.peerReviewed ? ['Peer-reviewed'] : []),
+  ]
+}
+
 // e.g. "Interpretability and explainability +1 · past month · peer-reviewed"
 export function defaultGraphName(f: GraphFilters, maxLength: number): string {
   const subject =

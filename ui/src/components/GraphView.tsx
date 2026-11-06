@@ -59,7 +59,11 @@ import {
   withRemoved,
 } from '../lib/storage'
 import type { GraphMembership, SavedGraph } from '../lib/storage'
-import { defaultGraphName, EMPTY_FILTERS } from '../lib/graphFilters'
+import {
+  defaultGraphName,
+  EMPTY_FILTERS,
+  filterLabels,
+} from '../lib/graphFilters'
 import type { GraphFilters } from '../lib/graphFilters'
 import { GRAPH_PAGE_SIZE, pageLabel } from '../lib/graphContent'
 import { graphPinsKey, useGraphContent } from '../hooks/useGraphContent'
@@ -70,9 +74,9 @@ import SearchResultsOverlay from './SearchResultsOverlay'
 import Dropdown from './Dropdown'
 import DraftGraphBar from './DraftGraphBar'
 import GraphPager from './GraphPager'
+import FilterChips from './FilterChips'
 import GenerateGraphModal from './GenerateGraphModal'
 import LoadingIndicator from './LoadingIndicator'
-import LatestBatchBadge from './LatestBatchBadge'
 import { HeaderLogo, ViewSwitch } from './HeaderNav'
 import { NewGraphButton, NewGraphMenuItem } from './NewGraph'
 import { track } from '../lib/analytics'
@@ -1247,7 +1251,7 @@ export default function ArxivGraph() {
           <button
             type='button'
             onClick={() => setModal(NEW_GRAPH_MODAL)}
-            className='mt-1 flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#4ea8de] text-sm font-medium text-neutral-950 hover:bg-[#6bb8e6] cursor-pointer'
+            className='mt-1 flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-md border border-[#4ea8de]/50 bg-[#4ea8de]/15 text-sm font-medium text-[#8cc8ee] hover:bg-[#4ea8de]/25 hover:border-[#4ea8de]/70 hover:text-[#b3dbf5] cursor-pointer transition-colors'
           >
             <Plus size={15} />
             New graph
@@ -1267,6 +1271,7 @@ export default function ArxivGraph() {
                 MAX_GRAPH_NAME_LENGTH,
               )}
               basedOnName={source.basedOn?.name}
+              chips={filterLabels(source.filters)}
               onSave={(name) => saveDraft(null, name)}
               onUpdate={() => saveDraft(source.basedOn)}
               onEdit={openEdit}
@@ -1277,8 +1282,53 @@ export default function ArxivGraph() {
       )}
       {source.kind === 'saved' && data && (
         <div className='fixed bottom-4 inset-x-0 z-10 flex justify-center pointer-events-none'>
-          <div className='pointer-events-auto flex items-center px-3 py-1.5 rounded-lg border border-neutral-700 bg-neutral-950/95 shadow-lg'>
+          {/* The graph's count, its recipe and what can be done with it, as
+              on the list view's count line */}
+          <div className='pointer-events-auto max-w-[min(56rem,calc(100vw-2rem))] flex items-center gap-3 px-3 py-1.5 rounded-lg border border-neutral-700 bg-neutral-950/95 shadow-lg'>
             {pager}
+            {source.graph.filters && (
+              <FilterChips labels={filterLabels(source.graph.filters)} />
+            )}
+            {confirmingDelete ? (
+              <span className='shrink-0 flex items-center gap-1.5 text-[13px] text-neutral-300 whitespace-nowrap'>
+                Delete this graph?
+                {/* Keep comes first so it lands under the cursor that just
+                    clicked Delete, making a double click harmless */}
+                <button
+                  type='button'
+                  onClick={() => setConfirmingDelete(false)}
+                  className='px-2 py-0.5 rounded-md border border-neutral-700 hover:border-neutral-500 hover:text-white cursor-pointer'
+                >
+                  Keep
+                </button>
+                <button
+                  type='button'
+                  onClick={deleteActiveSavedGraph}
+                  className='px-2 py-0.5 rounded-md border border-red-500/60 text-red-400 hover:text-red-300 hover:border-red-400 cursor-pointer'
+                >
+                  Delete
+                </button>
+              </span>
+            ) : (
+              <span className='shrink-0 flex items-center gap-3 text-xs'>
+                <button
+                  type='button'
+                  onClick={openEdit}
+                  className='flex items-center gap-1 text-neutral-500 hover:text-white underline underline-offset-2 cursor-pointer'
+                >
+                  <Pencil size={11} />
+                  {source.graph.filters ? 'Edit' : 'Add filters'}
+                </button>
+                <button
+                  type='button'
+                  onClick={() => setConfirmingDelete(true)}
+                  className='flex items-center gap-1 text-neutral-500 hover:text-red-400 underline underline-offset-2 cursor-pointer'
+                >
+                  <Trash2 size={11} />
+                  Delete
+                </button>
+              </span>
+            )}
           </div>
         </div>
       )}
@@ -1485,50 +1535,6 @@ export default function ArxivGraph() {
                 </button>
               </div>
             )}
-
-            {activeSavedGraph &&
-              (confirmingDelete ? (
-                <div className='flex items-center gap-1.5 text-[13px] text-neutral-300 whitespace-nowrap'>
-                  Delete?
-                  {/* Keep comes first so it lands under the cursor that just
-                    clicked the trash icon, making a double click harmless. */}
-                  <button
-                    type='button'
-                    onClick={() => setConfirmingDelete(false)}
-                    className='px-2 py-0.5 rounded-md border border-neutral-700 hover:border-neutral-500 hover:text-white cursor-pointer'
-                  >
-                    Keep
-                  </button>
-                  <button
-                    type='button'
-                    onClick={deleteActiveSavedGraph}
-                    className='px-2 py-0.5 rounded-md border border-red-500/60 text-red-400 hover:text-red-300 hover:border-red-400 cursor-pointer'
-                  >
-                    Delete
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <button
-                    type='button'
-                    onClick={openEdit}
-                    aria-label={`Edit “${activeSavedGraph.name}”`}
-                    title='Edit graph filters'
-                    className='p-1.5 rounded-md bg-neutral-950 border border-neutral-700 text-neutral-300 hover:text-white hover:border-neutral-500 cursor-pointer transition-colors'
-                  >
-                    <Pencil size={14} />
-                  </button>
-                  <button
-                    type='button'
-                    onClick={() => setConfirmingDelete(true)}
-                    aria-label={`Delete “${activeSavedGraph.name}”`}
-                    title='Delete graph'
-                    className='p-1.5 rounded-md bg-neutral-950 border border-neutral-700 text-neutral-300 hover:text-red-400 hover:border-neutral-500 cursor-pointer transition-colors'
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </>
-              ))}
           </div>
         </div>
 
@@ -1627,7 +1633,6 @@ export default function ArxivGraph() {
               <Info size={14} />
               About
             </Link>
-            <LatestBatchBadge className='hidden lg:inline' />
           </div>
         </div>
       </div>
