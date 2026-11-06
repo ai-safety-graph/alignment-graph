@@ -147,7 +147,7 @@ export default function GenerateGraphModal({
           </button>
         </div>
 
-        <div className='min-h-0 overflow-auto px-0'>
+        <div className='min-h-0 overflow-auto overscroll-contain scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent'>
           <FilterBar
             tagEntries={tagEntries}
             availableDomains={availableDomains}
