@@ -211,6 +211,9 @@ export default function BrowseView() {
   // Tailwind's md is width >= 48rem; the exact complement agrees with
   // the md: classes at every width, fractional ones included
   const isSmall = useMediaQuery('(width < 48rem)')
+  // The graph sheet is phone-only: widening the screen closes it, so it
+  // doesn't pop back up untapped if the screen narrows again
+  if (graphSheetOpen && isSmall === false) setGraphSheetOpen(false)
 
   useEffect(() => {
     if (
@@ -507,7 +510,7 @@ export default function BrowseView() {
   const bottomBar = (
     <nav
       aria-label='Papers and graphs'
-      className='md:hidden fixed inset-x-0 bottom-0 z-10 flex items-stretch border-t border-neutral-800 bg-neutral-950 pb-[env(safe-area-inset-bottom)] text-[11px]'
+      className='md:hidden fixed inset-x-0 bottom-0 z-10 flex items-stretch border-t border-neutral-800 bg-neutral-950 text-[11px]'
     >
       {selectedSubgraph && (
         <div
@@ -583,7 +586,7 @@ export default function BrowseView() {
       <div
         role='dialog'
         aria-label='Graphs'
-        className='relative z-10 w-full max-h-[80dvh] overflow-y-auto overscroll-contain rounded-t-2xl border-t border-[#333333] bg-neutral-950 pb-[env(safe-area-inset-bottom)] shadow-2xl'
+        className='relative z-10 w-full max-h-[80dvh] overflow-y-auto overscroll-contain rounded-t-2xl border-t border-[#333333] bg-neutral-950 shadow-2xl'
       >
         <div className='mx-auto mt-2 mb-1 h-1 w-10 rounded-full bg-neutral-700' />
         {[{ id: null, name: 'All papers' }, ...subgraphs].map((subgraph) => {
@@ -760,7 +763,7 @@ export default function BrowseView() {
             ref={listRef}
             className='flex-1 overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent [scrollbar-gutter:stable_both-edges] md:[scrollbar-gutter:stable] md:[direction:rtl]'
           >
-            <div className='md:[direction:ltr] md:px-8 pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0'>
+            <div className='md:[direction:ltr] md:px-8 pb-14 md:pb-0'>
               <div className='md:hidden relative px-4 pt-4 pb-2 flex flex-col items-center gap-1'>
                 {listMode === 'all' && (
                   <div className='absolute top-4 left-4 flex items-center h-[30px]'>
