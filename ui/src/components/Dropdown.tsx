@@ -6,14 +6,11 @@ export default function Dropdown({
   label,
   children,
   className = 'max-w-[240px]',
-  align = 'left',
 }: {
   label: ReactNode
   children?: ReactNode
   /** Button classes; defaults to the max width cap. */
   className?: string
-  /** Which edge of the button the menu lines up with. */
-  align?: 'left' | 'right'
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const ref = useRef<HTMLDivElement | null>(null)
@@ -47,7 +44,7 @@ export default function Dropdown({
       {canOpen && isOpen && (
         <div
           onClick={() => setIsOpen(false)}
-          className={`absolute top-full mt-1 ${align === 'right' ? 'right-0' : 'left-0'} z-40 bg-[#2a2a2a] border border-[#333333] rounded-xl overflow-hidden shadow-lg min-w-[160px] max-w-[320px]`}
+          className='absolute top-full mt-1 left-0 z-40 bg-[#2a2a2a] border border-[#333333] rounded-xl overflow-hidden shadow-lg min-w-[160px] max-w-[320px]'
         >
           {children}
         </div>
