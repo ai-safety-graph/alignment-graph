@@ -806,9 +806,10 @@ export default function BrowseView() {
                     >
                       {isMatches ? (
                         <>
-                          {/* Badges flow inline so a long recipe clamps to
-                              two lines with an ellipsis; the full list is in
-                              the tooltip */}
+                          {/* Badges flow inline so a long recipe clamps with
+                              an ellipsis (one line on phones, two on
+                              desktop); the full list is in the tooltip and,
+                              on phones, the Edit filters modal */}
                           <p
                             className='min-w-0 line-clamp-1 md:line-clamp-2'
                             title={recipeLabels.join(', ') || undefined}
