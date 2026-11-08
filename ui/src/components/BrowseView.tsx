@@ -794,7 +794,7 @@ export default function BrowseView() {
                               desktop); the full list is in the tooltip and,
                               on phones, the Edit filters modal */}
                           <p
-                            className='min-w-0 line-clamp-1 md:line-clamp-2'
+                            className='min-w-0 leading-6 line-clamp-1 md:line-clamp-2'
                             title={recipeLabels.join(', ') || undefined}
                           >
                             <span className='mr-1.5'>

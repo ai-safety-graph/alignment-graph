@@ -1,9 +1,8 @@
-import { Pin, PinOff } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { NodeCompact } from '../lib/types'
 import TagChips from './TagChips'
 import VenueBadge from './VenueBadge'
-import { MAX_PINNED } from '../lib/storage'
+import PinToggle from './PinToggle'
 
 interface PaperListProps {
   items: Array<{ n: NodeCompact }>
@@ -70,55 +69,42 @@ export default function PaperList({
       <ul>
         {slice.map(({ n }) => {
           const inSubgraph = subgraphPaperIds?.has(n.aid) ?? false
-          const addBlocked = !inSubgraph && !!subgraphFull
           return (
-          <li
-            key={n.aid}
-            className={`flex items-center mb-1.5 last:mb-0 rounded-md active:bg-[#2a2a2a]${n.aid === selectedId ? ' bg-neutral-800' : ''}${enableHover ? ' hover:bg-[#2a2a2a]' : ''}`}
-          >
-            <button
-              onClick={() => onSelectId(n.aid)}
-              className='flex-1 min-w-0 text-left px-4 py-3 cursor-pointer'
+            <li
+              key={n.aid}
+              className={`flex items-center mb-1.5 last:mb-0 rounded-md active:bg-[#2a2a2a]${n.aid === selectedId ? ' bg-neutral-800' : ''}${enableHover ? ' hover:bg-[#2a2a2a]' : ''}`}
             >
-              {n.pr && (
-                <div className='mb-1 flex'>
-                  <VenueBadge pr={n.pr} vn={n.vn} />
-                </div>
-              )}
-              <div className='text-[15px] leading-snug'>{n.t}</div>
-              <div className='mt-0.5 text-[13px] text-neutral-400 truncate'>
-                {n.au}
-              </div>
-              <div className='mt-1 text-[12px] text-neutral-400'>
-                <div className='flex flex-wrap items-center gap-x-2 gap-y-1 mb-0.5'>
-                  <TagChips tags={n.tags} max={2} />
-                </div>
-              </div>
-            </button>
-            {(onAddToSubgraph || onRemoveFromSubgraph) && (
               <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  if (inSubgraph) onRemoveFromSubgraph?.(n.aid)
-                  else onAddToSubgraph?.(n.aid)
-                }}
-                disabled={addBlocked}
-                title={
-                  addBlocked
-                    ? `${subgraphName ?? 'Subgraph'} already has ${MAX_PINNED} pinned papers`
-                    : undefined
-                }
-                aria-label={
-                  inSubgraph
-                    ? `Unpin from ${subgraphName ?? 'subgraph'}`
-                    : `Pin to ${subgraphName ?? 'subgraph'}`
-                }
-                className='group shrink-0 mr-2 p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200 disabled:opacity-40 disabled:cursor-not-allowed'
+                onClick={() => onSelectId(n.aid)}
+                className='flex-1 min-w-0 text-left px-4 py-3 cursor-pointer'
               >
-                {inSubgraph ? <PinOff size={14} className='text-red-800 group-hover:text-red-500 transition-colors' /> : <Pin size={14} className='text-green-800 group-hover:text-green-500 transition-colors' />}
+                {n.pr && (
+                  <div className='mb-1 flex'>
+                    <VenueBadge pr={n.pr} vn={n.vn} />
+                  </div>
+                )}
+                <div className='text-[15px] leading-snug'>{n.t}</div>
+                <div className='mt-0.5 text-[13px] text-neutral-400 truncate'>
+                  {n.au}
+                </div>
+                <div className='mt-1 text-[12px] text-neutral-400'>
+                  <div className='flex flex-wrap items-center gap-x-2 gap-y-1 mb-0.5'>
+                    <TagChips tags={n.tags} max={2} />
+                  </div>
+                </div>
               </button>
-            )}
-          </li>
+              {(onAddToSubgraph || onRemoveFromSubgraph) && (
+                <PinToggle
+                  variant='icon'
+                  className='mr-2 p-1.5'
+                  pinned={inSubgraph}
+                  full={subgraphFull}
+                  graphName={subgraphName}
+                  onPin={() => onAddToSubgraph?.(n.aid)}
+                  onUnpin={() => onRemoveFromSubgraph?.(n.aid)}
+                />
+              )}
+            </li>
           )
         })}
       </ul>

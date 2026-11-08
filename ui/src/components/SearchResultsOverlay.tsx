@@ -1,6 +1,5 @@
-import { Pin, PinOff } from 'lucide-react'
 import type { NodeCompact } from '../lib/types'
-import { MAX_PINNED } from '../lib/storage'
+import PinToggle from './PinToggle'
 import TagChips from './TagChips'
 import VenueBadge from './VenueBadge'
 
@@ -26,7 +25,6 @@ export default function SearchResultsOverlay({
   subgraphName?: string
   subgraphFull?: boolean
 }) {
-  const subgraphLabel = subgraphName ?? 'Subgraph'
   if (!isLoading && !results?.length) return null
 
   return (
@@ -48,7 +46,6 @@ export default function SearchResultsOverlay({
       <ul className='list-none p-0 m-0'>
         {results.map(({ n }) => {
           const inSubgraph = subgraphPaperIds?.has(n.aid) ?? false
-          const addBlocked = !inSubgraph && !!subgraphFull
           return (
             <li key={n.aid} className='py-2 border-b border-neutral-800'>
               <div className='flex items-start gap-2'>
@@ -77,19 +74,15 @@ export default function SearchResultsOverlay({
                   </div>
                 </div>
                 {(onAddToSubgraph || onRemoveFromSubgraph) && (
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault()
-                      if (inSubgraph) onRemoveFromSubgraph?.(n.aid)
-                      else onAddToSubgraph?.(n.aid)
-                    }}
-                    disabled={addBlocked}
-                    title={addBlocked ? `${subgraphLabel} already has ${MAX_PINNED} pinned papers` : undefined}
-                    aria-label={inSubgraph ? `Unpin from ${subgraphLabel}` : `Pin to ${subgraphLabel}`}
-                    className='group p-1.5 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed'
-                  >
-                    {inSubgraph ? <PinOff size={14} className='text-red-800 group-hover:text-red-500 transition-colors' /> : <Pin size={14} className='text-green-800 group-hover:text-green-500 transition-colors' />}
-                  </button>
+                  <PinToggle
+                    variant='icon'
+                    className='p-1.5'
+                    pinned={inSubgraph}
+                    full={subgraphFull}
+                    graphName={subgraphName}
+                    onPin={() => onAddToSubgraph?.(n.aid)}
+                    onUnpin={() => onRemoveFromSubgraph?.(n.aid)}
+                  />
                 )}
               </div>
             </li>

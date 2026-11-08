@@ -1,10 +1,9 @@
-import { Pin, PinOff } from 'lucide-react'
 import { domainLabel } from '../lib/domain'
 import type { NodeCompact } from '../lib/types'
 import type { PaperDetail } from '../lib/api'
 import TagChips from './TagChips'
 import VenueBadge from './VenueBadge'
-import { MAX_PINNED } from '../lib/storage'
+import PinToggle from './PinToggle'
 import { useRef, useLayoutEffect } from 'react'
 
 type NeighborEntry = { n: NodeCompact; w: number }
@@ -39,8 +38,7 @@ export default function BrowsePaperDetails({
   subgraphFull,
 }: Props) {
   const isPaperInSubgraph = subgraphPaperIds?.has(paper.aid) ?? false
-  const subgraphLabel = subgraphName ?? 'Subgraph'
-  const fullTitle = `${subgraphLabel} already has ${MAX_PINNED} pinned papers`
+  const canPin = !!(onAddToSubgraph || onRemoveFromSubgraph)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const summaryText = paper.sm
 
@@ -87,42 +85,23 @@ export default function BrowsePaperDetails({
               </div>
             )}
           </div>
-          <h4 className='mt-1 mb-2 text-lg font-semibold leading-snug text-[#e5e5e5]'>
-            {paper.t}
-          </h4>
+          <div className='flex items-start gap-2 mt-1 mb-2'>
+            <h4 className='flex-1 min-w-0 text-lg font-semibold leading-snug text-[#e5e5e5]'>
+              {paper.t}
+            </h4>
+            {canPin && (
+              <PinToggle
+                pinned={isPaperInSubgraph}
+                full={subgraphFull}
+                graphName={subgraphName}
+                onPin={() => onAddToSubgraph?.(paper.aid)}
+                onUnpin={() => onRemoveFromSubgraph?.(paper.aid)}
+              />
+            )}
+          </div>
           <div className='flex items-center gap-2 mb-2 text-[13px] text-neutral-400'>
             <TagChips tags={paper.tags} />
           </div>
-          {(onAddToSubgraph || onRemoveFromSubgraph) && (
-            <button
-              onClick={() =>
-                isPaperInSubgraph
-                  ? onRemoveFromSubgraph?.(paper.aid)
-                  : onAddToSubgraph?.(paper.aid)
-              }
-              disabled={!isPaperInSubgraph && subgraphFull}
-              title={!isPaperInSubgraph && subgraphFull ? fullTitle : undefined}
-              className='group flex items-center gap-1.5 max-w-full text-[13px] text-neutral-300 hover:text-white bg-neutral-950 border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 mb-2 cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-neutral-300 disabled:hover:border-neutral-700'
-            >
-              {isPaperInSubgraph ? (
-                <>
-                  <span className='truncate'>Unpin from {subgraphLabel}</span>
-                  <PinOff
-                    size={14}
-                    className='shrink-0 text-red-800 group-hover:text-red-500 transition-colors'
-                  />
-                </>
-              ) : (
-                <>
-                  <span className='truncate'>Pin to {subgraphLabel}</span>
-                  <Pin
-                    size={14}
-                    className='shrink-0 text-green-800 group-hover:text-green-500 transition-colors'
-                  />
-                </>
-              )}
-            </button>
-          )}
         </div>
         <div className='px-3 lg:px-6'>
           <div className='text-[13px] mb-1.5'>
@@ -225,36 +204,15 @@ export default function BrowsePaperDetails({
                             </div>
                           </div>
                         </div>
-                        {(onAddToSubgraph || onRemoveFromSubgraph) && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              if (inSubgraph) onRemoveFromSubgraph?.(n.aid)
-                              else onAddToSubgraph?.(n.aid)
-                            }}
-                            disabled={!inSubgraph && subgraphFull}
-                            title={
-                              !inSubgraph && subgraphFull ? fullTitle : undefined
-                            }
-                            aria-label={
-                              inSubgraph
-                                ? `Unpin from ${subgraphLabel}`
-                                : `Pin to ${subgraphLabel}`
-                            }
-                            className='group shrink-0 self-start p-1 rounded-full cursor-pointer text-neutral-400 hover:text-neutral-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
-                          >
-                            {inSubgraph ? (
-                              <PinOff
-                                size={14}
-                                className='text-red-800 group-hover:text-red-500 transition-colors'
-                              />
-                            ) : (
-                              <Pin
-                                size={14}
-                                className='text-green-800 group-hover:text-green-500 transition-colors'
-                              />
-                            )}
-                          </button>
+                        {canPin && (
+                          <PinToggle
+                            variant='icon'
+                            pinned={inSubgraph}
+                            full={subgraphFull}
+                            graphName={subgraphName}
+                            onPin={() => onAddToSubgraph?.(n.aid)}
+                            onUnpin={() => onRemoveFromSubgraph?.(n.aid)}
+                          />
                         )}
                       </div>
                     </li>
