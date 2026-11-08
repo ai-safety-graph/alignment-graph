@@ -30,6 +30,11 @@ export default function PinToggle({
   const label = graphName ?? 'Subgraph'
   const disabled = !pinned && !!full
   const action = pinned ? `Unpin from ${label}` : `Pin to ${label}`
+  // No aria-pressed: the name already says what a click does, and pairing an
+  // action name with a pressed state reads as "Unpin…, pressed". The button
+  // variant's name starts with its visible text ("Pin" / "Pinned") so voice
+  // control can target it by what it shows.
+  const buttonName = pinned ? `Pinned, unpin from ${label}` : action
   const title = disabled
     ? `${label} already has ${MAX_PINNED} pinned papers`
     : action
@@ -56,7 +61,6 @@ export default function PinToggle({
         disabled={disabled}
         title={title}
         aria-label={action}
-        aria-pressed={pinned}
         className={`shrink-0 ${className} rounded-full cursor-pointer text-neutral-500 hover:text-neutral-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-neutral-500`}
       >
         {icon}
@@ -69,8 +73,7 @@ export default function PinToggle({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      aria-label={action}
-      aria-pressed={pinned}
+      aria-label={buttonName}
       className='group shrink-0 flex items-center gap-1.5 text-[13px] text-neutral-300 hover:text-white bg-neutral-950 border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-neutral-300 disabled:hover:border-neutral-700'
     >
       {icon}
