@@ -227,18 +227,29 @@ export default function BrowseView() {
 
   const resetKey = `${listMode}|${selectedSubgraphId ?? ''}|${debouncedQuery}|${listParams.fromDate ?? ''}|${[...listParams.activeTags].sort()}|${[...listParams.activeDomains].sort()}|${listParams.peerReviewed ? 1 : 0}`
 
+  // Phones scroll the document rather than the list, so iOS Safari can
+  // collapse its toolbar; desktop scrolls the list inside a fixed shell
   useLayoutEffect(() => {
-    if (listRef.current) listRef.current.scrollTop = 0
-  }, [resetKey])
+    if (isSmall) window.scrollTo(0, 0)
+    else if (listRef.current) listRef.current.scrollTop = 0
+  }, [resetKey, isSmall])
 
+  // With the document scrolling on phones, the page behind any overlay
+  // would scroll too, so lock it while one is open
+  const overlayOpen = Boolean(
+    selectedId ||
+      modal ||
+      isConfirmingDelete ||
+      (isSmall && (graphSheetOpen || filterExpanded)),
+  )
   useEffect(() => {
-    if (!selected) return
+    if (!overlayOpen) return
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => {
       document.body.style.overflow = prev
     }
-  }, [selected])
+  }, [overlayOpen])
 
   const view = isSmall ? 'mobile' : 'browse'
 
@@ -723,7 +734,7 @@ export default function BrowseView() {
       : EMPTY_FILTERS
 
   return (
-    <div className='fixed inset-0 bg-neutral-950 text-[#e5e5e5] flex flex-col'>
+    <div className='min-h-dvh md:fixed md:inset-0 bg-neutral-950 text-[#e5e5e5] flex flex-col'>
       <div className='hidden md:flex relative z-20 shrink-0 bg-neutral-950 px-4 py-3 items-center gap-3 border-b border-neutral-800'>
         {/* The two sides split the leftover width equally (but never below
             their content), which keeps the search box centred on the page */}
@@ -740,11 +751,11 @@ export default function BrowseView() {
         </div>
       </div>
 
-      <div className='flex flex-row flex-1 overflow-hidden'>
-        <div className='flex flex-col flex-1 overflow-hidden min-w-0'>
+      <div className='flex flex-row flex-1 md:overflow-hidden'>
+        <div className='flex flex-col flex-1 md:overflow-hidden min-w-0'>
           <div
             ref={listRef}
-            className='flex-1 overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent [scrollbar-gutter:stable_both-edges] md:[scrollbar-gutter:stable] md:[direction:rtl]'
+            className='flex-1 md:overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent md:[scrollbar-gutter:stable] md:[direction:rtl]'
           >
             <div className='md:[direction:ltr] md:px-8 pb-14 md:pb-0'>
               <div className='md:hidden relative px-4 pt-4 pb-2 flex flex-col items-center gap-1'>

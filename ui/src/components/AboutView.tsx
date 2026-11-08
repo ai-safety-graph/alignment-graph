@@ -114,8 +114,8 @@ function TagGlossary() {
 
 export default function AboutView() {
   return (
-    <div className='fixed inset-0 bg-neutral-950 text-[#e5e5e5] flex flex-col'>
-      <div className='shrink-0 bg-neutral-950/90 backdrop-blur px-4 py-3 flex items-center justify-between gap-3'>
+    <div className='min-h-dvh md:fixed md:inset-0 bg-neutral-950 text-[#e5e5e5] flex flex-col'>
+      <div className='sticky top-0 z-10 shrink-0 bg-neutral-950/90 backdrop-blur px-4 py-3 flex items-center justify-between gap-3'>
         <Link
           to='/'
           aria-label='Back'
@@ -134,7 +134,7 @@ export default function AboutView() {
         </Link>
       </div>
 
-      <div className='flex-1 overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent'>
+      <div className='flex-1 md:overflow-y-auto scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent'>
         <div className='max-w-3xl mx-auto px-4 py-8 md:py-12 flex flex-col gap-10'>
           <div className='flex flex-col gap-3'>
             <p className='text-[15px] leading-relaxed text-neutral-300'>
