@@ -1,10 +1,10 @@
-import { CircleX, Pin, PinOff } from 'lucide-react'
+import { CircleX } from 'lucide-react'
 import { domainLabel } from '../lib/domain'
 import type { NodeCompact } from '../lib/types'
 import { useRef, useLayoutEffect, useEffect, useState } from 'react'
 import TagChips from './TagChips'
 import VenueBadge from './VenueBadge'
-import { MAX_PINNED } from '../lib/storage'
+import PinToggle from './PinToggle'
 
 type NeighborEntry = { n: NodeCompact; w: number }
 
@@ -40,15 +40,17 @@ export default function MobilePaperDetails({
   subgraphFull,
 }: Props) {
   const isPaperInSubgraph = subgraphPaperIds?.has(paper.aid) ?? false
-  const subgraphLabel = subgraphName ?? 'Subgraph'
-  const fullTitle = `${subgraphLabel} already has ${MAX_PINNED} pinned papers`
+  const canPin = !!(onAddToSubgraph || onRemoveFromSubgraph)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const barRef = useRef<HTMLDivElement | null>(null)
   const titleRef = useRef<HTMLHeadingElement | null>(null)
   const [titleHidden, setTitleHidden] = useState(false)
   const summaryText = paper.sm
 
-  // Show a one-line title in the sticky bar once the full heading scrolls under it.
+  // Show a one-line title (with the pin toggle) in the sticky bar as soon as
+  // the heading starts scrolling under it: the title row's toggle sits level
+  // with the first line, so waiting for the whole heading would leave a
+  // stretch with no pin button on screen.
   useEffect(() => {
     const root = scrollerRef.current
     const bar = barRef.current
@@ -58,10 +60,14 @@ export default function MobilePaperDetails({
       ([entry]) => {
         const rootTop = entry.rootBounds?.top ?? 0
         setTitleHidden(
-          !entry.isIntersecting && entry.boundingClientRect.top < rootTop,
+          entry.intersectionRatio < 1 && entry.boundingClientRect.top < rootTop,
         )
       },
-      { root, rootMargin: `-${bar.offsetHeight}px 0px 0px 0px` },
+      {
+        root,
+        rootMargin: `-${bar.offsetHeight}px 0px 0px 0px`,
+        threshold: 1,
+      },
     )
     observer.observe(title)
     return () => observer.disconnect()
@@ -121,59 +127,48 @@ export default function MobilePaperDetails({
           </div>
           {/* Absolutely positioned so showing it doesn't shift the heading being observed. */}
           {titleHidden && (
-            <div
-              className='absolute top-full inset-x-0 pb-2 bg-neutral-950 border-b border-neutral-800 truncate text-sm font-semibold text-[#e5e5e5]'
-              title={paper.t}
-            >
-              {paper.t}
+            <div className='absolute top-full inset-x-0 pb-2 bg-neutral-950 border-b border-neutral-800 flex items-center gap-2'>
+              <div
+                className='flex-1 min-w-0 truncate text-sm font-semibold text-[#e5e5e5]'
+                title={paper.t}
+              >
+                {paper.t}
+              </div>
+              {/* The title row's toggle has scrolled away with the heading */}
+              {canPin && (
+                <PinToggle
+                  pinned={isPaperInSubgraph}
+                  full={subgraphFull}
+                  graphName={subgraphName}
+                  onPin={() => onAddToSubgraph?.(paper.aid)}
+                  onUnpin={() => onRemoveFromSubgraph?.(paper.aid)}
+                />
+              )}
             </div>
           )}
         </div>
 
         <div className='pt-1'>
-          <h4
-            ref={titleRef}
-            className='mb-2 text-lg font-semibold leading-snug text-[#e5e5e5]'
-          >
-            {paper.t}
-          </h4>
+          <div className='flex items-start gap-2 mb-2'>
+            <h4
+              ref={titleRef}
+              className='flex-1 min-w-0 text-lg font-semibold leading-snug text-[#e5e5e5]'
+            >
+              {paper.t}
+            </h4>
+            {canPin && (
+              <PinToggle
+                pinned={isPaperInSubgraph}
+                full={subgraphFull}
+                graphName={subgraphName}
+                onPin={() => onAddToSubgraph?.(paper.aid)}
+                onUnpin={() => onRemoveFromSubgraph?.(paper.aid)}
+              />
+            )}
+          </div>
           <div className='flex items-center gap-2 mb-2 text-[13px] text-neutral-400'>
             <TagChips tags={paper.tags} />
           </div>
-          {(onAddToSubgraph || onRemoveFromSubgraph) && (
-            <div className='mb-2'>
-              <button
-                onClick={() =>
-                  isPaperInSubgraph
-                    ? onRemoveFromSubgraph?.(paper.aid)
-                    : onAddToSubgraph?.(paper.aid)
-                }
-                disabled={!isPaperInSubgraph && subgraphFull}
-                title={!isPaperInSubgraph && subgraphFull ? fullTitle : undefined}
-                className='group flex items-center gap-1.5 max-w-full text-[13px] text-neutral-300 hover:text-white bg-neutral-950 border border-neutral-700 hover:border-neutral-500 rounded-md px-2.5 py-1 cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-neutral-300 disabled:hover:border-neutral-700'
-              >
-                {isPaperInSubgraph ? (
-                  <>
-                    <span className='truncate'>
-                      Unpin from {subgraphLabel}
-                    </span>
-                    <PinOff
-                      size={14}
-                      className='shrink-0 text-red-800 group-hover:text-red-500 transition-colors'
-                    />
-                  </>
-                ) : (
-                  <>
-                    <span className='truncate'>Pin to {subgraphLabel}</span>
-                    <Pin
-                      size={14}
-                      className='shrink-0 text-green-800 group-hover:text-green-500 transition-colors'
-                    />
-                  </>
-                )}
-              </button>
-            </div>
-          )}
         </div>
         <div className='text-[13px] mb-1.5'>
           <strong>Authors:</strong> {paper.au}
