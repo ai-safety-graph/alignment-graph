@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import type { ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import ForceGraph2D from 'react-force-graph-2d'
@@ -169,6 +170,28 @@ type GraphSource =
   | { kind: 'saved'; graph: SavedGraph }
 
 const NO_MEMBERSHIP: GraphMembership = { pinned: [], hidden: [] }
+
+// Holds a bottom bar centred on the window, clear of the side overlays. The
+// spacers grow equally from nothing, so the bar sits in the middle until one
+// would get narrower than its clearance (px); that one then holds its width
+// and the bar moves over only as far as it needs to, then shrinks or wraps.
+function BottomBarSlot({
+  left,
+  right,
+  children,
+}: {
+  left: number
+  right: number
+  children: ReactNode
+}) {
+  return (
+    <div className='fixed bottom-4 inset-x-0 z-10 flex pointer-events-none'>
+      <div aria-hidden className='grow basis-0' style={{ minWidth: left }} />
+      {children}
+      <div aria-hidden className='grow basis-0' style={{ minWidth: right }} />
+    </div>
+  )
+}
 
 type ModalState = {
   mode: 'generate' | 'edit'
@@ -1150,19 +1173,16 @@ export default function ArxivGraph() {
   )
   const graphName = activeSavedGraph?.name ?? 'Unsaved graph'
 
-  // The bottom bar centres in the space the side overlays leave: the Legend
-  // (its button, or the 280px card while expanded) or the search results
-  // column (360px at left-4, which holds the Legend too) on the left, and
-  // the paper details panel (440px at right-4, GraphPaperDetails) while one
-  // is open. When both are open on a narrow screen there's no room left, and
-  // the overlays draw over it.
+  // The bottom bar stays centred on the window (BottomBarSlot); these are
+  // only how much room it leaves the side overlays: the Legend (its button,
+  // or the 280px card while expanded) or the search results column (360px at
+  // left-4, which holds the Legend too) on the left, and the paper details
+  // panel (440px at right-4, GraphPaperDetails) while one is open. When both
+  // are open on a narrow screen there's no room left, and the overlays draw
+  // over it.
   const showSearchResults = !!query && (searchResults.length > 0 || isSearching)
-  const bottomBarLeft = showSearchResults
-    ? 'left-[392px]'
-    : legendCollapsed
-      ? 'left-28'
-      : 'left-[312px]'
-  const bottomBarInset = `${bottomBarLeft} ${selected ? 'right-[472px]' : 'right-28'}`
+  const bottomBarLeft = showSearchResults ? 392 : legendCollapsed ? 112 : 312
+  const bottomBarRight = selected ? 472 : 112
 
   // Rendering helpers
   const nodeCanvasObject = (
@@ -1277,9 +1297,7 @@ export default function ArxivGraph() {
         </div>
       )}
       {source.kind === 'draft' && data && (
-        <div
-          className={`fixed bottom-4 ${bottomBarInset} z-10 flex justify-center pointer-events-none`}
-        >
+        <BottomBarSlot left={bottomBarLeft} right={bottomBarRight}>
           <div className='pointer-events-auto min-w-0'>
             <DraftGraphBar
               // Remount per draft so a half-typed name doesn't carry over
@@ -1299,14 +1317,12 @@ export default function ArxivGraph() {
               onDiscard={discardDraft}
             />
           </div>
-        </div>
+        </BottomBarSlot>
       )}
       {/* Shown even with nothing loaded (an emptied pins-only graph, a
           failed fetch), so the graph can still be edited or deleted */}
       {source.kind === 'saved' && (
-        <div
-          className={`fixed bottom-4 ${bottomBarInset} z-10 flex justify-center pointer-events-none`}
-        >
+        <BottomBarSlot left={bottomBarLeft} right={bottomBarRight}>
           {/* The graph's count, its recipe and what can be done with it, as
               on the list view's count line */}
           <div className='pointer-events-auto min-w-0 max-w-[56rem] flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-3 py-1.5 rounded-lg border border-neutral-700 bg-neutral-950/95 shadow-lg'>
@@ -1373,7 +1389,7 @@ export default function ArxivGraph() {
               New graph
             </button>
           </div>
-        </div>
+        </BottomBarSlot>
       )}
       {modal && (
         <GenerateGraphModal
