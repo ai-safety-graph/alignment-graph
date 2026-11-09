@@ -38,6 +38,7 @@ import { usePaperDetail } from '../hooks/usePaperDetail'
 import { useNavHistory } from '../hooks/useNavHistory'
 import { useCapabilities } from '../hooks/useCapabilities'
 import { useSubgraphManager } from '../hooks/useSubgraphManager'
+import { useFitCount } from '../hooks/useFitCount'
 import { EMPTY_FILTERS, filterLabels } from '../lib/graphFilters'
 import type { GraphFilters } from '../lib/graphFilters'
 
@@ -238,9 +239,9 @@ export default function BrowseView() {
   // would scroll too, so lock it while one is open
   const overlayOpen = Boolean(
     selectedId ||
-    modal ||
-    isConfirmingDelete ||
-    (isSmall && (graphSheetOpen || filterExpanded)),
+      modal ||
+      isConfirmingDelete ||
+      (isSmall && (graphSheetOpen || filterExpanded)),
   )
   useEffect(() => {
     if (!overlayOpen) return
@@ -670,6 +671,12 @@ export default function BrowseView() {
 
   // The graph's recipe, read-only: Edit changes it, as on the graph view
   const recipeLabels = recipe ? filterLabels(recipe) : []
+  // Desktop caps the count line at two rows; this drops the badges that
+  // don't fit so it can end in "…" after a whole one
+  const [countLineRef, shownLabels] = useFitCount(
+    recipeLabels.length,
+    `${recipeLabels.join('|')}|${total}|${!!debouncedQuery.trim()}`,
+  )
   const editRecipeButton = (
     <button
       type='button'
@@ -800,15 +807,18 @@ export default function BrowseView() {
                     >
                       {isMatches ? (
                         <>
-                          {/* Badges flow inline so a long recipe clamps with
-                              an ellipsis (one line on phones, two on
-                              desktop); the full list is in the tooltip and,
-                              on phones, the Edit filters modal. Phones use
-                              truncate, not line-clamp-1: WebKit clamps the
-                              box to 20px, cutting off the badges' bottom
-                              border, and ellipsizes inside the first badge. */}
+                          {/* Badges flow inline so a long recipe ends in an
+                              ellipsis (one line on phones, two on desktop);
+                              the full list is in the tooltip and, on phones,
+                              the Edit filters modal. No line-clamp: Safari
+                              counts each badge's own text as a clamped line,
+                              so it cut off their bottom border, put its
+                              ellipsis inside a badge and showed three rows
+                              on iPad. Phones truncate; desktop caps the
+                              height and useFitCount adds the ellipsis. */}
                           <p
-                            className='min-w-0 leading-6 truncate md:whitespace-normal md:line-clamp-2'
+                            ref={countLineRef}
+                            className='min-w-0 leading-6 truncate md:whitespace-normal md:max-h-12'
                             title={recipeLabels.join(', ') || undefined}
                           >
                             <span className='mr-1.5'>
@@ -827,7 +837,7 @@ export default function BrowseView() {
                                 matchesPhrase
                               )}
                             </span>
-                            {recipeLabels.map((label) => (
+                            {recipeLabels.slice(0, shownLabels).map((label) => (
                               <span
                                 key={label}
                                 className='inline-block mr-1.5 px-1.5 leading-4 rounded-full border border-neutral-700'
@@ -835,6 +845,9 @@ export default function BrowseView() {
                                 {label}
                               </span>
                             ))}
+                            {shownLabels < recipeLabels.length && (
+                              <span aria-hidden>…</span>
+                            )}
                           </p>
                           {recipeActions}
                         </>
