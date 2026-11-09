@@ -238,9 +238,9 @@ export default function BrowseView() {
   // would scroll too, so lock it while one is open
   const overlayOpen = Boolean(
     selectedId ||
-      modal ||
-      isConfirmingDelete ||
-      (isSmall && (graphSheetOpen || filterExpanded)),
+    modal ||
+    isConfirmingDelete ||
+    (isSmall && (graphSheetOpen || filterExpanded)),
   )
   useEffect(() => {
     if (!overlayOpen) return
@@ -803,9 +803,12 @@ export default function BrowseView() {
                           {/* Badges flow inline so a long recipe clamps with
                               an ellipsis (one line on phones, two on
                               desktop); the full list is in the tooltip and,
-                              on phones, the Edit filters modal */}
+                              on phones, the Edit filters modal. Phones use
+                              truncate, not line-clamp-1: WebKit clamps the
+                              box to 20px, cutting off the badges' bottom
+                              border, and ellipsizes inside the first badge. */}
                           <p
-                            className='min-w-0 leading-6 line-clamp-1 md:line-clamp-2'
+                            className='min-w-0 leading-6 truncate md:whitespace-normal md:line-clamp-2'
                             title={recipeLabels.join(', ') || undefined}
                           >
                             <span className='mr-1.5'>
