@@ -672,10 +672,12 @@ export default function BrowseView() {
   // The graph's recipe, read-only: Edit changes it, as on the graph view
   const recipeLabels = recipe ? filterLabels(recipe) : []
   // Desktop caps the count line at two rows; this drops the badges that
-  // don't fit so it can end in "…" after a whole one
+  // don't fit so it can end in "…" after a whole one. The key covers
+  // everything that changes the line's width or content: the spinner sits
+  // beside it and narrows it without resizing the row.
   const [countLineRef, shownLabels] = useFitCount(
     recipeLabels.length,
-    `${recipeLabels.join('|')}|${total}|${!!debouncedQuery.trim()}`,
+    `${recipeLabels.join('|')}|${total}|${!!debouncedQuery.trim()}|${isFiltering}`,
   )
   const editRecipeButton = (
     <button
@@ -849,6 +851,12 @@ export default function BrowseView() {
                               <span aria-hidden>…</span>
                             )}
                           </p>
+                          {/* Outside the <p> so it can't affect the fit */}
+                          {shownLabels < recipeLabels.length && (
+                            <span className='sr-only'>
+                              {recipeLabels.slice(shownLabels).join(', ')}
+                            </span>
+                          )}
                           {recipeActions}
                         </>
                       ) : (
