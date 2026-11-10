@@ -14,8 +14,11 @@ from ..db import PAPER_TEXT_EXPR
 # Per-facet caps for the free-text facets; the UI enforces the same.
 MAX_TERMS = 10
 MAX_TERM_LENGTH = 80
-# A keyword needs a trigram to use idx_papers_text_trgm; shorter ones ("RL")
-# would scan every relevant abstract (seconds on prod).
+# A keyword needs a trigram to use idx_papers_text_trgm, and pg_trgm only
+# indexes letters and digits: "RL" (too short) or "C++" (one alphanumeric)
+# scan every relevant abstract instead (seconds on prod). Only the length is
+# enforced: rejecting "C++" would block real keywords, and an unindexed
+# keyword costs no more than `/api/papers?q=`, which always scans.
 MIN_KEYWORD_LENGTH = 3
 
 # Characters special in a Postgres ARE outside a bracket expression. Escaping

@@ -29,10 +29,11 @@ def list_papers(
     conn=Depends(get_conn),
 ):
     offset = (page - 1) * limit
+    keywords = clean_terms(kw, "kw", MIN_KEYWORD_LENGTH)
+    authors = clean_terms(author, "author")
     where, params = recipe_where(
         tags=tags, domains=domain, from_date=from_date, to_date=to_date,
-        peer_reviewed=peer_reviewed,
-        keywords=clean_terms(kw, "kw", MIN_KEYWORD_LENGTH), authors=clean_terms(author, "author"),
+        peer_reviewed=peer_reviewed, keywords=keywords, authors=authors,
     )
     if q:
         where.append("(title ILIKE %s OR authors ILIKE %s)")
@@ -67,7 +68,8 @@ def list_papers(
     # Log each search once: later pages are infinite-scroll of the same query.
     if q and page == 1:
         has_filters = bool(
-            tags or domain or from_date or to_date or peer_reviewed or kw or author
+            tags or domain or from_date or to_date or peer_reviewed
+            or keywords or authors
         )
         background_tasks.add_task(log_search, q, "keyword", total, has_filters)
 
