@@ -290,6 +290,13 @@ export default function ArxivGraph() {
   const cursors = paging.key === sourceKey ? paging.cursors : []
   const pageIndex = cursors.length
 
+  // "Show only pinned papers", from the bottom bar's pinned count. Tied to the
+  // source it was turned on for, so switching graphs turns it off; paging,
+  // pins and hides keep it.
+  const [pinnedOnlyKey, setPinnedOnlyKey] = useState<string | null>(null)
+  // Bumped to frame the canvas after the visible nodes change (see fitView)
+  const [fitRequest, setFitRequest] = useState(0)
+
   // The graph's papers: a page of its recipe plus its pins, minus hides.
   // Queries use the app-wide infinite staleTime, so revisiting a graph or
   // page (e.g. navigating to /browse and back) doesn't refetch.
@@ -885,6 +892,11 @@ export default function ArxivGraph() {
       ids.has(n.id),
     )
   }
+  // Runs after the render that updated fitStateRef, so it frames the nodes
+  // left visible (e.g. by the pinned-only toggle)
+  useEffect(() => {
+    if (fitRequest > 0) fitView(500)
+  }, [fitRequest])
 
   // Focus helpers
   function focusNode(
@@ -1129,12 +1141,6 @@ export default function ArxivGraph() {
   // Related ghosts are excluded: every fit (ESC / background click) also
   // deselects, which clears them right after, so fitting to them would frame
   // nodes that are about to vanish.
-  fitStateRef.current = {
-    nodes: allSimNodes.slice(0, allSimNodes.length - relatedGhostNodes.length),
-    width,
-    height,
-  }
-
   // Pinned papers get a ring and an Unpin button; the recipe's own matches
   // can be pinned too
   const pinnedAids = useMemo(
@@ -1142,9 +1148,40 @@ export default function ArxivGraph() {
     [membership?.pinned],
   )
 
+  // Pins on screen, on this page of the recipe or not. A graph without a
+  // recipe is all pins, which the count already says, so it has no toggle.
+  const hasRecipe = source.kind === 'draft' || !!activeSavedGraph?.filters
+  const pinnedShown =
+    data && hasRecipe
+      ? data.nodes.filter((n) => pinnedAids.has(n.aid)).length
+      : 0
+  // Turns itself off once nothing pinned is left to show
+  const pinnedOnly = pinnedOnlyKey === sourceKey && pinnedShown > 0
+  // Pinned-only hides the recipe's other papers but keeps them in the
+  // simulation, so the layout doesn't move. Ghosts (search, related) stay,
+  // and so does the selected paper, e.g. one just unpinned or picked from
+  // search, until it's deselected.
+  const isNodeVisible = (n: NodeCompact) =>
+    !pinnedOnly ||
+    ghostIds.has(n.id) ||
+    pinnedAids.has(n.aid) ||
+    n.id === selectedId
+  const togglePinnedOnly = () => {
+    track('graph_pinned_only', { value: pinnedOnly ? 'off' : 'on' })
+    setPinnedOnlyKey(pinnedOnly ? null : sourceKey)
+    setFitRequest((r) => r + 1)
+  }
+
+  fitStateRef.current = {
+    nodes: allSimNodes
+      .slice(0, allSimNodes.length - relatedGhostNodes.length)
+      .filter(isNodeVisible),
+    width,
+    height,
+  }
+
   // Count, date span and Newer/Older for the bottom bar. Without a recipe
   // every node is a pin, and there's one page.
-  const hasRecipe = source.kind === 'draft' || !!activeSavedGraph?.filters
   const recipeShown = data
     ? hasRecipe
       ? data.nodes.filter((n) => pageAids.has(n.aid)).length
@@ -1158,12 +1195,10 @@ export default function ArxivGraph() {
         shown: recipeShown,
         total: hasRecipe ? (data.meta.total ?? recipeShown) : recipeShown,
         span: data.meta.span,
-        // Every pin on screen, on this page of the recipe or not. A graph
-        // without a recipe is all pins, which the count already says.
-        pinned: hasRecipe
-          ? data.nodes.filter((n) => pinnedAids.has(n.aid)).length
-          : 0,
       })}
+      pinned={pinnedShown}
+      pinnedOnly={pinnedOnly}
+      onTogglePinnedOnly={togglePinnedOnly}
       paged={pageIndex > 0 || !!data.meta.next}
       canNewer={pageIndex > 0}
       canOlder={!!data.meta.next && !content.isPaging}
@@ -1425,6 +1460,7 @@ export default function ArxivGraph() {
           }}
           enableNodeDrag={false}
           nodeCanvasObject={nodeCanvasObject}
+          nodeVisibility={(n: NodeObject<NodeCompact>) => isNodeVisible(n)}
           nodeLabel={nodeLabel}
           linkColor={linkColor}
           nodePointerAreaPaint={(n: NodeObject<NodeCompact>, color, ctx) => {
@@ -1443,7 +1479,10 @@ export default function ArxivGraph() {
               l.s ?? (typeof l.source === 'object' ? l.source?.id : l.source)
             const t =
               l.t ?? (typeof l.target === 'object' ? l.target?.id : l.target)
-            return s === activeId || t === activeId
+            if (s !== activeId && t !== activeId) return false
+            // No edges out to papers hidden by pinned-only
+            const other = byId.get(s === activeId ? t : s)
+            return !!other && isNodeVisible(other)
           }}
           onEngineTick={() => {
             // With stored coords, nodes settle within a few px of where they
