@@ -12,7 +12,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from ..config import API_CORS_ORIGINS, ENABLE_SEMANTIC_SEARCH
 from .deps import PoolTimeout, close_pool, init_pool
 from .ratelimit import limiter
-from .routes import graph, meta, papers, search, tags
+from .routes import authors, graph, meta, papers, search, tags
 
 
 @asynccontextmanager
@@ -64,6 +64,7 @@ app.include_router(papers.router)
 app.include_router(search.router)
 app.include_router(tags.router)
 app.include_router(meta.router)
+app.include_router(authors.router)
 
 
 @app.get("/health")
