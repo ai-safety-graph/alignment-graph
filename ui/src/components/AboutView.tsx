@@ -61,7 +61,7 @@ function CollapsibleSection({
   children: ReactNode
 }) {
   return (
-    <details className='group flex flex-col gap-3'>
+    <details className='group'>
       <summary className='cursor-pointer list-none flex items-center gap-2 text-lg font-semibold text-white [&::-webkit-details-marker]:hidden'>
         <h2>{title}</h2>
         <ChevronRight
@@ -69,7 +69,7 @@ function CollapsibleSection({
           className='text-neutral-500 transition-transform group-open:rotate-90'
         />
       </summary>
-      <div className='flex flex-col gap-3 text-[15px] leading-relaxed text-neutral-300'>
+      <div className='mt-3 flex flex-col gap-3 text-[15px] leading-relaxed text-neutral-300'>
         {children}
       </div>
     </details>
