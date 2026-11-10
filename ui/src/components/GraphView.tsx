@@ -290,9 +290,9 @@ export default function ArxivGraph() {
   const cursors = paging.key === sourceKey ? paging.cursors : []
   const pageIndex = cursors.length
 
-  // "Show only pinned papers", from the bottom bar's pinned count. Tied to the
-  // source it was turned on for, so switching graphs turns it off; paging,
-  // pins and hides keep it.
+  // "Show only pinned papers", from the bottom bar's pinned count: the source
+  // key it was turned on for. Cleared when switching graphs (showSource),
+  // carried over when a draft is saved, and kept by paging, pins and hides.
   const [pinnedOnlyKey, setPinnedOnlyKey] = useState<string | null>(null)
   // Bumped to frame the canvas after the visible nodes change (see fitView)
   const [fitRequest, setFitRequest] = useState(0)
@@ -974,6 +974,7 @@ export default function ArxivGraph() {
     setConfirmingDelete(false)
     setPendingExit(null)
     setPaging({ key: '', cursors: [] })
+    setPinnedOnlyKey(null)
     setSource(next)
   }
 
@@ -1067,6 +1068,8 @@ export default function ArxivGraph() {
       queryClient.setQueryData(graphPinsKey(saved.id, saved.pinned), pins)
     setSavedGraphs((prev) => [saved, ...prev.filter((s) => s.id !== saved.id)])
     showSource({ kind: 'saved', graph: saved })
+    // Same papers on screen, so keep pinned-only on (after showSource's reset)
+    if (pinnedOnly) setPinnedOnlyKey(`saved:${saved.id}`)
     return null
   }
 
@@ -1155,17 +1158,29 @@ export default function ArxivGraph() {
     data && hasRecipe
       ? data.nodes.filter((n) => pinnedAids.has(n.aid)).length
       : 0
-  // Turns itself off once nothing pinned is left to show
   const pinnedOnly = pinnedOnlyKey === sourceKey && pinnedShown > 0
+  // Once nothing pinned is left to show (the last pin unpinned), turn it off
+  // for good, so pinning again doesn't hide everything else, and frame the
+  // papers that came back
+  useEffect(() => {
+    if (!data || pinnedOnlyKey !== sourceKey || pinnedShown > 0) return
+    setPinnedOnlyKey(null)
+    setFitRequest((r) => r + 1)
+  }, [data, pinnedOnlyKey, sourceKey, pinnedShown])
   // Pinned-only hides the recipe's other papers but keeps them in the
-  // simulation, so the layout doesn't move. Ghosts (search, related) stay,
-  // and so does the selected paper, e.g. one just unpinned or picked from
-  // search, until it's deselected.
+  // simulation, so the layout doesn't move. Pins and search ghosts stay, and
+  // the camera frames them. The selected paper (e.g. one just unpinned or
+  // picked from search) and its related papers also stay, including related
+  // papers that are hidden recipe nodes and so have no ghost, but only while
+  // it's selected, so fits leave them out.
+  const relatedAids = useMemo(
+    () => new Set(related.map((r) => r.aid)),
+    [related],
+  )
+  const isFramedNode = (n: NodeCompact) =>
+    !pinnedOnly || ghostIds.has(n.id) || pinnedAids.has(n.aid)
   const isNodeVisible = (n: NodeCompact) =>
-    !pinnedOnly ||
-    ghostIds.has(n.id) ||
-    pinnedAids.has(n.aid) ||
-    n.id === selectedId
+    isFramedNode(n) || n.id === selectedId || relatedAids.has(n.aid)
   const togglePinnedOnly = () => {
     track('graph_pinned_only', { value: pinnedOnly ? 'off' : 'on' })
     setPinnedOnlyKey(pinnedOnly ? null : sourceKey)
@@ -1175,7 +1190,7 @@ export default function ArxivGraph() {
   fitStateRef.current = {
     nodes: allSimNodes
       .slice(0, allSimNodes.length - relatedGhostNodes.length)
-      .filter(isNodeVisible),
+      .filter(isFramedNode),
     width,
     height,
   }
