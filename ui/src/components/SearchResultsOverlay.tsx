@@ -69,6 +69,11 @@ export default function SearchResultsOverlay({
                   <div className='text-[12px] text-neutral-500 truncate'>
                     {n.au}
                   </div>
+                  {n.pd && (
+                    <div className='text-[12px] text-neutral-500 tabular-nums'>
+                      {n.pd}
+                    </div>
+                  )}
                   <div className='text-[12px] text-neutral-400 flex flex-wrap items-center gap-x-2 gap-y-1 mb-0.5'>
                     <TagChips tags={n.tags} max={2} />
                   </div>

@@ -87,6 +87,11 @@ export default function PaperList({
                 <div className='mt-0.5 text-[13px] text-neutral-400 truncate'>
                   {n.au}
                 </div>
+                {n.pd && (
+                  <div className='text-[12px] text-neutral-500 tabular-nums'>
+                    {n.pd}
+                  </div>
+                )}
                 <div className='mt-1 text-[12px] text-neutral-400'>
                   <div className='flex flex-wrap items-center gap-x-2 gap-y-1 mb-0.5'>
                     <TagChips tags={n.tags} max={2} />
