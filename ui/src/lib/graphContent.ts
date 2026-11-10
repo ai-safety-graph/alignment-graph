@@ -68,23 +68,21 @@ function shortDate(iso: string): string {
   })
 }
 
-// "Papers 501–1,000 of 3,214 · Aug 12 – Sep 30 · 3 pinned" with Newer/Older
-// arrows when the recipe has more than one page. `pageIndex` counts from 0.
+// "Papers 501–1,000 of 3,214 · Aug 12 – Sep 30" with Newer/Older arrows
+// when the recipe has more than one page. The pinned count follows it as its
+// own toggle (GraphPager). `pageIndex` counts from 0.
 export function pageLabel({
   pageIndex,
   pageSize,
   shown,
   total,
   span,
-  pinned,
 }: {
   pageIndex: number
   pageSize: number
   shown: number
   total: number
   span?: { newest: string; oldest: string } | null
-  // Pinned papers shown, whether or not the recipe matched them
-  pinned: number
 }): string {
   const parts: string[] = []
   if (total > shown || pageIndex > 0) {
@@ -102,6 +100,5 @@ export function pageLabel({
         ? shortDate(span.newest)
         : `${shortDate(span.oldest)} – ${shortDate(span.newest)}`,
     )
-  if (pinned > 0) parts.push(`${pinned.toLocaleString()} pinned`)
   return parts.join(' · ')
 }
