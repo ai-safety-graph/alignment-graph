@@ -171,15 +171,6 @@ type GraphSource =
 
 const NO_MEMBERSHIP: GraphMembership = { pinned: [], hidden: [] }
 
-// Identifies the graph being shown, and with the page, the camera framing
-function graphSourceKey(source: GraphSource) {
-  return source.kind === 'draft'
-    ? `draft:${JSON.stringify(source.filters)}`
-    : source.kind === 'saved'
-      ? `saved:${source.graph.id}`
-      : 'none'
-}
-
 // Holds a bottom bar centred on the window, clear of the side overlays. The
 // spacers grow equally from nothing, so the bar sits in the middle until one
 // would get narrower than its clearance (px); that one then holds its width
@@ -280,7 +271,13 @@ export default function ArxivGraph() {
         : null
   const pinnedFull = (membership?.pinned.length ?? 0) >= MAX_PINNED
 
-  const sourceKey = graphSourceKey(source)
+  // Identifies the graph being shown, and with the page, the camera framing
+  const sourceKey =
+    source.kind === 'draft'
+      ? `draft:${JSON.stringify(source.filters)}`
+      : source.kind === 'saved'
+        ? `saved:${source.graph.id}`
+        : 'none'
 
   // Cursors for the pages after the first, newest first. Tied to the source
   // they were collected on, and cleared by showSource, so switching graphs
@@ -297,8 +294,6 @@ export default function ArxivGraph() {
   // key it was turned on for. Cleared when switching graphs (showSource),
   // carried over when a draft is saved, and kept by paging, pins and hides.
   const [pinnedOnlyKey, setPinnedOnlyKey] = useState<string | null>(null)
-  // Bumped to frame the canvas after the visible nodes change (see fitView)
-  const [fitRequest, setFitRequest] = useState(0)
 
   // The graph's papers: a page of its recipe plus its pins, minus hides.
   // Queries use the app-wide infinite staleTime, so revisiting a graph or
@@ -895,11 +890,6 @@ export default function ArxivGraph() {
       ids.has(n.id),
     )
   }
-  // Runs after the render that updated fitStateRef, so it frames the nodes
-  // left visible (e.g. by the pinned-only toggle)
-  useEffect(() => {
-    if (fitRequest > 0) fitView(500)
-  }, [fitRequest])
 
   // Focus helpers
   function focusNode(
@@ -977,11 +967,6 @@ export default function ArxivGraph() {
     setConfirmingDelete(false)
     setPendingExit(null)
     setPaging({ key: '', cursors: [] })
-    // Regenerating a draft with the same filters keeps the source key and the
-    // data, so no autofit runs: frame the papers pinned-only hid. Any other
-    // change autofits by itself, or (saving a draft) keeps the framing.
-    if (pinnedOnlyKey != null && graphSourceKey(next) === sourceKey)
-      setFitRequest((r) => r + 1)
     setPinnedOnlyKey(null)
     setSource(next)
   }
@@ -1165,13 +1150,23 @@ export default function ArxivGraph() {
       : 0
   const pinnedOnly = pinnedOnlyKey === sourceKey && pinnedShown > 0
   // Once nothing pinned is left to show (the last pin unpinned), turn it off
-  // for good, so pinning again doesn't hide everything else, and frame the
-  // papers that came back
+  // for good, so pinning again doesn't hide everything else
   useEffect(() => {
     if (!data || pinnedOnlyKey !== sourceKey || pinnedShown > 0) return
     setPinnedOnlyKey(null)
-    setFitRequest((r) => r + 1)
   }, [data, pinnedOnlyKey, sourceKey, pinnedShown])
+  // Frame what's visible whenever pinned-only turns on or off, however that
+  // happened (the toggle, the last pin unpinned, a switch or regenerate),
+  // unless an autofit is already due for new content or a fresh canvas: the
+  // effects that arm it run before this one. Runs after the render that
+  // updated fitStateRef. Saving a draft keeps pinned-only on, so the framing
+  // carries over.
+  const wasPinnedOnlyRef = useRef(pinnedOnly)
+  useEffect(() => {
+    if (wasPinnedOnlyRef.current === pinnedOnly) return
+    wasPinnedOnlyRef.current = pinnedOnly
+    if (didAutoFit.current) fitView(500)
+  }, [pinnedOnly])
   // Pinned-only hides the recipe's other papers but keeps them in the
   // simulation, so the layout doesn't move. Pins and search ghosts stay, and
   // the camera frames them. The selected paper (e.g. one just unpinned or
@@ -1189,7 +1184,6 @@ export default function ArxivGraph() {
   const togglePinnedOnly = () => {
     track('graph_pinned_only', { value: pinnedOnly ? 'off' : 'on' })
     setPinnedOnlyKey(pinnedOnly ? null : sourceKey)
-    setFitRequest((r) => r + 1)
   }
 
   // Related ghosts are excluded: every fit (ESC / background click) also
