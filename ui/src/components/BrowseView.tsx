@@ -38,7 +38,12 @@ import { usePaperDetail } from '../hooks/usePaperDetail'
 import { useNavHistory } from '../hooks/useNavHistory'
 import { useCapabilities } from '../hooks/useCapabilities'
 import { useSubgraphManager } from '../hooks/useSubgraphManager'
-import { EMPTY_FILTERS, filterLabels } from '../lib/graphFilters'
+import { domainLabel } from '../lib/domain'
+import {
+  EMPTY_FILTERS,
+  filterLabels,
+  filterSummary,
+} from '../lib/graphFilters'
 import type { GraphFilters } from '../lib/graphFilters'
 
 export default function BrowseView() {
@@ -670,6 +675,12 @@ export default function BrowseView() {
 
   // The graph's recipe, read-only: Edit changes it, as on the graph view
   const recipeLabels = recipe ? filterLabels(recipe) : []
+  // The badges show it in short, as on the graph view's bottom bar, plus
+  // the arXiv domains, which the summary leaves out but which narrow the
+  // list too much to hide behind the tooltip
+  const recipeChips = recipe
+    ? [...filterSummary(recipe), ...recipe.domains.map(domainLabel)]
+    : []
   const editRecipeButton = (
     <button
       type='button'
@@ -800,23 +811,27 @@ export default function BrowseView() {
                     >
                       {isMatches ? (
                         <>
-                          {/* Badges flow inline so a long recipe clamps with
-                              an ellipsis (one line on phones, two on
-                              desktop); the full list is in the tooltip and,
-                              on phones, the Edit filters modal */}
+                          {/* The recipe in short (a few short badges), so
+                              desktop wraps it in full and phones truncate it
+                              to one line; the full list is in the tooltip
+                              and the Edit filters modal. No line-clamp:
+                              Safari counts each badge's own text as a
+                              clamped line, cutting off their bottom border
+                              and putting its ellipsis inside a badge. */}
                           <p
-                            className='min-w-0 leading-6 line-clamp-1 md:line-clamp-2'
+                            className='min-w-0 leading-6 truncate md:whitespace-normal'
                             title={recipeLabels.join(', ') || undefined}
                           >
                             <span className='mr-1.5'>
                               {total.toLocaleString()}{' '}
                               {total === 1 ? 'paper' : 'papers'}
-                              {/* Phones get one line, so with filters to show
-                                  the chips follow a bare colon */}
+                              {/* Phones get one line and the half-width list
+                                  column below lg is narrow, so there the
+                                  chips follow a bare colon */}
                               {recipeLabels.length > 0 ? (
                                 <>
-                                  <span className='md:hidden'>:</span>
-                                  <span className='hidden md:inline'>
+                                  <span className='lg:hidden'>:</span>
+                                  <span className='hidden lg:inline'>
                                     {matchesPhrase}
                                   </span>
                                 </>
@@ -824,7 +839,7 @@ export default function BrowseView() {
                                 matchesPhrase
                               )}
                             </span>
-                            {recipeLabels.map((label) => (
+                            {recipeChips.map((label) => (
                               <span
                                 key={label}
                                 className='inline-block mr-1.5 px-1.5 leading-4 rounded-full border border-neutral-700'

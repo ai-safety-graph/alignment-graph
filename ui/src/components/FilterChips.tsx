@@ -1,7 +1,9 @@
 // A graph's recipe as small read-only chips on one line. A long recipe ends
 // in an ellipsis, as does a single chip wider than the space; the full list
-// is in the tooltip. Chips are spaced from the
-// left, as a trailing margin on the last one would wrap it a few px early.
+// is in the tooltip. Chips are spaced from the left, as a trailing margin
+// on the last one would start the ellipsis a few px early.
+// truncate, not line-clamp-1: Safari counts each chip's own text as the
+// clamped line, cutting off their bottom border and ellipsizing mid-chip.
 export default function FilterChips({
   labels,
   title = labels.join(', '),
@@ -16,7 +18,7 @@ export default function FilterChips({
   return (
     <span
       title={title}
-      className={`min-w-0 line-clamp-1 text-xs text-neutral-500 [&>span+span]:ml-1.5 ${className}`}
+      className={`min-w-0 truncate text-xs text-neutral-500 [&>span+span]:ml-1.5 ${className}`}
     >
       {labels.map((label) => (
         <span
