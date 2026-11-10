@@ -171,6 +171,15 @@ type GraphSource =
 
 const NO_MEMBERSHIP: GraphMembership = { pinned: [], hidden: [] }
 
+// Identifies the graph being shown, and with the page, the camera framing
+function graphSourceKey(source: GraphSource) {
+  return source.kind === 'draft'
+    ? `draft:${JSON.stringify(source.filters)}`
+    : source.kind === 'saved'
+      ? `saved:${source.graph.id}`
+      : 'none'
+}
+
 // Holds a bottom bar centred on the window, clear of the side overlays. The
 // spacers grow equally from nothing, so the bar sits in the middle until one
 // would get narrower than its clearance (px); that one then holds its width
@@ -271,13 +280,7 @@ export default function ArxivGraph() {
         : null
   const pinnedFull = (membership?.pinned.length ?? 0) >= MAX_PINNED
 
-  // Identifies the graph being shown, and with the page, the camera framing
-  const sourceKey =
-    source.kind === 'draft'
-      ? `draft:${JSON.stringify(source.filters)}`
-      : source.kind === 'saved'
-        ? `saved:${source.graph.id}`
-        : 'none'
+  const sourceKey = graphSourceKey(source)
 
   // Cursors for the pages after the first, newest first. Tied to the source
   // they were collected on, and cleared by showSource, so switching graphs
@@ -974,10 +977,11 @@ export default function ArxivGraph() {
     setConfirmingDelete(false)
     setPendingExit(null)
     setPaging({ key: '', cursors: [] })
-    // Frame the papers that come back. A new graph is autofitted anyway, but
-    // regenerating a draft with the same filters keeps the same data, so
-    // nothing else would refit.
-    if (pinnedOnlyKey != null) setFitRequest((r) => r + 1)
+    // Regenerating a draft with the same filters keeps the source key and the
+    // data, so no autofit runs: frame the papers pinned-only hid. Any other
+    // change autofits by itself, or (saving a draft) keeps the framing.
+    if (pinnedOnlyKey != null && graphSourceKey(next) === sourceKey)
+      setFitRequest((r) => r + 1)
     setPinnedOnlyKey(null)
     setSource(next)
   }
