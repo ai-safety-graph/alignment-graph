@@ -108,3 +108,13 @@ def test_recipe_facets_match_the_same_on_both_endpoints(client, corpus, params, 
 )
 def test_recipe_facets_reject_bad_terms(client, path, params):
     assert client.get(path, params=params).status_code == 422
+
+
+def test_search_log_ignores_blank_recipe_terms(client, monkeypatch):
+    from aisafety_pipeline.api.routes import papers
+
+    calls = []
+    monkeypatch.setattr(papers, "log_search", lambda *a: calls.append(a))
+    client.get("/api/papers", params={"q": "foo", "kw": " "})
+    client.get("/api/papers", params={"q": "foo", "kw": "jailbreak"})
+    assert [c[3] for c in calls] == [False, True]
