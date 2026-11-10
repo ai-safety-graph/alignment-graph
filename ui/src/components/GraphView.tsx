@@ -1494,10 +1494,7 @@ export default function ArxivGraph() {
               l.s ?? (typeof l.source === 'object' ? l.source?.id : l.source)
             const t =
               l.t ?? (typeof l.target === 'object' ? l.target?.id : l.target)
-            if (s !== activeId && t !== activeId) return false
-            // No edges out to papers hidden by pinned-only
-            const other = byId.get(s === activeId ? t : s)
-            return !!other && isNodeVisible(other)
+            return s === activeId || t === activeId
           }}
           onEngineTick={() => {
             // With stored coords, nodes settle within a few px of where they
