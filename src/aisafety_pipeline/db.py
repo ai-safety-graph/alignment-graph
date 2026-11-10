@@ -216,8 +216,15 @@ class PgConnection:
 # llm_relevant/llm_tags on `papers`) has been dropped; see
 # migrations/drop_paper_tags.sql.
 
+# Title + abstract as one string, for graph-recipe keyword filters
+# (api/recipe.py). Queries must use this exact expression to hit
+# idx_papers_text_trgm.
+PAPER_TEXT_EXPR = "(coalesce(title, '') || ' ' || coalesce(summary, ''))"
+
 _PG_SCHEMA = [
     "CREATE EXTENSION IF NOT EXISTS vector",
+    # Trigram indexes for the recipe keyword/author regex filters.
+    "CREATE EXTENSION IF NOT EXISTS pg_trgm",
     """
     CREATE TABLE IF NOT EXISTS papers_raw (
         id TEXT PRIMARY KEY,
@@ -295,6 +302,12 @@ _PG_VECTOR_INDEX_TOPIC = (
 _PG_LLM_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_papers_llm_relevant ON papers (llm_relevant)",
     "CREATE INDEX IF NOT EXISTS idx_papers_llm_tags ON papers USING gin (llm_tags)",
+    # Graph-recipe keyword / author filters (`~*` regexes, api/recipe.py).
+    # Without them every such query reads the whole (wide) papers heap.
+    "CREATE INDEX IF NOT EXISTS idx_papers_text_trgm ON papers "
+    f"USING gin ({PAPER_TEXT_EXPR} gin_trgm_ops) WHERE llm_relevant = TRUE",
+    "CREATE INDEX IF NOT EXISTS idx_papers_authors_trgm ON papers "
+    "USING gin (authors gin_trgm_ops) WHERE llm_relevant = TRUE",
 ]
 _PG_DROP_LEGACY_VECTOR_INDEXES = [
     "DROP INDEX IF EXISTS idx_papers_embedding",
