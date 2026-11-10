@@ -974,6 +974,10 @@ export default function ArxivGraph() {
     setConfirmingDelete(false)
     setPendingExit(null)
     setPaging({ key: '', cursors: [] })
+    // Frame the papers that come back. A new graph is autofitted anyway, but
+    // regenerating a draft with the same filters keeps the same data, so
+    // nothing else would refit.
+    if (pinnedOnlyKey != null) setFitRequest((r) => r + 1)
     setPinnedOnlyKey(null)
     setSource(next)
   }
@@ -1141,9 +1145,6 @@ export default function ArxivGraph() {
     () => ({ nodes: allSimNodes, links: data?.links ?? [] }),
     [allSimNodes, data],
   )
-  // Related ghosts are excluded: every fit (ESC / background click) also
-  // deselects, which clears them right after, so fitting to them would frame
-  // nodes that are about to vanish.
   // Pinned papers get a ring and an Unpin button; the recipe's own matches
   // can be pinned too
   const pinnedAids = useMemo(
@@ -1187,6 +1188,9 @@ export default function ArxivGraph() {
     setFitRequest((r) => r + 1)
   }
 
+  // Related ghosts are excluded: every fit (ESC / background click) also
+  // deselects, which clears them right after, so fitting to them would frame
+  // nodes that are about to vanish.
   fitStateRef.current = {
     nodes: allSimNodes
       .slice(0, allSimNodes.length - relatedGhostNodes.length)
