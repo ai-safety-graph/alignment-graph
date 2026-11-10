@@ -17,8 +17,9 @@ MAX_TERM_LENGTH = 80
 # A keyword needs a trigram to use idx_papers_text_trgm, and pg_trgm only
 # indexes letters and digits: "RL" (too short) or "C++" (one alphanumeric)
 # scan every relevant abstract instead (seconds on prod). Only the length is
-# enforced: rejecting "C++" would block real keywords, and an unindexed
-# keyword costs no more than `/api/papers?q=`, which always scans.
+# enforced: rejecting "C++" would block real keywords. Such a keyword scans
+# like `/api/papers?q=` always does, though it costs more (a regex over every
+# abstract, where `q` is an ILIKE over titles and authors).
 MIN_KEYWORD_LENGTH = 3
 
 # Characters special in a Postgres ARE outside a bracket expression. Escaping
