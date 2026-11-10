@@ -84,6 +84,7 @@ import { HeaderLogo, ViewSwitch } from './HeaderNav'
 import { NewGraphButton, NewGraphMenuItem } from './NewGraph'
 import { track } from '../lib/analytics'
 import { useCapabilities } from '../hooks/useCapabilities'
+import { useNewGraphRequest } from '../hooks/useNewGraphRequest'
 
 // Alpha of nodes outside the active node's neighbourhood: softer while
 // hovering, stronger once a node is locked. Changes fade over FADE_MS.
@@ -231,8 +232,11 @@ export default function ArxivGraph() {
     const graph = savedGraphs.find((g) => g.id === active) ?? savedGraphs[0]
     return graph ? { kind: 'saved', graph } : { kind: 'none' }
   })
+  // Opened from About's "Create a graph" or by a first visitor: start with
+  // the new-graph modal
+  const newGraphRequested = useNewGraphRequest()
   const [modal, setModal] = useState<ModalState | null>(() =>
-    savedGraphs.length ? null : NEW_GRAPH_MODAL,
+    savedGraphs.length && !newGraphRequested ? null : NEW_GRAPH_MODAL,
   )
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   // Mirrors GraphLegend's own state, to keep the bottom bar clear of it
