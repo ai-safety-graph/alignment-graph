@@ -62,4 +62,18 @@ describe('SearchResultsOverlay', () => {
     expect(screen.getByText('ICLR 2026')).toBeTruthy()
     expect(screen.getAllByTitle(/Peer-reviewed/)).toHaveLength(1)
   })
+
+  it('shows the publication date, and nothing when it is missing', () => {
+    render(
+      <SearchResultsOverlay
+        results={[
+          { n: { ...node('d'), pd: '2026-10-31' }, score: 1, deg: 0 },
+          { n: { ...node('e'), pd: '' }, score: 1, deg: 0 },
+        ]}
+        onSelect={() => {}}
+      />,
+    )
+    expect(screen.getByText('2026-10-31')).toBeTruthy()
+    expect(screen.getAllByText(/^\d{4}-\d{2}-\d{2}$/)).toHaveLength(1)
+  })
 })
