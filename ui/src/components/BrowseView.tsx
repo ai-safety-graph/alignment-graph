@@ -38,6 +38,7 @@ import { usePaperDetail } from '../hooks/usePaperDetail'
 import { useNavHistory } from '../hooks/useNavHistory'
 import { useCapabilities } from '../hooks/useCapabilities'
 import { useSubgraphManager } from '../hooks/useSubgraphManager'
+import { domainLabel } from '../lib/domain'
 import {
   EMPTY_FILTERS,
   filterLabels,
@@ -674,11 +675,12 @@ export default function BrowseView() {
 
   // The graph's recipe, read-only: Edit changes it, as on the graph view
   const recipeLabels = recipe ? filterLabels(recipe) : []
-  // The badges show it in short, as on the graph view's bottom bar. The
-  // summary leaves out arXiv domains, so a domains-only recipe shows its
-  // labels instead of an empty list after "match these filters:".
-  const summaryChips = recipe ? filterSummary(recipe) : []
-  const recipeChips = summaryChips.length > 0 ? summaryChips : recipeLabels
+  // The badges show it in short, as on the graph view's bottom bar, plus
+  // the arXiv domains, which the summary leaves out but which narrow the
+  // list too much to hide behind the tooltip
+  const recipeChips = recipe
+    ? [...filterSummary(recipe), ...recipe.domains.map(domainLabel)]
+    : []
   const editRecipeButton = (
     <button
       type='button'
@@ -809,7 +811,7 @@ export default function BrowseView() {
                     >
                       {isMatches ? (
                         <>
-                          {/* The recipe in short (at most three badges), so
+                          {/* The recipe in short (a few short badges), so
                               desktop wraps it in full and phones truncate it
                               to one line; the full list is in the tooltip
                               and the Edit filters modal. No line-clamp:
