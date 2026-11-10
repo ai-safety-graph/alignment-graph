@@ -27,6 +27,7 @@ import LatestBatchBadge from './LatestBatchBadge'
 import { HeaderLogo, ViewSwitch } from './HeaderNav'
 import { NewGraphButton, NewGraphMenuItem } from './NewGraph'
 import GenerateGraphModal from './GenerateGraphModal'
+import { useNewGraphRequest } from '../hooks/useNewGraphRequest'
 import type { NodeCompact } from '../lib/types'
 import { presetToFromDate, useServerFilters } from '../hooks/useServerFilters'
 import { useMediaQuery } from '../hooks/useMediaQuery'
@@ -39,11 +40,7 @@ import { useNavHistory } from '../hooks/useNavHistory'
 import { useCapabilities } from '../hooks/useCapabilities'
 import { useSubgraphManager } from '../hooks/useSubgraphManager'
 import { domainLabel } from '../lib/domain'
-import {
-  EMPTY_FILTERS,
-  filterLabels,
-  filterSummary,
-} from '../lib/graphFilters'
+import { EMPTY_FILTERS, filterLabels, filterSummary } from '../lib/graphFilters'
 import type { GraphFilters } from '../lib/graphFilters'
 
 export default function BrowseView() {
@@ -61,7 +58,11 @@ export default function BrowseView() {
   // Collapsed by default so the list gets the column; active filters still
   // show as a summary row while collapsed.
   const [filterExpanded, setFilterExpanded] = useState(false)
-  const [modal, setModal] = useState<'generate' | 'edit' | null>(null)
+  // About's "Create a graph" lands here on phones with the modal open
+  const newGraphRequested = useNewGraphRequest()
+  const [modal, setModal] = useState<'generate' | 'edit' | null>(
+    newGraphRequested ? 'generate' : null,
+  )
   // Phones pick a graph (and edit or delete it) from a bottom sheet
   const [graphSheetOpen, setGraphSheetOpen] = useState(false)
 
@@ -243,9 +244,9 @@ export default function BrowseView() {
   // would scroll too, so lock it while one is open
   const overlayOpen = Boolean(
     selectedId ||
-      modal ||
-      isConfirmingDelete ||
-      (isSmall && (graphSheetOpen || filterExpanded)),
+    modal ||
+    isConfirmingDelete ||
+    (isSmall && (graphSheetOpen || filterExpanded)),
   )
   useEffect(() => {
     if (!overlayOpen) return

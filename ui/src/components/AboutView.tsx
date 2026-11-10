@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft } from 'lucide-react'
+import { ChevronRight, Plus } from 'lucide-react'
 import { fetchCoverage } from '../lib/api'
 import { useLatestBatch } from '../hooks/useLatestBatch'
 import { useTagCatalog } from '../hooks/useTagCatalog'
+import { NEW_GRAPH_STATE } from '../hooks/useNewGraphRequest'
 
 const REPO_URL = 'https://github.com/ai-safety-graph/alignment-graph'
 const ISSUES_URL = `${REPO_URL}/issues`
@@ -47,6 +48,39 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
         {children}
       </div>
     </section>
+  )
+}
+
+// Reference material closed by default, so the page doesn't read as a wall
+// of text; the summary is styled like a Section heading
+function CollapsibleSection({
+  title,
+  children,
+}: {
+  title: string
+  children: ReactNode
+}) {
+  return (
+    <details className='group flex flex-col gap-3'>
+      <summary className='cursor-pointer list-none flex items-center gap-2 text-lg font-semibold text-white [&::-webkit-details-marker]:hidden'>
+        <h2>{title}</h2>
+        <ChevronRight
+          size={16}
+          className='text-neutral-500 transition-transform group-open:rotate-90'
+        />
+      </summary>
+      <div className='flex flex-col gap-3 text-[15px] leading-relaxed text-neutral-300'>
+        {children}
+      </div>
+    </details>
+  )
+}
+
+function SubHeading({ children }: { children: ReactNode }) {
+  return (
+    <h3 className='text-xs font-medium uppercase tracking-wide text-neutral-500'>
+      {children}
+    </h3>
   )
 }
 
@@ -116,21 +150,23 @@ export default function AboutView() {
   return (
     <div className='min-h-dvh md:fixed md:inset-0 bg-neutral-950 text-[#e5e5e5] flex flex-col'>
       <div className='sticky top-0 z-10 shrink-0 bg-neutral-950/90 backdrop-blur px-4 py-3 flex items-center justify-between gap-3'>
-        <Link
-          to='/'
-          aria-label='Back'
-          className='shrink-0 p-1 cursor-pointer text-neutral-300 hover:text-white transition-colors'
-        >
-          <ArrowLeft size={15} />
-        </Link>
-        <h1 className='sr-only'>About</h1>
-        {/* Home, like the logo on every other page; GitHub is linked below */}
-        <Link to='/' aria-label='Alignment Graph home'>
+        {/* Logo → home at the left, as in the app's other headers */}
+        <Link to='/' aria-label='Alignment Graph home' className='shrink-0'>
           <img
             src='/ag-logo.svg'
             alt='Alignment Graph'
-            className='h-[34px] w-auto opacity-50 saturate-70 hover:opacity-90 transition-opacity'
+            className='h-[30px] w-auto opacity-60 saturate-70 hover:opacity-90 transition-opacity'
           />
+        </Link>
+        <h1 className='sr-only'>About</h1>
+        {/* Lands on the home view with the new-graph modal open */}
+        <Link
+          to='/'
+          state={NEW_GRAPH_STATE}
+          className='shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-neutral-950 border border-neutral-700 text-[13px] text-neutral-300 hover:text-white hover:border-neutral-500 whitespace-nowrap transition-colors'
+        >
+          <Plus size={14} />
+          Create a graph
         </Link>
       </div>
 
@@ -146,69 +182,70 @@ export default function AboutView() {
           </div>
 
           <Section title='How to use'>
-            <p>
-              <span className='text-white'>Graph view</span> (desktop): start
-              with <span className='text-white'>New graph</span> and pick topic
-              tags, research domains and a date window. Each dot is a matching
-              paper, and papers on similar topics are placed near each other.
-              Click a paper to open its details, summary and related papers.
-              Press <Kbd>/</Kbd> or <Kbd>⌘/Ctrl</Kbd>+<Kbd>K</Kbd> to search and{' '}
-              <Kbd>Esc</Kbd> to clear the search.
-            </p>
-            <p>
-              <span className='text-white'>Filters</span>: in the list view,
-              narrow the papers by topic tag, research domain or publication
-              date. In the graph view the same filters build the graph.
-            </p>
-            <p>
-              <span className='text-white'>List view</span>: switch from Graph
-              to List in the header for a searchable list of papers, with the
-              selected paper's details beside it.
-            </p>
-            <p>
-              <span className='text-white'>On mobile</span>: the list view is
-              the main view. Search at the top, tap a paper to open its summary
-              and related papers, and tap a related paper to follow it. The
-              trail of papers you've opened lets you step back. Filters and
-              saved graphs work the same way as on desktop.
-            </p>
-            <p>
-              <span className='text-white'>Saved graphs</span>: save a generated
-              graph to keep it, edit its filters later, and add papers to it
-              from their detail panel. In the list view,{' '}
-              <span className='text-white'>New Graph</span> starts an empty
-              named collection. Pick a saved graph from the dropdown to see only
-              those papers. You can keep up to 50 graphs of up to 500 papers
-              each.
-            </p>
+            <SubHeading>Quick start</SubHeading>
+            <ol className='list-decimal pl-5 flex flex-col gap-2'>
+              <li>
+                <span className='text-white'>Pick a topic.</span> Click{' '}
+                <span className='text-white'>New graph</span> and choose topic
+                tags, research domains and a date range. Turn on{' '}
+                <span className='text-white'>Peer-reviewed only</span> to keep
+                only accepted papers.
+              </li>
+              <li>
+                <span className='text-white'>Explore.</span> Each dot is a
+                paper, and papers on similar topics sit close together. Click
+                one to see its summary and related papers.
+              </li>
+              <li>
+                <span className='text-white'>Keep what's useful.</span> Save the
+                graph, then <span className='text-white'>Pin</span> papers to it
+                from their details.
+              </li>
+            </ol>
+
+            <SubHeading>Views</SubHeading>
+            <ul className='list-disc pl-5 flex flex-col gap-2'>
+              <li>
+                <span className='text-white'>Graph</span> (desktop): the map.
+                The legend in the corner explains the colours. Press{' '}
+                <Kbd>/</Kbd> or <Kbd>⌘/Ctrl</Kbd>+<Kbd>K</Kbd> to search and{' '}
+                <Kbd>Esc</Kbd> to clear.
+              </li>
+              <li>
+                <span className='text-white'>List</span>: the same papers in a
+                searchable list. When a saved graph is selected, tabs switch
+                between its <span className='text-white'>Matches</span>, your{' '}
+                <span className='text-white'>Pinned</span> papers, and{' '}
+                <span className='text-white'>All papers</span> to pin from.
+              </li>
+              <li>
+                <span className='text-white'>On a phone</span>: the list is the
+                main view. Tap a paper for its summary, tap a related paper to
+                follow it, and step back along the trail.
+              </li>
+            </ul>
+
             <p className='text-sm text-neutral-400'>
-              Saved graphs live only in this browser. They don't sync to your
-              other devices or browsers, there's no export yet, and clearing
+              You can keep up to 50 graphs, with up to 500 pinned papers each,
+              and edit a graph's filters at any time. Graphs are stored only in
+              this browser: they don't sync, there's no export yet, and clearing
               this site's data deletes them.
             </p>
           </Section>
 
           <Section title='Reading the map'>
             <ul className='list-disc pl-5 flex flex-col gap-2'>
+              <li>Only closeness matters; the axes mean nothing.</li>
               <li>
-                Only closeness matters. The axes have no meaning, so "left" or
-                "up" says nothing about a paper.
+                A dense cluster means many papers, not more important ones.
               </li>
               <li>
-                A dense cluster means many papers on a topic, not that the topic
-                or its papers are more important.
+                Positions are approximate; a paper's related-papers list is more
+                reliable.
               </li>
               <li>
-                Positions are approximate. A 2D map can't keep every similarity,
-                so two nearby papers may only be loosely related. The
-                related-papers list in each paper's details is a more reliable
-                guide.
-              </li>
-              <li>
-                Existing papers don't move between daily updates. New papers are
-                slotted in next to their closest neighbours, which is less
-                precise than a full re-layout, so recent papers' positions are
-                rougher until the next periodic refit.
+                New papers are slotted in daily and placed precisely at the next
+                refit.
               </li>
             </ul>
           </Section>
@@ -222,7 +259,7 @@ export default function AboutView() {
             <TagGlossary />
           </Section>
 
-          <Section title='How papers are collected'>
+          <CollapsibleSection title='How papers are collected'>
             <ol className='list-decimal pl-5 flex flex-col gap-2'>
               <li>
                 <span className='text-white'>Harvest.</span> Each day, new
@@ -256,9 +293,9 @@ export default function AboutView() {
               All of this is automated, so the collection may miss some papers
               or include borderline ones.
             </p>
-          </Section>
+          </CollapsibleSection>
 
-          <Section title='Privacy'>
+          <CollapsibleSection title='Privacy'>
             <ul className='list-disc pl-5 flex flex-col gap-2'>
               <li>No accounts, cookies or advertising trackers.</li>
               <li>
@@ -285,7 +322,7 @@ export default function AboutView() {
                 metadata.
               </li>
             </ul>
-          </Section>
+          </CollapsibleSection>
 
           <Section title='Feedback'>
             <p>
