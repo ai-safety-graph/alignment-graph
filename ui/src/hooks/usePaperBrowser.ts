@@ -4,6 +4,7 @@ import { fetchPapers } from '../lib/api'
 import type { NodeCompact } from '../lib/types'
 
 const PAGE_SIZE = 50
+const NONE: string[] = []
 
 type Params = {
   /** Debounced keyword query. */
@@ -13,6 +14,9 @@ type Params = {
   activeDomains: Set<string>
   /** Only papers known to be peer-reviewed. */
   peerReviewed?: boolean
+  /** A graph recipe's keyword / author facets (its Matches list). */
+  keywords?: string[]
+  authors?: string[]
   /** When false, the browser pauses fetching (e.g. while semantic search is active). */
   enabled?: boolean
 }
@@ -48,6 +52,8 @@ export function usePaperBrowser({
   activeTags,
   activeDomains,
   peerReviewed = false,
+  keywords = NONE,
+  authors = NONE,
   enabled = true,
 }: Params): PaperBrowser {
   const tagsKey = [...activeTags].sort().join(',')
@@ -62,7 +68,16 @@ export function usePaperBrowser({
     isFetchingNextPage,
     error: queryError,
   } = useInfiniteQuery({
-    queryKey: ['papers', query, fromDate ?? '', tagsKey, domainsKey, peerReviewed],
+    queryKey: [
+      'papers',
+      query,
+      fromDate ?? '',
+      tagsKey,
+      domainsKey,
+      peerReviewed,
+      keywords,
+      authors,
+    ],
     queryFn: ({ pageParam }) =>
       fetchPapers({
         q: query || undefined,
@@ -70,6 +85,8 @@ export function usePaperBrowser({
         tags: activeTags.size > 0 ? [...activeTags] : undefined,
         domains: activeDomains.size > 0 ? [...activeDomains] : undefined,
         peerReviewed,
+        keywords,
+        authors,
         limit: PAGE_SIZE,
         page: pageParam,
       }),

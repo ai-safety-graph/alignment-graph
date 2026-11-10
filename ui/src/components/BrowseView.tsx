@@ -130,6 +130,8 @@ export default function BrowseView() {
         activeTags: new Set(recipe.tags),
         activeDomains: new Set(recipe.domains),
         peerReviewed: recipe.peerReviewed ?? false,
+        keywords: recipe.keywords,
+        authors: recipe.authors,
       },
     [recipe],
   )

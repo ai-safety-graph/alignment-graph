@@ -11,7 +11,18 @@ export type GraphFilters = {
   // Only papers known to be peer-reviewed. Optional: recipes saved before
   // the toggle existed don't have it and mean "all papers".
   peerReviewed?: boolean
+  // Free-text facets, each "any of" and ANDed with the rest: keywords match a
+  // word start in the title or abstract, authors a whole author name.
+  // Optional for the same reason; absent or empty means no filter.
+  keywords?: string[]
+  authors?: string[]
 }
+
+// Limits the API enforces too (api/recipe.py). Keywords need a trigram to be
+// served by the text index, and author suggestions start at the same length.
+export const MIN_TERM_LENGTH = 3
+export const MAX_TERMS = 10
+export const MAX_TERM_LENGTH = 80
 
 export const EMPTY_FILTERS: GraphFilters = {
   tags: [],
@@ -25,18 +36,27 @@ export function toRangeParams(f: GraphFilters): {
   tags: string[]
   domains: string[]
   peerReviewed: boolean
+  keywords: string[]
+  authors: string[]
 } {
   return {
     from: presetToFromDate(f.datePreset),
     tags: f.tags,
     domains: f.domains,
     peerReviewed: f.peerReviewed ?? false,
+    keywords: f.keywords ?? [],
+    authors: f.authors ?? [],
   }
 }
+
+export const keywordLabel = (k: string) => `“${k}”`
+export const authorLabel = (a: string) => `by ${a}`
 
 // One label per filter in a recipe, for showing it as chips
 export function filterLabels(f: GraphFilters): string[] {
   return [
+    ...(f.authors ?? []).map(authorLabel),
+    ...(f.keywords ?? []).map(keywordLabel),
     ...f.tags,
     ...f.domains.map(domainLabel),
     ...(f.datePreset === 'all'
@@ -50,7 +70,8 @@ export function filterLabels(f: GraphFilters): string[] {
 }
 
 // A short form of a recipe for the graph view's bottom bar: peer review and
-// the date window if set, then how many topics. filterLabels has the lot.
+// the date window if set, then the authors and keywords (one in full, more as
+// a count), then how many topics. filterLabels has the lot.
 export function filterSummary(f: GraphFilters): string[] {
   const date =
     f.datePreset === 'all'
@@ -60,17 +81,42 @@ export function filterSummary(f: GraphFilters): string[] {
   return [
     ...(f.peerReviewed ? ['Peer-reviewed'] : []),
     ...(date ? [date] : []),
+    ...countOrOne(f.authors ?? [], authorLabel, 'authors'),
+    ...countOrOne(f.keywords ?? [], keywordLabel, 'keywords'),
     ...(f.tags.length > 0
       ? [`${f.tags.length} ${f.tags.length === 1 ? 'topic' : 'topics'}`]
       : []),
   ]
 }
 
-// e.g. "Interpretability and explainability +1 · past month · peer-reviewed"
+// One item in full, several as a count ("3 authors")
+function countOrOne(
+  items: string[],
+  label: (s: string) => string,
+  plural: string,
+): string[] {
+  if (items.length === 0) return []
+  return [items.length === 1 ? label(items[0]) : `${items.length} ${plural}`]
+}
+
+const firstPlus = (items: string[], fmt: (s: string) => string = (s) => s) =>
+  fmt(items[0]) + (items.length > 1 ? ` +${items.length - 1}` : '')
+
+// e.g. "Interpretability and explainability +1 · past month · peer-reviewed",
+// or "Neel Nanda · “sparse autoencoder”". Authors and keywords lead, as the
+// most specific facets; tags follow, then domains when nothing else names it.
 export function defaultGraphName(f: GraphFilters, maxLength: number): string {
+  const authors = f.authors ?? []
+  const keywords = f.keywords ?? []
+  const named = [
+    ...(authors.length > 0 ? [firstPlus(authors)] : []),
+    ...(keywords.length > 0 ? [firstPlus(keywords, keywordLabel)] : []),
+  ]
   const subject =
-    f.tags.length > 0
-      ? f.tags[0] + (f.tags.length > 1 ? ` +${f.tags.length - 1}` : '')
+    named.length > 0
+      ? named.join(' · ')
+      : f.tags.length > 0
+        ? firstPlus(f.tags)
       : f.domains.length > 0
         ? f.domains.map(domainLabel).join(', ')
         : 'All papers'

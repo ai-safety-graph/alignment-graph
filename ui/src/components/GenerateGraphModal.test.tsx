@@ -8,7 +8,8 @@ import GenerateGraphModal from './GenerateGraphModal'
 import { EMPTY_FILTERS } from '../lib/graphFilters'
 import type { GraphFilters } from '../lib/graphFilters'
 
-// Serves /api/tags and answers /api/papers with `totalFor(url)`.
+// Serves /api/tags and /api/authors, and answers /api/papers with
+// `totalFor(url)`.
 function mockApi(totalFor: (url: URL) => number) {
   vi.stubGlobal(
     'fetch',
@@ -16,7 +17,12 @@ function mockApi(totalFor: (url: URL) => number) {
       const url = new URL(input, 'http://localhost')
       const body = url.pathname.endsWith('/api/tags')
         ? { rlhf: { size: 4 }, evals: { size: 2 } }
-        : { total: totalFor(url), page: 1, limit: 1, items: [] }
+        : url.pathname.endsWith('/api/authors')
+          ? [
+              { name: 'Neel Nanda', n: 44 },
+              { name: 'Nanyun Peng', n: 18 },
+            ].filter((a) => a.name.toLowerCase().includes(url.searchParams.get('q')!.toLowerCase()))
+          : { total: totalFor(url), page: 1, limit: 1, items: [] }
       return { ok: true, status: 200, json: async () => body } as Response
     }),
   )
@@ -155,6 +161,78 @@ describe('GenerateGraphModal', () => {
     await userEvent.click(create)
 
     expect(screen.getByText('Maximum 50 saved graphs reached')).toBeInTheDocument()
+  })
+
+  it('adds a keyword on Enter without generating, and counts with it', async () => {
+    mockApi((url) => (url.searchParams.getAll('kw').includes('sparse autoencoder') ? 7 : 12))
+    const { onGenerate } = renderModal()
+
+    const input = screen.getByRole('combobox', { name: 'Keywords and authors' })
+    await userEvent.type(input, 'sparse  autoencoder{Enter}')
+    expect(onGenerate).not.toHaveBeenCalled()
+    expect(input).toHaveValue('')
+    expect(screen.getByRole('button', { name: 'Remove keyword sparse autoencoder' })).toBeInTheDocument()
+    expect(await screen.findByText('7 papers match')).toBeInTheDocument()
+
+    // Enter on the empty box generates, as anywhere else in the modal
+    const generate = screen.getByRole('button', { name: 'Generate graph' })
+    await waitFor(() => expect(generate).toBeEnabled())
+    await userEvent.keyboard('{Enter}')
+    expect(onGenerate).toHaveBeenCalledWith({
+      tags: [],
+      domains: [],
+      datePreset: 'all',
+      keywords: ['sparse autoencoder'],
+    })
+  })
+
+  it('suggests authors from the corpus and adds the chosen one', async () => {
+    mockApi((url) => (url.searchParams.getAll('author').includes('Neel Nanda') ? 44 : 12))
+    const { onGenerate } = renderModal()
+
+    const input = screen.getByRole('combobox', { name: 'Keywords and authors' })
+    await userEvent.type(input, 'nanda')
+    // The typed text as a keyword comes first, then the suggestion
+    const suggestion = await screen.findByRole('option', { name: /Neel Nanda/ })
+    expect(screen.getAllByRole('option')[0]).toHaveTextContent('Keyword “nanda”')
+    expect(suggestion).toHaveTextContent('44 papers')
+    await userEvent.keyboard('{ArrowDown}{Enter}')
+
+    expect(screen.getByRole('button', { name: 'Remove author Neel Nanda' })).toBeInTheDocument()
+    expect(await screen.findByText('44 papers match')).toBeInTheDocument()
+    const generate = screen.getByRole('button', { name: 'Generate graph' })
+    await waitFor(() => expect(generate).toBeEnabled())
+    await userEvent.click(generate)
+    expect(onGenerate).toHaveBeenCalledWith({ tags: [], domains: [], datePreset: 'all', authors: ['Neel Nanda'] })
+  })
+
+  it('offers a short name only as an author, without looking it up', async () => {
+    mockApi(() => 3)
+    renderModal()
+
+    await userEvent.type(screen.getByRole('combobox', { name: 'Keywords and authors' }), 'Yu')
+    const options = await screen.findAllByRole('option')
+    expect(options).toHaveLength(1)
+    expect(options[0]).toHaveTextContent('Author “Yu”')
+    const urls = vi.mocked(fetch).mock.calls.map((c) => c[0] as string)
+    expect(urls.some((u) => u.includes('/api/authors'))).toBe(false)
+  })
+
+  it('removes the last chip on Backspace and clears typed text on Escape', async () => {
+    mockApi(() => 3)
+    const { onClose } = renderModal({
+      initialFilters: { ...EMPTY_FILTERS, keywords: ['jailbreak'], authors: ['Neel Nanda'] },
+      mode: 'edit',
+    })
+
+    const input = screen.getByRole('combobox', { name: 'Keywords and authors' })
+    await userEvent.type(input, 'abc{Escape}')
+    expect(input).toHaveValue('')
+    expect(onClose).not.toHaveBeenCalled()
+
+    await userEvent.keyboard('{Backspace}')
+    expect(screen.queryByRole('button', { name: 'Remove keyword jailbreak' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove author Neel Nanda' })).toBeInTheDocument()
   })
 
   it('closes on Escape', async () => {

@@ -48,7 +48,8 @@ export async function fetchSubgraph(
 }
 
 // One page of the relevant papers matching the filters (any of `tags`, any of
-// `domains`, published in [from, to] as YYYY-MM-DD, not in `exclude`, known
+// `domains`, any of `keywords` in the title/abstract, any of `authors`,
+// published in [from, to] as YYYY-MM-DD, not in `exclude`, known
 // peer-reviewed when `peerReviewed`; every bound optional), newest first. `meta.total` is the full match count and
 // `meta.next` the cursor for the following page, passed back as `before`.
 export async function fetchGraphRange(
@@ -60,6 +61,8 @@ export async function fetchGraphRange(
     exclude?: string[]
     before?: GraphCursor | null
     peerReviewed?: boolean
+    keywords?: string[]
+    authors?: string[]
   } = {},
 ): Promise<GraphDataCompact> {
   const qs = new URLSearchParams()
@@ -67,6 +70,7 @@ export async function fetchGraphRange(
   if (params.to) qs.set('to', params.to)
   params.tags?.forEach((t) => qs.append('tags', t))
   params.domains?.forEach((d) => qs.append('domain', d))
+  appendTerms(qs, params)
   params.exclude?.forEach((aid) => qs.append('exclude', aid))
   if (params.peerReviewed) qs.set('peer_reviewed', 'true')
   if (params.before) {
@@ -124,6 +128,8 @@ export async function fetchPapers(
     to?: string
     q?: string
     peerReviewed?: boolean
+    keywords?: string[]
+    authors?: string[]
   } = {},
 ): Promise<PaginatedPapers> {
   const qs = new URLSearchParams()
@@ -134,9 +140,32 @@ export async function fetchPapers(
   if (params.from) qs.set('from', params.from)
   if (params.to) qs.set('to', params.to)
   if (params.q) qs.set('q', params.q)
+  appendTerms(qs, params)
   if (params.peerReviewed) qs.set('peer_reviewed', 'true')
   const data = await apiFetch<PaginatedPapers>(`/api/papers?${qs}`)
   return { ...data, items: data.items.map(withTags) }
+}
+
+// The recipe's keyword / author facets, as /api/graph/range and /api/papers
+// take them
+function appendTerms(
+  qs: URLSearchParams,
+  params: { keywords?: string[]; authors?: string[] },
+) {
+  params.keywords?.forEach((k) => qs.append('kw', k))
+  params.authors?.forEach((a) => qs.append('author', a))
+}
+
+export type AuthorSuggestion = { name: string; n: number }
+
+// Author names with a word starting with `q` (≥ 3 characters), most papers
+// first, for the recipe's author facet
+export async function fetchAuthors(
+  q: string,
+  limit = 8,
+): Promise<AuthorSuggestion[]> {
+  const qs = new URLSearchParams({ q, limit: String(limit) })
+  return apiFetch<AuthorSuggestion[]>(`/api/authors?${qs}`)
 }
 
 export async function fetchTags(): Promise<TagsLegend> {
