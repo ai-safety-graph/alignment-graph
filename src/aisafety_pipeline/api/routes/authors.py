@@ -11,8 +11,10 @@ router = APIRouter(prefix="/api/authors", tags=["authors"])
 # matches at the start of any word of a name ("nan" finds "Neel Nanda"), the
 # same prefix rule as recipe keywords. The outer `authors ~*` uses
 # idx_papers_authors_trgm to find candidate papers before their author lists
-# are split, so only those rows are unnested. `q` needs a trigram (3+
-# characters) for that index; shorter ones scan every relevant paper.
+# are split, so only those rows are unnested. That needs a trigram, so `q`
+# must be 3+ characters; one with no run of 3 letters or digits ("J. S")
+# still has none and scans every relevant paper's authors (cheap, but not
+# indexed), the same trade-off recipe keywords make.
 _AUTHORS_SQL = """
     SELECT a AS name, count(*) AS n
     FROM papers, unnest(string_to_array(authors, ', ')) AS a
