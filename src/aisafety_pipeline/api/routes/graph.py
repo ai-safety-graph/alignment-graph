@@ -9,6 +9,7 @@ from pydantic import BaseModel, field_validator
 from ...config import TOPIC_EMB_DIMS, TOPIC_EMB_MODEL
 from ..deps import get_conn
 from ..ratelimit import expensive_limit, limiter
+from ..recipe import MIN_KEYWORD_LENGTH, clean_terms, recipe_where
 
 router = APIRouter(prefix="/api/graph", tags=["graph"])
 
@@ -66,28 +67,16 @@ def _build_range_graph(
     exclude: list[str] | None = None,
     before: tuple[dt.date, str] | None = None,
     peer_reviewed: bool = False,
+    keywords: list[str] | None = None,
+    authors: list[str] | None = None,
 ) -> dict:
-    # `published` is TEXT (YYYY-MM-DD), so compare as ISO strings.
-    where = ["llm_relevant = TRUE"]
-    params: list = []
-    if tags:
-        where.append("llm_tags && %s")
-        params.append(tags)
-    if domains:
-        where.append("domain_tag = ANY(%s)")
-        params.append(domains)
-    if from_date:
-        where.append("published >= %s")
-        params.append(from_date.isoformat())
-    if to_date:
-        where.append("published <= %s")
-        params.append(to_date.isoformat())
+    where, params = recipe_where(
+        tags=tags, domains=domains, from_date=from_date, to_date=to_date,
+        peer_reviewed=peer_reviewed, keywords=keywords or [], authors=authors or [],
+    )
     if exclude:
         where.append("id <> ALL(%s)")
         params.append(exclude)
-    if peer_reviewed:
-        # Bare column so it matches idx_papers_reviewed_published's predicate.
-        where.append("peer_reviewed")
     match = " AND ".join(where)
     total = conn.execute(
         f"SELECT count(*) FROM papers WHERE {match}", params
@@ -263,11 +252,14 @@ def get_range_graph(
     before_date: dt.date | None = Query(None),
     before_id: str | None = Query(None),
     peer_reviewed: bool = Query(False),
+    kw: list[str] = Query(default=[]),
+    author: list[str] = Query(default=[]),
     conn=Depends(get_conn),
 ):
     """Graph of relevant papers matching the filters (any of `tags`, any of
-    `domain`, published in [from, to], not in `exclude`, known peer-reviewed
-    when `peer_reviewed`), newest first, one
+    `domain`, any of `kw` in title/abstract, any of `author`, published in
+    [from, to], not in `exclude`, known peer-reviewed when `peer_reviewed`),
+    newest first, one
     page of _MAX_RANGE. Pass `meta.next` back as `before_date`/`before_id`
     for the following page."""
     if (before_date is None) != (before_id is None):
@@ -281,4 +273,7 @@ def get_range_graph(
             detail=f"exclude must contain at most {_MAX_EXCLUDE} items",
         )
     before = (before_date, before_id) if before_date and before_id else None
-    return _build_range_graph(conn, from_date, to_date, tags, domain, exclude, before, peer_reviewed)
+    return _build_range_graph(
+        conn, from_date, to_date, tags, domain, exclude, before, peer_reviewed,
+        keywords=clean_terms(kw, "kw", MIN_KEYWORD_LENGTH), authors=clean_terms(author, "author"),
+    )

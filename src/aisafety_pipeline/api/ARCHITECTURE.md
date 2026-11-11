@@ -80,7 +80,7 @@ Every route except `/health` is rate-limited per client IP by `slowapi` (`rateli
 - Failures (including `PoolTimeout`) are logged and swallowed. `SEARCH_LOG_ENABLED=false` turns it off.
 - Search-as-you-type logs prefixes ("alig", "align"). `scripts/search_report.sql` filters these when reporting.
 - The table is created by `init_db()`; `migrations/add_search_log.sql` is for databases created before that (and enables RLS).
-- `has_filters` means any of tags/domain/from/to for keyword searches, and domain or tag for semantic searches.
+- `has_filters` means any of tags/domain/from/to/peer_reviewed/kw/author for keyword searches, and domain or tag for semantic searches.
 
 Frontend product analytics (pageviews, custom events) use Umami Cloud; see `ui/src/lib/analytics.ts`.
 
@@ -129,6 +129,8 @@ Query params (all optional; with none, every relevant paper matches):
 - `from` / `to` (`YYYY-MM-DD`, inclusive). Malformed dates return 422.
 - `exclude` — repeatable paper IDs left out of both the page and `meta.total` (at most `_MAX_EXCLUDE` = 500, else 422)
 - `peer_reviewed` — `true` keeps only papers known to be peer-reviewed (default `false`, no filtering)
+- `kw` — repeatable recipe keyword; papers whose title or abstract contains any of them at a word start (case-insensitive prefix match, so `jailbreak` finds "jailbreaks"; inner whitespace matches line breaks). 3–80 characters each, at most 10, else 422
+- `author` — repeatable; papers with any of them as a whole entry of the `", "`-joined `authors` column (case-insensitive, so `Li` doesn't match "Oliver Li" or "Liang"). Up to 80 characters each, at most 10
 - `before_date` + `before_id` — keyset cursor: return rows after this one in page order. Pass the previous response's `meta.next` back as-is. Giving only one of them returns 422.
 
 Implementation:
@@ -145,10 +147,13 @@ Paginated paper listing with server-side filtering.
 Query params:
 - `page` (default 1, ≥ 1), `limit` (default 50, 1–200)
 - `tags` — repeatable; papers matching any given tag are included (`llm_tags && %s`, array overlap)
-- `domain` — repeatable; multiple values are OR-ed (`domain_tag IN (...)`)
+- `domain` — repeatable; multiple values are OR-ed (`domain_tag = ANY(%s)`)
 - `from` / `to` — `published` date bounds (plain strings compared against the TEXT column; not validated, unlike `/range`)
 - `q` — keyword substring match on `title`/`authors` (`ILIKE`)
 - `peer_reviewed` — `true` keeps only papers known to be peer-reviewed (default `false`)
+- `kw` / `author` — the recipe keyword and author facets, exactly as on `/api/graph/range`
+
+`tags`, `domain`, `from`/`to`, `peer_reviewed`, `kw` and `author` are the graph-recipe filters. Both endpoints build that WHERE clause with `recipe.recipe_where()`, so a recipe's graph and its Browse listing always match the same papers: each facet is "any of" within itself, ANDed with the others. `q` is added on top here only. Keywords match `db.PAPER_TEXT_EXPR` (title + abstract) and authors match `authors`, each as one `~*` alternation, so they're served by the partial trigram indexes `idx_papers_text_trgm` / `idx_papers_authors_trgm` (`migrations/add_recipe_trigram_indexes.sql`). `~* ANY(array)` can't use a GIN index, and a keyword with no run of 3 letters or digits has no trigram (pg_trgm ignores punctuation); either one scans the whole papers heap (seconds on prod). Keywords under 3 characters are rejected; longer ones without such a run (`C++`) are allowed and scan, since rejecting them would block real keywords. (`q` scans every row too, though more cheaply: an `ILIKE` over titles and authors rather than a regex over abstracts.) User input is escaped before it goes into the regex.
 
 Ordered by `published DESC, id` (stable across pages). `total` comes from `count(*) OVER ()` on the page query (one round trip); only a page past the end, which has no row to carry it, runs a separate `COUNT(*)`. Returns: `{ total, page, limit, items }` where items have `aid, t, au, pd, ln, dm, tags, pr, vn` — no `id`, coords or `sm` (summary); fetch a single paper for the summary.
 

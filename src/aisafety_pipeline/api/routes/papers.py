@@ -4,6 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 
 from ..deps import get_conn
 from ..ratelimit import expensive_limit, limiter
+from ..recipe import MIN_KEYWORD_LENGTH, clean_terms, recipe_where
 from ..search_log import log_search
 
 router = APIRouter(prefix="/api/papers", tags=["papers"])
@@ -21,33 +22,23 @@ def list_papers(
     q: str | None = Query(None),
     # Only papers known to be peer-reviewed (unknown status is excluded).
     peer_reviewed: bool = Query(False),
+    # Graph-recipe facets, the same as /api/graph/range: any of `kw` in the
+    # title/abstract, any of `author` as a whole author name.
+    kw: list[str] = Query(default=[]),
+    author: list[str] = Query(default=[]),
     conn=Depends(get_conn),
 ):
     offset = (page - 1) * limit
-    where = ["llm_relevant = TRUE"]
-    params: list = []
-
-    if tags:
-        where.append("llm_tags && %s")
-        params.append(tags)
-    if domain:
-        placeholders = ','.join(['%s'] * len(domain))
-        where.append(f"domain_tag IN ({placeholders})")
-        params.extend(domain)
-    if from_date:
-        where.append("published >= %s")
-        params.append(from_date)
-    if to_date:
-        where.append("published <= %s")
-        params.append(to_date)
+    keywords = clean_terms(kw, "kw", MIN_KEYWORD_LENGTH)
+    authors = clean_terms(author, "author")
+    where, params = recipe_where(
+        tags=tags, domains=domain, from_date=from_date, to_date=to_date,
+        peer_reviewed=peer_reviewed, keywords=keywords, authors=authors,
+    )
     if q:
         where.append("(title ILIKE %s OR authors ILIKE %s)")
         like = f"%{q}%"
         params.extend([like, like])
-    if peer_reviewed:
-        # Bare column (not `IS TRUE`) so it matches the predicate of
-        # idx_papers_reviewed_published.
-        where.append("peer_reviewed")
 
     where_sql = "WHERE " + " AND ".join(where)
 
@@ -76,7 +67,10 @@ def list_papers(
 
     # Log each search once: later pages are infinite-scroll of the same query.
     if q and page == 1:
-        has_filters = bool(tags or domain or from_date or to_date or peer_reviewed)
+        has_filters = bool(
+            tags or domain or from_date or to_date or peer_reviewed
+            or keywords or authors
+        )
         background_tasks.add_task(log_search, q, "keyword", total, has_filters)
 
     items = [
