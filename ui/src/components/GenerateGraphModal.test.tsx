@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
@@ -8,7 +8,8 @@ import GenerateGraphModal from './GenerateGraphModal'
 import { EMPTY_FILTERS } from '../lib/graphFilters'
 import type { GraphFilters } from '../lib/graphFilters'
 
-// Serves /api/tags and answers /api/papers with `totalFor(url)`.
+// Serves /api/tags and /api/authors, and answers /api/papers with
+// `totalFor(url)`.
 function mockApi(totalFor: (url: URL) => number) {
   vi.stubGlobal(
     'fetch',
@@ -16,7 +17,14 @@ function mockApi(totalFor: (url: URL) => number) {
       const url = new URL(input, 'http://localhost')
       const body = url.pathname.endsWith('/api/tags')
         ? { rlhf: { size: 4 }, evals: { size: 2 } }
-        : { total: totalFor(url), page: 1, limit: 1, items: [] }
+        : url.pathname.endsWith('/api/authors')
+          ? [
+              { name: 'Neel Nanda', n: 44 },
+              { name: 'Nanyun Peng', n: 18 },
+              // Longer than the API's 80-character author term
+              { name: `Nanda ${'X'.repeat(80)}`, n: 1 },
+            ].filter((a) => a.name.toLowerCase().includes(url.searchParams.get('q')!.toLowerCase()))
+          : { total: totalFor(url), page: 1, limit: 1, items: [] }
       return { ok: true, status: 200, json: async () => body } as Response
     }),
   )
@@ -155,6 +163,131 @@ describe('GenerateGraphModal', () => {
     await userEvent.click(create)
 
     expect(screen.getByText('Maximum 50 saved graphs reached')).toBeInTheDocument()
+  })
+
+  it('adds a keyword on Enter without generating, and counts with it', async () => {
+    mockApi((url) => (url.searchParams.getAll('kw').includes('sparse autoencoder') ? 7 : 12))
+    const { onGenerate } = renderModal()
+
+    const input = screen.getByRole('combobox', { name: 'Keywords and authors' })
+    await userEvent.type(input, 'sparse  autoencoder{Enter}')
+    expect(onGenerate).not.toHaveBeenCalled()
+    expect(input).toHaveValue('')
+    expect(screen.getByRole('button', { name: 'Remove keyword sparse autoencoder' })).toBeInTheDocument()
+    expect(await screen.findByText('7 papers match')).toBeInTheDocument()
+
+    // Enter on the empty box generates, as anywhere else in the modal
+    const generate = screen.getByRole('button', { name: 'Generate graph' })
+    await waitFor(() => expect(generate).toBeEnabled())
+    await userEvent.keyboard('{Enter}')
+    expect(onGenerate).toHaveBeenCalledWith({
+      tags: [],
+      domains: [],
+      datePreset: 'all',
+      keywords: ['sparse autoencoder'],
+    })
+  })
+
+  it('suggests authors from the corpus and adds the chosen one', async () => {
+    mockApi((url) => (url.searchParams.getAll('author').includes('Neel Nanda') ? 44 : 12))
+    const { onGenerate } = renderModal()
+
+    const input = screen.getByRole('combobox', { name: 'Keywords and authors' })
+    await userEvent.type(input, 'nanda')
+    // The typed text as a keyword comes first, then the suggestion
+    const suggestion = await screen.findByRole('option', { name: /Neel Nanda/ })
+    expect(screen.getAllByRole('option')[0]).toHaveTextContent('Keyword “nanda”')
+    expect(suggestion).toHaveTextContent('44 papers')
+    await userEvent.keyboard('{ArrowDown}{Enter}')
+
+    expect(screen.getByRole('button', { name: 'Remove author Neel Nanda' })).toBeInTheDocument()
+    expect(await screen.findByText('44 papers match')).toBeInTheDocument()
+    const generate = screen.getByRole('button', { name: 'Generate graph' })
+    await waitFor(() => expect(generate).toBeEnabled())
+    await userEvent.click(generate)
+    expect(onGenerate).toHaveBeenCalledWith({ tags: [], domains: [], datePreset: 'all', authors: ['Neel Nanda'] })
+  })
+
+  it('offers a short name only as an author, without looking it up', async () => {
+    mockApi(() => 3)
+    renderModal()
+
+    await userEvent.type(screen.getByRole('combobox', { name: 'Keywords and authors' }), 'Yu')
+    const options = await screen.findAllByRole('option')
+    expect(options).toHaveLength(1)
+    expect(options[0]).toHaveTextContent('Author “Yu”')
+    const urls = vi.mocked(fetch).mock.calls.map((c) => c[0] as string)
+    expect(urls.some((u) => u.includes('/api/authors'))).toBe(false)
+  })
+
+  it('removes the last chip on Backspace and clears typed text on Escape', async () => {
+    mockApi(() => 3)
+    const { onClose } = renderModal({
+      initialFilters: { ...EMPTY_FILTERS, keywords: ['jailbreak'], authors: ['Neel Nanda'] },
+      mode: 'edit',
+    })
+
+    const input = screen.getByRole('combobox', { name: 'Keywords and authors' })
+    await userEvent.type(input, 'abc{Escape}')
+    expect(input).toHaveValue('')
+    expect(onClose).not.toHaveBeenCalled()
+
+    await userEvent.keyboard('{Backspace}')
+    expect(screen.queryByRole('button', { name: 'Remove keyword jailbreak' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove author Neel Nanda' })).toBeInTheDocument()
+  })
+
+  it('does not remove chips on a held Backspace', async () => {
+    mockApi(() => 3)
+    renderModal({
+      initialFilters: { ...EMPTY_FILTERS, keywords: ['jailbreak'], authors: ['Neel Nanda'] },
+      mode: 'edit',
+    })
+
+    const input = screen.getByRole('combobox', { name: 'Keywords and authors' })
+    fireEvent.keyDown(input, { key: 'Backspace', repeat: true })
+    expect(screen.getByRole('button', { name: 'Remove keyword jailbreak' })).toBeInTheDocument()
+  })
+
+  it('leaves Enter to the IME while composing', async () => {
+    mockApi(() => 3)
+    const { onGenerate, onClose } = renderModal()
+
+    const input = screen.getByRole('combobox', { name: 'Keywords and authors' })
+    await userEvent.type(input, 'abcd')
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+    expect(input).toHaveValue('abcd')
+    expect(screen.queryByRole('button', { name: /Remove keyword/ })).not.toBeInTheDocument()
+    expect(onGenerate).not.toHaveBeenCalled()
+
+    // On an empty box too, where Enter would otherwise generate; Safari's
+    // committing Enter comes after compositionend, marked only by keyCode 229
+    await userEvent.clear(input)
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+    fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 })
+    fireEvent.keyDown(input, { key: 'Escape', isComposing: true })
+    expect(onGenerate).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('counts characters as the API does, not UTF-16 units', async () => {
+    mockApi(() => 3)
+    renderModal()
+
+    // Two characters, three UTF-16 units: too short for a keyword
+    await userEvent.type(screen.getByRole('combobox', { name: 'Keywords and authors' }), '𝔼x')
+    const options = await screen.findAllByRole('option')
+    expect(options).toHaveLength(1)
+    expect(options[0]).toHaveTextContent('Author “𝔼x”')
+  })
+
+  it('leaves out suggested names longer than an author term can be', async () => {
+    mockApi(() => 3)
+    renderModal()
+
+    await userEvent.type(screen.getByRole('combobox', { name: 'Keywords and authors' }), 'nanda')
+    await screen.findByRole('option', { name: /Neel Nanda/ })
+    expect(screen.queryByRole('option', { name: /XXXX/ })).not.toBeInTheDocument()
   })
 
   it('closes on Escape', async () => {

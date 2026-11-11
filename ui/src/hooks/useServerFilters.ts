@@ -52,6 +52,8 @@ export function useServerFilters(
     domains: string[]
     datePreset: DatePreset
     peerReviewed?: boolean
+    keywords?: string[]
+    authors?: string[]
   },
 ) {
   const [activeTags, setActiveTags] = useState<Set<string>>(
@@ -68,6 +70,14 @@ export function useServerFilters(
     initial?.peerReviewed ?? false,
   )
 
+  // A recipe's free-text facets, in the order they were added
+  const [keywords, setKeywords] = useState<string[]>(
+    () => initial?.keywords ?? [],
+  )
+  const [authors, setAuthors] = useState<string[]>(
+    () => initial?.authors ?? [],
+  )
+
   const tagEntries = useMemo(
     () => Object.entries(tags) as Array<[string, { size: number }]>,
     [tags],
@@ -79,7 +89,9 @@ export function useServerFilters(
     activeTags.size > 0 ||
     activeDomains.size > 0 ||
     datePreset !== 'all' ||
-    peerReviewedOnly
+    peerReviewedOnly ||
+    keywords.length > 0 ||
+    authors.length > 0
 
   function clearAllFilters() {
     track('filter_change', { kind: 'clear' })
@@ -87,6 +99,26 @@ export function useServerFilters(
     setActiveDomains(new Set())
     setDatePreset('all')
     setPeerReviewedOnly(false)
+    setKeywords([])
+    setAuthors([])
+  }
+
+  // Adding skips a case-insensitive duplicate; the caller enforces caps
+  function addKeyword(kw: string) {
+    track('filter_change', { kind: 'keyword', value: 'add' })
+    setKeywords((prev) => withTerm(prev, kw))
+  }
+  function removeKeyword(kw: string) {
+    track('filter_change', { kind: 'keyword', value: 'remove' })
+    setKeywords((prev) => prev.filter((k) => k !== kw))
+  }
+  function addAuthor(name: string) {
+    track('filter_change', { kind: 'author', value: 'add' })
+    setAuthors((prev) => withTerm(prev, name))
+  }
+  function removeAuthor(name: string) {
+    track('filter_change', { kind: 'author', value: 'remove' })
+    setAuthors((prev) => prev.filter((a) => a !== name))
   }
 
   function togglePeerReviewed() {
@@ -130,5 +162,17 @@ export function useServerFilters(
     clearAllFilters,
     toggleTag,
     toggleDomain,
+    keywords,
+    addKeyword,
+    removeKeyword,
+    authors,
+    addAuthor,
+    removeAuthor,
   }
+}
+
+function withTerm(list: string[], term: string): string[] {
+  const t = term.trim().replace(/\s+/g, ' ')
+  if (!t || list.some((x) => x.toLowerCase() === t.toLowerCase())) return list
+  return [...list, t]
 }

@@ -1001,6 +1001,8 @@ export default function ArxivGraph() {
     track('graph_generate', {
       tags: filters.tags.length,
       domains: filters.domains.length,
+      keywords: filters.keywords?.length ?? 0,
+      authors: filters.authors?.length ?? 0,
       date: filters.datePreset,
       peer_reviewed: filters.peerReviewed ?? false,
       mode: modal?.mode ?? 'generate',

@@ -3,6 +3,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { X } from 'lucide-react'
 
 import FilterBar from './FilterBar'
+import RecipeTermsInput from './RecipeTermsInput'
 import { fetchPapers } from '../lib/api'
 import { defaultGraphName, toRangeParams } from '../lib/graphFilters'
 import type { GraphFilters } from '../lib/graphFilters'
@@ -41,16 +42,26 @@ export default function GenerateGraphModal({
     clearAllFilters,
     toggleTag,
     toggleDomain,
+    keywords,
+    addKeyword,
+    removeKeyword,
+    authors,
+    addAuthor,
+    removeAuthor,
   } = useServerFilters(tags, initialFilters)
 
+  // Empty facets are left out, so a recipe without them (and its query
+  // keys) looks just like one saved before they existed
   const filters = useMemo<GraphFilters>(
     () => ({
       tags: [...activeTags],
       domains: [...activeDomains],
       datePreset,
       ...(peerReviewedOnly ? { peerReviewed: true } : {}),
+      ...(keywords.length > 0 ? { keywords } : {}),
+      ...(authors.length > 0 ? { authors } : {}),
     }),
-    [activeTags, activeDomains, datePreset, peerReviewedOnly],
+    [activeTags, activeDomains, datePreset, peerReviewedOnly, keywords, authors],
   )
 
   // Live match count: /api/papers applies the same filters as /api/graph/range,
@@ -129,8 +140,8 @@ export default function GenerateGraphModal({
               {mode === 'edit' ? 'Edit graph' : 'Generate a graph'}
             </h2>
             <p className='mt-1 text-sm text-neutral-400'>
-              Pick the topics you care about to map their papers. Nearby papers
-              cover similar topics.
+              Pick the topics, keywords or authors you care about to map their
+              papers. Nearby papers cover similar topics.
             </p>
           </div>
           <button
@@ -142,6 +153,15 @@ export default function GenerateGraphModal({
             <X size={16} />
           </button>
         </div>
+
+        <RecipeTermsInput
+          keywords={keywords}
+          authors={authors}
+          onAddKeyword={addKeyword}
+          onRemoveKeyword={removeKeyword}
+          onAddAuthor={addAuthor}
+          onRemoveAuthor={removeAuthor}
+        />
 
         <div className='min-h-0 overflow-auto overscroll-contain scrollbar scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent'>
           <FilterBar
