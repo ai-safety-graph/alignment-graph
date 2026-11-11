@@ -23,6 +23,9 @@ export type GraphFilters = {
 export const MIN_TERM_LENGTH = 3
 export const MAX_TERMS = 10
 export const MAX_TERM_LENGTH = 80
+// A term's length as the API counts it: code points, not UTF-16 units, so a
+// keyword like "𝔼x" is 2 characters, not 3
+export const termLength = (s: string) => [...s].length
 
 export const EMPTY_FILTERS: GraphFilters = {
   tags: [],

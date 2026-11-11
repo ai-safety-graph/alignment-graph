@@ -8,6 +8,7 @@ import {
   MAX_TERM_LENGTH,
   MAX_TERMS,
   MIN_TERM_LENGTH,
+  termLength,
 } from '../lib/graphFilters'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 
@@ -48,7 +49,7 @@ export default function RecipeTermsInput({
   const keywordsFull = keywords.length >= MAX_TERMS
 
   const debounced = useDebouncedValue(term, 200)
-  const lookup = !authorsFull && debounced.length >= MIN_TERM_LENGTH
+  const lookup = !authorsFull && termLength(debounced) >= MIN_TERM_LENGTH
   const { data: suggestions } = useQuery({
     queryKey: ['authors', debounced],
     queryFn: () => fetchAuthors(debounced),
@@ -58,18 +59,22 @@ export default function RecipeTermsInput({
   const options = useMemo<Option[]>(() => {
     if (!term) return []
     const out: Option[] = []
-    if (!keywordsFull && term.length >= MIN_TERM_LENGTH && !has(keywords, term))
+    const length = termLength(term)
+    if (!keywordsFull && length >= MIN_TERM_LENGTH && !has(keywords, term))
       out.push({ kind: 'keyword', value: term })
     if (authorsFull) return out
     // Only suggestions for what's in the box now, not a stale lookup
-    const names = lookup && debounced === term ? (suggestions ?? []) : []
+    // (and none longer than the API takes as an author term)
+    const names = (
+      lookup && debounced === term ? (suggestions ?? []) : []
+    ).filter((s) => termLength(s.name) <= MAX_TERM_LENGTH)
     for (const s of names)
       if (!has(authors, s.name))
         out.push({ kind: 'author', value: s.name, n: s.n })
     // The name as typed, for short names suggestions don't start at ("Yu")
     // or ones not in the corpus yet; it matches whole names only
     if (
-      term.length >= 2 &&
+      length >= 2 &&
       !names.some((s) => s.name.toLowerCase() === term.toLowerCase()) &&
       !has(authors, term)
     )
@@ -98,6 +103,12 @@ export default function RecipeTermsInput({
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     // Keys handled here stay away from the modal's Enter/Escape handlers
+    // Keys during an IME composition (CJK input) belong to the IME: the Enter
+    // or Escape that ends one mustn't add a chip or reach the modal either
+    if (e.nativeEvent.isComposing || e.keyCode === 229) {
+      e.stopPropagation()
+      return
+    }
     const handled = () => {
       e.preventDefault()
       e.stopPropagation()
@@ -115,7 +126,9 @@ export default function RecipeTermsInput({
     } else if (e.key === 'Escape' && text) {
       handled()
       setText('')
-    } else if (e.key === 'Backspace' && !text) {
+    } else if (e.key === 'Backspace' && !text && !e.repeat) {
+      // Not on auto-repeat: holding Backspace to clear the text mustn't go
+      // on to remove every chip
       if (keywords.length > 0) onRemoveKeyword(keywords[keywords.length - 1])
       else if (authors.length > 0) onRemoveAuthor(authors[authors.length - 1])
     }

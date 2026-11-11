@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
@@ -21,6 +21,8 @@ function mockApi(totalFor: (url: URL) => number) {
           ? [
               { name: 'Neel Nanda', n: 44 },
               { name: 'Nanyun Peng', n: 18 },
+              // Longer than the API's 80-character author term
+              { name: `Nanda ${'X'.repeat(80)}`, n: 1 },
             ].filter((a) => a.name.toLowerCase().includes(url.searchParams.get('q')!.toLowerCase()))
           : { total: totalFor(url), page: 1, limit: 1, items: [] }
       return { ok: true, status: 200, json: async () => body } as Response
@@ -233,6 +235,50 @@ describe('GenerateGraphModal', () => {
     await userEvent.keyboard('{Backspace}')
     expect(screen.queryByRole('button', { name: 'Remove keyword jailbreak' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Remove author Neel Nanda' })).toBeInTheDocument()
+  })
+
+  it('does not remove chips on a held Backspace', async () => {
+    mockApi(() => 3)
+    renderModal({
+      initialFilters: { ...EMPTY_FILTERS, keywords: ['jailbreak'], authors: ['Neel Nanda'] },
+      mode: 'edit',
+    })
+
+    const input = screen.getByRole('combobox', { name: 'Keywords and authors' })
+    fireEvent.keyDown(input, { key: 'Backspace', repeat: true })
+    expect(screen.getByRole('button', { name: 'Remove keyword jailbreak' })).toBeInTheDocument()
+  })
+
+  it('leaves Enter to the IME while composing', async () => {
+    mockApi(() => 3)
+    const { onGenerate } = renderModal()
+
+    const input = screen.getByRole('combobox', { name: 'Keywords and authors' })
+    await userEvent.type(input, 'abcd')
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+    expect(input).toHaveValue('abcd')
+    expect(screen.queryByRole('button', { name: /Remove keyword/ })).not.toBeInTheDocument()
+    expect(onGenerate).not.toHaveBeenCalled()
+  })
+
+  it('counts characters as the API does, not UTF-16 units', async () => {
+    mockApi(() => 3)
+    renderModal()
+
+    // Two characters, three UTF-16 units: too short for a keyword
+    await userEvent.type(screen.getByRole('combobox', { name: 'Keywords and authors' }), '𝔼x')
+    const options = await screen.findAllByRole('option')
+    expect(options).toHaveLength(1)
+    expect(options[0]).toHaveTextContent('Author “𝔼x”')
+  })
+
+  it('leaves out suggested names longer than an author term can be', async () => {
+    mockApi(() => 3)
+    renderModal()
+
+    await userEvent.type(screen.getByRole('combobox', { name: 'Keywords and authors' }), 'nanda')
+    await screen.findByRole('option', { name: /Neel Nanda/ })
+    expect(screen.queryByRole('option', { name: /XXXX/ })).not.toBeInTheDocument()
   })
 
   it('closes on Escape', async () => {

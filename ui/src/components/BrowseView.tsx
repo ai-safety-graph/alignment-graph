@@ -233,7 +233,7 @@ export default function BrowseView() {
 
   const items = useMemo(() => (papers ?? []).map((n) => ({ n })), [papers])
 
-  const resetKey = `${listMode}|${selectedSubgraphId ?? ''}|${debouncedQuery}|${listParams.fromDate ?? ''}|${[...listParams.activeTags].sort()}|${[...listParams.activeDomains].sort()}|${listParams.peerReviewed ? 1 : 0}`
+  const resetKey = `${listMode}|${selectedSubgraphId ?? ''}|${debouncedQuery}|${listParams.fromDate ?? ''}|${[...listParams.activeTags].sort()}|${[...listParams.activeDomains].sort()}|${listParams.peerReviewed ? 1 : 0}|${isMatches ? JSON.stringify([recipe?.keywords ?? [], recipe?.authors ?? []]) : ''}`
 
   // Phones scroll the document rather than the list, so iOS Safari can
   // collapse its toolbar; desktop scrolls the list inside a fixed shell
