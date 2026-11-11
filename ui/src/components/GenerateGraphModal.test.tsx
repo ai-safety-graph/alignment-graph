@@ -251,7 +251,7 @@ describe('GenerateGraphModal', () => {
 
   it('leaves Enter to the IME while composing', async () => {
     mockApi(() => 3)
-    const { onGenerate } = renderModal()
+    const { onGenerate, onClose } = renderModal()
 
     const input = screen.getByRole('combobox', { name: 'Keywords and authors' })
     await userEvent.type(input, 'abcd')
@@ -259,6 +259,15 @@ describe('GenerateGraphModal', () => {
     expect(input).toHaveValue('abcd')
     expect(screen.queryByRole('button', { name: /Remove keyword/ })).not.toBeInTheDocument()
     expect(onGenerate).not.toHaveBeenCalled()
+
+    // On an empty box too, where Enter would otherwise generate; Safari's
+    // committing Enter comes after compositionend, marked only by keyCode 229
+    await userEvent.clear(input)
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+    fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 })
+    fireEvent.keyDown(input, { key: 'Escape', isComposing: true })
+    expect(onGenerate).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
   })
 
   it('counts characters as the API does, not UTF-16 units', async () => {
