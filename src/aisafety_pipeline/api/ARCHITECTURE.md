@@ -192,6 +192,12 @@ Implementation:
 
 Returns: `{ query: str, results: [{ aid, t, au, pd, ln, dm, sim, tags, pr, vn }] }` — `sim` is cosine similarity rounded to 4 decimals (nullable); no `id` or coords.
 
+### `GET /api/authors`
+
+Author-name suggestions for the graph-recipe `author` facet: `[{name, n}]`, most papers first (ties by name), counting relevant papers only.
+
+Query params: `q` (required, 3–80 characters), `limit` (default 10, 1–20). `q` matches at the start of any word of a name, with the same escaped prefix rule as recipe keywords (`nan` finds "Neel Nanda" and "Nan Rosemary Ke"). An outer `authors ~*` on the same pattern uses `idx_papers_authors_trgm` to find candidate papers before their author lists are unnested. The 3-character minimum is there because a shorter `q` has no trigram; a longer one with no run of 3 letters or digits (`J. S`, while typing initials) has none either and scans every relevant paper's authors, which is cheap and allowed. Default rate limit (it's index-backed and called while typing).
+
 ### `GET /api/tags`
 
 All tag metadata, computed live from `papers.llm_tags` of `llm_relevant` papers with at least one tag (not precomputed/cached). `size` counts every paper holding the tag at any rank; `primary_size` counts only papers where it's the first-listed (i.e. `llm_tags[1]`) tag — used so pie-chart percentages sum to 100% instead of being inflated by multi-tag overlap.
