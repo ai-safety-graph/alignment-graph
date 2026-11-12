@@ -127,6 +127,10 @@ export default function BrowseView() {
   const listMode = selectedSubgraph ? viewMode : 'all'
   // A shared graph's pins are read-only until it's saved
   const canPin = !!selectedSubgraphId && !isSharedDraft
+  // A link to a graph with no recipe and no pins would open nothing
+  const canShare =
+    !!selectedSubgraph &&
+    (!!selectedSubgraph.filters || selectedSubgraph.pinned.length > 0)
   // The picker lists a shared graph, while it's shown, above the user's own
   const graphLabel = (name: string) =>
     isSharedDraft ? `${name} (unsaved)` : name
@@ -669,13 +673,15 @@ export default function BrowseView() {
                 already */}
             {!isSharedDraft && (
               <>
-                <ShareLinkButton
-                  graph={selectedSubgraph}
-                  view={view}
-                  iconSize={16}
-                  label='Share a link to this graph'
-                  className={`${sheetRowClass} text-neutral-200`}
-                />
+                {canShare && (
+                  <ShareLinkButton
+                    graph={selectedSubgraph}
+                    view={view}
+                    iconSize={16}
+                    label='Share a link to this graph'
+                    className={`${sheetRowClass} text-neutral-200`}
+                  />
+                )}
                 <button
                   type='button'
                   onClick={closeSheetThen(() => setIsConfirmingDelete(true))}
@@ -738,11 +744,13 @@ export default function BrowseView() {
       {editRecipeButton}
       {selectedSubgraph && !isSharedDraft && (
         <>
-          <ShareLinkButton
-            graph={selectedSubgraph}
-            view={view}
-            className='hidden md:flex items-center gap-1 text-neutral-500 hover:text-white underline underline-offset-2 cursor-pointer'
-          />
+          {canShare && (
+            <ShareLinkButton
+              graph={selectedSubgraph}
+              view={view}
+              className='hidden md:flex items-center gap-1 text-neutral-500 hover:text-white underline underline-offset-2 cursor-pointer'
+            />
+          )}
           <button
             type='button'
             onClick={() => setIsConfirmingDelete(true)}

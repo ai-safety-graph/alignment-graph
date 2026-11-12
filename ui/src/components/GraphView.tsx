@@ -1487,7 +1487,8 @@ export default function ArxivGraph() {
                   <Pencil size={11} />
                   {source.graph.filters ? 'Edit' : 'Add filters'}
                 </button>
-                {shareGraph && (
+                {/* A link to an empty graph would open nothing */}
+                {shareGraph && !isEmptySavedGraph && (
                   <ShareLinkButton
                     graph={shareGraph}
                     view='graph'
