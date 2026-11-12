@@ -14,8 +14,28 @@ import {
   type SavedGraph,
 } from '../lib/storage'
 import type { GraphFilters } from '../lib/graphFilters'
+import type { SharedGraph } from '../lib/shareLink'
+import { track } from '../lib/analytics'
 import { useDebouncedValue } from './useDebouncedValue'
 import { useGraphContent } from './useGraphContent'
+import { useSharedGraph } from './useSharedGraph'
+
+// Stands in for a saved graph's id while a share link's graph is shown
+export const SHARED_DRAFT_ID = 'shared'
+
+// A share link's graph, shaped as a saved graph so the lists treat it as one.
+// It isn't stored until the user saves it.
+function asSavedGraph(shared: SharedGraph): SavedGraph {
+  return {
+    id: SHARED_DRAFT_ID,
+    name: shared.name,
+    ...(shared.filters ? { filters: shared.filters } : {}),
+    pinned: shared.pinned,
+    hidden: shared.hidden,
+    createdAt: '',
+    updatedAt: '',
+  }
+}
 
 // What Browse lists for a selected graph: the papers its recipe matches, its
 // pins, or all papers to pin from
@@ -27,19 +47,46 @@ function defaultMode(graph: SavedGraph | undefined): GraphListMode {
 }
 
 // Browse's side of saved graphs. A graph is selected (shared with the graph
-// view through the active-graph key) or not ("All papers").
+// view through the active-graph key) or not ("All papers"). A share link
+// opens its graph as a read-only draft (SHARED_DRAFT_ID) to save or discard.
 export function useSubgraphManager() {
+  const { shared, clearShareParams } = useSharedGraph()
+  const [sharedDraft, setSharedDraft] = useState<SavedGraph | null>(() =>
+    shared ? asSavedGraph(shared) : null,
+  )
   const [subgraphs, setSubgraphs] = useState<SavedGraph[]>(() =>
     listSavedGraphs().sort(byUpdatedDesc),
   )
-  const [selectedSubgraphId, setSelectedId] = useState<string | null>(() => {
+  // The stored selection, which a shared draft only covers for now
+  const activeSavedId = () => {
     const active = getActiveGraphId()
     return subgraphs.some((s) => s.id === active) ? active : null
-  })
+  }
+  const [selectedSubgraphId, setSelectedId] = useState<string | null>(() =>
+    sharedDraft ? SHARED_DRAFT_ID : activeSavedId(),
+  )
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
   const [viewMode, setViewMode] = useState<GraphListMode>(() =>
-    defaultMode(subgraphs.find((s) => s.id === selectedSubgraphId)),
+    defaultMode(
+      sharedDraft ?? subgraphs.find((s) => s.id === selectedSubgraphId),
+    ),
   )
+  useEffect(() => {
+    if (shared)
+      track('graph_open_shared', {
+        pins: shared.pinned.length,
+        has_recipe: !!shared.filters,
+      })
+    // Once per link opened
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Leaving the shared draft (saved, discarded, edited, another graph
+  // picked) drops it, and its link from the URL
+  const dropSharedDraft = () => {
+    setSharedDraft(null)
+    clearShareParams()
+  }
   const [subgraphQuery, setSubgraphQuery] = useState('')
   const debouncedSubgraphQuery = useDebouncedValue(subgraphQuery, 300)
   const [subgraphActiveTags, setSubgraphActiveTags] = useState<Set<string>>(
@@ -51,9 +98,42 @@ export function useSubgraphManager() {
 
   // Selecting a graph (or "All papers", null) also makes it the graph view's
   const setSelectedSubgraphId = (id: string | null, graph?: SavedGraph) => {
+    if (sharedDraft && id !== SHARED_DRAFT_ID) dropSharedDraft()
     setSelectedId(id)
     setActiveGraphId(id)
     setViewMode(defaultMode(graph ?? subgraphs.find((s) => s.id === id)))
+  }
+
+  // Stores the shared draft under `name` and selects it. Returns an error
+  // message when it can't be saved (e.g. the saved-graph cap).
+  const saveSharedDraft = (name: string) => {
+    if (!sharedDraft) return null
+    let graph: SavedGraph
+    try {
+      graph = createSavedGraph(name, {
+        ...(sharedDraft.filters ? { filters: sharedDraft.filters } : {}),
+        pinned: sharedDraft.pinned,
+        hidden: sharedDraft.hidden,
+      })
+    } catch (e) {
+      return e instanceof Error ? e.message : 'Could not save graph'
+    }
+    dropSharedDraft()
+    setSubgraphs((prev) => [graph, ...prev])
+    // Same papers in the same list, so the list mode stays
+    setSelectedId(graph.id)
+    setActiveGraphId(graph.id)
+    return null
+  }
+
+  // Back to the graph that was selected before the link opened
+  const discardSharedDraft = () => {
+    if (!sharedDraft) return
+    track('graph_discard')
+    const back = activeSavedId()
+    dropSharedDraft()
+    setSelectedId(back)
+    setViewMode(defaultMode(subgraphs.find((s) => s.id === back)))
   }
 
   // Saves a graph generated from filters and selects it. Returns an error
@@ -70,12 +150,20 @@ export function useSubgraphManager() {
     return null
   }
 
-  const selectedSubgraph = subgraphs.find(
-    (subgraph) => subgraph.id === selectedSubgraphId,
-  )
+  const selectedSubgraph =
+    selectedSubgraphId === SHARED_DRAFT_ID
+      ? (sharedDraft ?? undefined)
+      : subgraphs.find((subgraph) => subgraph.id === selectedSubgraphId)
+  const isSharedDraft = !!sharedDraft && selectedSubgraph === sharedDraft
 
-  // Changing the recipe keeps the papers pinned and hidden by hand
+  // Changing the recipe keeps the papers pinned and hidden by hand. A shared
+  // draft changes in memory, and stops matching its link.
   const editGraphFilters = (filters: GraphFilters) => {
+    if (isSharedDraft) {
+      setSharedDraft({ ...sharedDraft, filters })
+      clearShareParams()
+      return
+    }
     if (!selectedSubgraphId) return
     const updated = updateSavedGraph(selectedSubgraphId, { filters })
     setSubgraphs((prev) => [
@@ -120,8 +208,9 @@ export function useSubgraphManager() {
     ? `Failed to load graph: ${content.error.message}`
     : null
 
+  // A shared draft's pins are read-only until it's saved
   const setMembership = (next: GraphMembership) => {
-    if (!selectedSubgraphId) return
+    if (!selectedSubgraphId || isSharedDraft) return
     let updated: SavedGraph
     try {
       updated = updateSavedGraph(selectedSubgraphId, next)
@@ -143,7 +232,7 @@ export function useSubgraphManager() {
   }
 
   const confirmDeleteSubgraph = () => {
-    if (!selectedSubgraphId) return
+    if (!selectedSubgraphId || isSharedDraft) return
     deleteSavedGraph(selectedSubgraphId)
     const remaining = subgraphs.filter((s) => s.id !== selectedSubgraphId)
     setSubgraphs(remaining)
@@ -245,6 +334,9 @@ export function useSubgraphManager() {
     selectedSubgraph,
     selectedSubgraphPaperIds,
     pinnedFull,
+    isSharedDraft,
+    saveSharedDraft,
+    discardSharedDraft,
     createGraph,
     editGraphFilters,
     isConfirmingDelete,

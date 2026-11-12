@@ -85,6 +85,8 @@ import { NewGraphButton, NewGraphMenuItem } from './NewGraph'
 import { track } from '../lib/analytics'
 import { useCapabilities } from '../hooks/useCapabilities'
 import { useNewGraphRequest } from '../hooks/useNewGraphRequest'
+import { useSharedGraph } from '../hooks/useSharedGraph'
+import ShareLinkButton from './ShareLinkButton'
 
 // Alpha of nodes outside the active node's neighbourhood: softer while
 // hovering, stronger once a node is locked. Changes fade over FADE_MS.
@@ -159,14 +161,17 @@ function ghostCoord(
 }
 
 // What the canvas shows: nothing yet, an unsaved graph generated from filters
-// (`basedOn` = the saved graph it was edited from), or a saved graph. Drafts
-// carry their own pins and hides, which saving stores with the recipe.
+// (`basedOn` = the saved graph it was edited from) or opened from a share
+// link, or a saved graph. Drafts carry their own pins and hides, which saving
+// stores with the recipe. Only a shared draft can lack a recipe (a shared
+// pins-only graph); it keeps the name it was shared under.
 type GraphSource =
   | { kind: 'none' }
   | ({
       kind: 'draft'
-      filters: GraphFilters
+      filters: GraphFilters | null
       basedOn: SavedGraph | null
+      sharedName?: string
     } & GraphMembership)
   | { kind: 'saved'; graph: SavedGraph }
 
@@ -225,19 +230,52 @@ export default function ArxivGraph() {
   const [savedGraphs, setSavedGraphs] = useState<SavedGraph[]>(() =>
     listSavedGraphs().sort(byUpdatedDesc),
   )
+  // A share link opens its graph as a draft, to save or discard
+  const { shared, clearShareParams } = useSharedGraph()
   // Returning visitors land on the graph last opened in either view (else the
   // most recently updated one); first visitors get the new-graph modal.
-  const [source, setSource] = useState<GraphSource>(() => {
+  const [initialSaved] = useState<SavedGraph | null>(() => {
     const active = getActiveGraphId()
-    const graph = savedGraphs.find((g) => g.id === active) ?? savedGraphs[0]
-    return graph ? { kind: 'saved', graph } : { kind: 'none' }
+    return savedGraphs.find((g) => g.id === active) ?? savedGraphs[0] ?? null
   })
+  const [source, setSource] = useState<GraphSource>(() =>
+    shared
+      ? {
+          kind: 'draft',
+          filters: shared.filters ?? null,
+          basedOn: null,
+          pinned: shared.pinned,
+          hidden: shared.hidden,
+          sharedName: shared.name,
+        }
+      : initialSaved
+        ? { kind: 'saved', graph: initialSaved }
+        : { kind: 'none' },
+  )
   // Opened from About's "Create a graph" or by a first visitor: start with
   // the new-graph modal
   const newGraphRequested = useNewGraphRequest()
   const [modal, setModal] = useState<ModalState | null>(() =>
-    savedGraphs.length && !newGraphRequested ? null : NEW_GRAPH_MODAL,
+    shared || (savedGraphs.length && !newGraphRequested)
+      ? null
+      : NEW_GRAPH_MODAL,
   )
+  // The share link stays in the URL while its draft is on screen unchanged,
+  // so a reload keeps it; any change (a save, a pin, an edit, another graph)
+  // drops it, as the link no longer describes what's shown
+  const [sharedSource] = useState(() => (shared ? source : null))
+  useEffect(() => {
+    if (sharedSource && source !== sharedSource) clearShareParams()
+  }, [source, sharedSource, clearShareParams])
+  useEffect(() => {
+    if (shared)
+      track('graph_open_shared', {
+        pins: shared.pinned.length,
+        has_recipe: !!shared.filters,
+      })
+    // Once per link opened
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   // Mirrors GraphLegend's own state, to keep the bottom bar clear of it
   const [legendCollapsed, setLegendCollapsed] = useState(getLegendCollapsed)
@@ -259,8 +297,9 @@ export default function ArxivGraph() {
   )
 
   // Last saved graph shown, so discarding a draft can go back to it.
-  // It's also the graph Browse opens on.
-  const lastSavedIdRef = useRef<string | null>(activeSavedGraph?.id ?? null)
+  // It's also the graph Browse opens on. A shared draft goes back to the
+  // graph the view would otherwise have opened on.
+  const lastSavedIdRef = useRef<string | null>(initialSaved?.id ?? null)
   useEffect(() => {
     if (source.kind !== 'saved') return
     lastSavedIdRef.current = source.graph.id
@@ -1030,7 +1069,7 @@ export default function ArxivGraph() {
     if (source.kind === 'draft') {
       setModal({
         mode: 'edit',
-        initialFilters: source.filters,
+        initialFilters: source.filters ?? EMPTY_FILTERS,
         basedOn: source.basedOn,
       })
     } else if (source.kind === 'saved') {
@@ -1049,7 +1088,7 @@ export default function ArxivGraph() {
   const saveDraft = (target: SavedGraph | null, name?: string) => {
     if (source.kind !== 'draft' || !data) return 'Graph not loaded yet'
     const stored = {
-      filters: source.filters,
+      ...(source.filters ? { filters: source.filters } : {}),
       pinned: source.pinned,
       hidden: source.hidden,
     }
@@ -1149,7 +1188,7 @@ export default function ArxivGraph() {
 
   // Pins on screen, on this page of the recipe or not. A graph without a
   // recipe is all pins, which the count already says, so it has no toggle.
-  const hasRecipe = source.kind === 'draft' || !!activeSavedGraph?.filters
+  const hasRecipe = !!recipe
   const pinnedShown =
     data && hasRecipe
       ? data.nodes.filter((n) => pinnedAids.has(n.aid)).length
@@ -1229,7 +1268,28 @@ export default function ArxivGraph() {
       onOlder={goOlder}
     />
   )
-  const graphName = activeSavedGraph?.name ?? 'Unsaved graph'
+  const draftName =
+    source.kind === 'draft' && source.sharedName
+      ? `${source.sharedName} (unsaved)`
+      : 'Unsaved graph'
+  const graphName = activeSavedGraph?.name ?? draftName
+  // What a share link from this view carries: the graph on screen, saved or
+  // not
+  const shareGraph =
+    source.kind === 'saved'
+      ? { ...source.graph }
+      : source.kind === 'draft'
+        ? {
+            name:
+              source.sharedName ??
+              (source.filters
+                ? defaultGraphName(source.filters, MAX_GRAPH_NAME_LENGTH)
+                : 'Shared graph'),
+            ...(source.filters ? { filters: source.filters } : {}),
+            pinned: source.pinned,
+            hidden: source.hidden,
+          }
+        : null
 
   // The bottom bar stays centred on the window (BottomBarSlot); these are
   // only how much room it leaves the side overlays: the Legend (its button,
@@ -1362,13 +1422,13 @@ export default function ArxivGraph() {
               key={sourceKey}
               pager={pager}
               empty={data.nodes.length === 0}
-              defaultName={defaultGraphName(
-                source.filters,
-                MAX_GRAPH_NAME_LENGTH,
-              )}
+              defaultName={shareGraph?.name ?? ''}
               basedOnName={source.basedOn?.name}
-              chips={filterSummary(source.filters)}
-              chipsTitle={filterLabels(source.filters).join(', ')}
+              chips={source.filters ? filterSummary(source.filters) : []}
+              chipsTitle={
+                source.filters ? filterLabels(source.filters).join(', ') : ''
+              }
+              shareGraph={shareGraph}
               onSave={(name) => saveDraft(null, name)}
               onUpdate={() => saveDraft(source.basedOn)}
               onEdit={openEdit}
@@ -1422,6 +1482,13 @@ export default function ArxivGraph() {
                   <Pencil size={11} />
                   {source.graph.filters ? 'Edit' : 'Add filters'}
                 </button>
+                {shareGraph && (
+                  <ShareLinkButton
+                    graph={shareGraph}
+                    view='graph'
+                    className='flex items-center gap-1 text-neutral-500 hover:text-white underline underline-offset-2 cursor-pointer'
+                  />
+                )}
                 <button
                   type='button'
                   onClick={() => setConfirmingDelete(true)}
@@ -1604,7 +1671,7 @@ export default function ArxivGraph() {
                 className='max-w-[140px] lg:max-w-[240px]'
                 label={
                   source.kind === 'draft'
-                    ? 'Unsaved graph'
+                    ? draftName
                     : (activeSavedGraph?.name ??
                       (savedGraphs.length ? 'Saved graphs' : 'No saved graphs'))
                 }
