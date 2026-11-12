@@ -27,6 +27,8 @@ import LatestBatchBadge from './LatestBatchBadge'
 import { HeaderLogo, ViewSwitch } from './HeaderNav'
 import { NewGraphButton, NewGraphMenuItem } from './NewGraph'
 import GenerateGraphModal from './GenerateGraphModal'
+import ShareLinkButton from './ShareLinkButton'
+import SharedDraftBar from './SharedDraftBar'
 import { useNewGraphRequest } from '../hooks/useNewGraphRequest'
 import type { NodeCompact } from '../lib/types'
 import { presetToFromDate, useServerFilters } from '../hooks/useServerFilters'
@@ -38,7 +40,10 @@ import { usePaperBrowser } from '../hooks/usePaperBrowser'
 import { usePaperDetail } from '../hooks/usePaperDetail'
 import { useNavHistory } from '../hooks/useNavHistory'
 import { useCapabilities } from '../hooks/useCapabilities'
-import { useSubgraphManager } from '../hooks/useSubgraphManager'
+import {
+  SHARED_DRAFT_ID,
+  useSubgraphManager,
+} from '../hooks/useSubgraphManager'
 import { domainLabel } from '../lib/domain'
 import { EMPTY_FILTERS, filterLabels, filterSummary } from '../lib/graphFilters'
 import type { GraphFilters } from '../lib/graphFilters'
@@ -73,6 +78,9 @@ export default function BrowseView() {
     selectedSubgraph,
     selectedSubgraphPaperIds,
     pinnedFull,
+    isSharedDraft,
+    saveSharedDraft,
+    discardSharedDraft,
     createGraph,
     editGraphFilters,
     isConfirmingDelete,
@@ -117,6 +125,22 @@ export default function BrowseView() {
   // all papers to pin from. The filter bar (and semantic search) only drive
   // the lists of all papers; a graph's matches use its own recipe.
   const listMode = selectedSubgraph ? viewMode : 'all'
+  // A shared graph's pins are read-only until it's saved
+  const canPin = !!selectedSubgraphId && !isSharedDraft
+  // A link to a graph with no recipe and no pins would open nothing
+  const canShare =
+    !!selectedSubgraph &&
+    (!!selectedSubgraph.filters || selectedSubgraph.pinned.length > 0)
+  // The picker lists a shared graph, while it's shown, above the user's own
+  const graphLabel = (name: string) =>
+    isSharedDraft ? `${name} (unsaved)` : name
+  const pickerGraphs = [
+    { id: null, name: 'All papers' },
+    ...(isSharedDraft && selectedSubgraph
+      ? [{ id: SHARED_DRAFT_ID, name: graphLabel(selectedSubgraph.name) }]
+      : []),
+    ...subgraphs,
+  ]
   const isBrowsing = listMode !== 'pinned'
   const isMatches = listMode === 'matches'
   const recipe = selectedSubgraph?.filters
@@ -289,9 +313,11 @@ export default function BrowseView() {
   const renderSubgraphDropdown = (className: string) => (
     <Dropdown
       className={className}
-      label={selectedSubgraph?.name ?? 'All papers'}
+      label={
+        selectedSubgraph ? graphLabel(selectedSubgraph.name) : 'All papers'
+      }
     >
-      {[{ id: null, name: 'All papers' }, ...subgraphs].map((subgraph) => (
+      {pickerGraphs.map((subgraph) => (
         <button
           key={subgraph.id ?? ''}
           type='button'
@@ -562,13 +588,15 @@ export default function BrowseView() {
           type='button'
           aria-haspopup='dialog'
           aria-expanded={graphSheetOpen}
-          aria-label={`Graph: ${selectedSubgraph?.name ?? 'All papers'}`}
+          aria-label={`Graph: ${selectedSubgraph ? graphLabel(selectedSubgraph.name) : 'All papers'}`}
           onClick={() => setGraphSheetOpen(true)}
           className={`flex-1 min-w-0 h-14 px-2 flex flex-col items-center justify-center gap-1 cursor-pointer text-neutral-300 hover:text-white ${selectedSubgraph ? 'border-l border-neutral-800' : ''}`}
         >
           <Layers size={18} />
           <span className='max-w-full truncate'>
-            {selectedSubgraph?.name ?? 'All papers'}
+            {selectedSubgraph
+              ? graphLabel(selectedSubgraph.name)
+              : 'All papers'}
           </span>
         </button>
       ) : (
@@ -603,7 +631,7 @@ export default function BrowseView() {
         className='relative z-10 w-full max-h-[80dvh] overflow-y-auto overscroll-contain rounded-t-2xl border-t border-[#333333] bg-neutral-950 shadow-2xl'
       >
         <div className='mx-auto mt-2 mb-1 h-1 w-10 rounded-full bg-neutral-700' />
-        {[{ id: null, name: 'All papers' }, ...subgraphs].map((subgraph) => {
+        {pickerGraphs.map((subgraph) => {
           const current = selectedSubgraphId === subgraph.id
           return (
             <button
@@ -641,16 +669,31 @@ export default function BrowseView() {
                 {recipe ? 'Edit filters' : 'Add filters'}
               </span>
             </button>
-            <button
-              type='button'
-              onClick={closeSheetThen(() => setIsConfirmingDelete(true))}
-              className={`${sheetRowClass} text-red-400`}
-            >
-              <Trash2 size={16} className='shrink-0' />
-              <span className='min-w-0 truncate'>
-                Delete “{selectedSubgraph.name}”
-              </span>
-            </button>
+            {/* A shared graph is discarded from its bar, and was shared
+                already */}
+            {!isSharedDraft && (
+              <>
+                {canShare && (
+                  <ShareLinkButton
+                    graph={selectedSubgraph}
+                    view={view}
+                    iconSize={16}
+                    label='Share a link to this graph'
+                    className={`${sheetRowClass} text-neutral-200`}
+                  />
+                )}
+                <button
+                  type='button'
+                  onClick={closeSheetThen(() => setIsConfirmingDelete(true))}
+                  className={`${sheetRowClass} text-red-400`}
+                >
+                  <Trash2 size={16} className='shrink-0' />
+                  <span className='min-w-0 truncate'>
+                    Delete “{selectedSubgraph.name}”
+                  </span>
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -699,14 +742,25 @@ export default function BrowseView() {
   const recipeActions = (
     <div className='shrink-0 flex items-center gap-3'>
       {editRecipeButton}
-      <button
-        type='button'
-        onClick={() => setIsConfirmingDelete(true)}
-        className='hidden md:flex items-center gap-1 text-neutral-500 hover:text-red-400 underline underline-offset-2 cursor-pointer'
-      >
-        <Trash2 size={11} />
-        Delete
-      </button>
+      {selectedSubgraph && !isSharedDraft && (
+        <>
+          {canShare && (
+            <ShareLinkButton
+              graph={selectedSubgraph}
+              view={view}
+              className='hidden md:flex items-center gap-1 text-neutral-500 hover:text-white underline underline-offset-2 cursor-pointer'
+            />
+          )}
+          <button
+            type='button'
+            onClick={() => setIsConfirmingDelete(true)}
+            className='hidden md:flex items-center gap-1 text-neutral-500 hover:text-red-400 underline underline-offset-2 cursor-pointer'
+          >
+            <Trash2 size={11} />
+            Delete
+          </button>
+        </>
+      )}
     </div>
   )
 
@@ -789,6 +843,17 @@ export default function BrowseView() {
                   while the list scrolls. On desktop it stays below the top
                   bar (z-20) so the graph picker's menu draws over it. */}
               <div className='sticky top-0 z-20 md:z-10 bg-neutral-950'>
+                {isSharedDraft && selectedSubgraph && (
+                  <SharedDraftBar
+                    name={selectedSubgraph.name}
+                    onSave={(name) => {
+                      const err = saveSharedDraft(name)
+                      if (!err) track('graph_save', { kind: 'shared', view })
+                      return err
+                    }}
+                    onDiscard={discardSharedDraft}
+                  />
+                )}
                 <div className='hidden md:block'>
                   {subgraphTitle}
                   {recipeSummary}
@@ -981,13 +1046,9 @@ export default function BrowseView() {
                     enableHover
                     resetKey={`semantic|${debouncedQuery}`}
                     selectedId={selectedId ?? undefined}
-                    onAddToSubgraph={
-                      selectedSubgraphId ? addToSelectedSubgraph : undefined
-                    }
+                    onAddToSubgraph={canPin ? addToSelectedSubgraph : undefined}
                     onRemoveFromSubgraph={
-                      selectedSubgraphId
-                        ? removeFromSelectedSubgraph
-                        : undefined
+                      canPin ? removeFromSelectedSubgraph : undefined
                     }
                     subgraphPaperIds={selectedSubgraphPaperIds}
                     subgraphName={selectedSubgraph?.name}
@@ -1006,12 +1067,10 @@ export default function BrowseView() {
                       onLoadMore={loadMore}
                       selectedId={selectedId ?? undefined}
                       onAddToSubgraph={
-                        selectedSubgraphId ? addToSelectedSubgraph : undefined
+                        canPin ? addToSelectedSubgraph : undefined
                       }
                       onRemoveFromSubgraph={
-                        selectedSubgraphId
-                          ? removeFromSelectedSubgraph
-                          : undefined
+                        canPin ? removeFromSelectedSubgraph : undefined
                       }
                       subgraphPaperIds={selectedSubgraphPaperIds}
                       subgraphName={selectedSubgraph?.name}
@@ -1026,7 +1085,9 @@ export default function BrowseView() {
                   enableHover
                   resetKey={`${selectedSubgraphId ?? ''}|${debouncedSubgraphQuery}|${[...subgraphActiveTags].sort()}|${[...subgraphActiveDomains].sort()}`}
                   selectedId={selectedId ?? undefined}
-                  onRemoveFromSubgraph={removeFromSelectedSubgraph}
+                  onRemoveFromSubgraph={
+                    canPin ? removeFromSelectedSubgraph : undefined
+                  }
                   subgraphPaperIds={selectedSubgraphPaperIds}
                   subgraphName={selectedSubgraph?.name}
                 />
@@ -1046,11 +1107,9 @@ export default function BrowseView() {
                 onClose={close}
                 onSelectPaper={handleSelectRelated}
                 onNavigateTo={navigateTo}
-                onAddToSubgraph={
-                  selectedSubgraphId ? addToSelectedSubgraph : undefined
-                }
+                onAddToSubgraph={canPin ? addToSelectedSubgraph : undefined}
                 onRemoveFromSubgraph={
-                  selectedSubgraphId ? removeFromSelectedSubgraph : undefined
+                  canPin ? removeFromSelectedSubgraph : undefined
                 }
                 subgraphPaperIds={selectedSubgraphPaperIds}
                 subgraphName={selectedSubgraph?.name}
@@ -1131,11 +1190,9 @@ export default function BrowseView() {
                 onClose={close}
                 onSelectPaper={handleSelectRelated}
                 onNavigateTo={navigateTo}
-                onAddToSubgraph={
-                  selectedSubgraphId ? addToSelectedSubgraph : undefined
-                }
+                onAddToSubgraph={canPin ? addToSelectedSubgraph : undefined}
                 onRemoveFromSubgraph={
-                  selectedSubgraphId ? removeFromSelectedSubgraph : undefined
+                  canPin ? removeFromSelectedSubgraph : undefined
                 }
                 subgraphPaperIds={selectedSubgraphPaperIds}
                 subgraphName={selectedSubgraph?.name}

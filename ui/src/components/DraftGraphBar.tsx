@@ -1,15 +1,18 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { MAX_GRAPH_NAME_LENGTH } from '../lib/storage'
+import type { SharedGraph } from '../lib/shareLink'
 import FilterChips from './FilterChips'
+import ShareLinkButton from './ShareLinkButton'
 
 const BUTTON =
   'shrink-0 whitespace-nowrap px-2.5 py-1 rounded-md border border-neutral-700 text-[13px] text-neutral-300 hover:text-white hover:border-neutral-500 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
 const PRIMARY_BUTTON =
   'shrink-0 whitespace-nowrap px-2.5 py-1 rounded-md border border-[#4ea8de]/50 bg-[#4ea8de]/15 text-[13px] font-medium text-[#8cc8ee] hover:bg-[#4ea8de]/25 hover:border-[#4ea8de]/70 hover:text-[#b3dbf5] cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
 
-// Action bar for an unsaved, filter-generated graph: save it (as new, or over
-// the saved graph it was edited from), edit its filters, or discard it.
+// Action bar for an unsaved graph (generated from filters, or opened from a
+// share link): save it (as new, or over the saved graph it was edited from),
+// edit its filters, share it as it stands, or discard it.
 export default function DraftGraphBar({
   pager,
   empty,
@@ -21,6 +24,7 @@ export default function DraftGraphBar({
   onUpdate,
   onEdit,
   onDiscard,
+  shareGraph,
 }: {
   // Paper count and Newer/Older controls (GraphPager)
   pager: ReactNode
@@ -37,6 +41,8 @@ export default function DraftGraphBar({
   onUpdate: () => string | null
   onEdit: () => void
   onDiscard: () => void
+  // The draft as a share link carries it
+  shareGraph: SharedGraph | null
 }) {
   const [naming, setNaming] = useState(false)
   const [name, setName] = useState('')
@@ -136,6 +142,14 @@ export default function DraftGraphBar({
             <button type='button' onClick={onEdit} className={BUTTON}>
               Edit
             </button>
+            {shareGraph && !empty && (
+              <ShareLinkButton
+                graph={shareGraph}
+                view='graph'
+                iconSize={13}
+                className={`${BUTTON} flex items-center gap-1`}
+              />
+            )}
             <button type='button' onClick={onDiscard} className={BUTTON}>
               Discard
             </button>
