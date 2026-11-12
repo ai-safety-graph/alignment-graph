@@ -98,7 +98,10 @@ export function useSubgraphManager() {
 
   // Selecting a graph (or "All papers", null) also makes it the graph view's
   const setSelectedSubgraphId = (id: string | null, graph?: SavedGraph) => {
-    if (sharedDraft && id !== SHARED_DRAFT_ID) dropSharedDraft()
+    // Picking the shared draft again changes nothing. Its id is a stand-in,
+    // never stored as the active graph.
+    if (id === SHARED_DRAFT_ID) return
+    if (sharedDraft) dropSharedDraft()
     setSelectedId(id)
     setActiveGraphId(id)
     setViewMode(defaultMode(graph ?? subgraphs.find((s) => s.id === id)))

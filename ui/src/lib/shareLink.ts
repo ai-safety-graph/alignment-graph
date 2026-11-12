@@ -68,6 +68,14 @@ function decodeIds(value: string | null, max: number): string[] {
   return [...new Set(ids)].slice(0, max).map((id) => ABS_PREFIX + id)
 }
 
+// Exactly what Python's `\s` matches (the API's _WS in api/recipe.py). JS's
+// `\s` differs: it lacks the C0 separators (\x1c-\x1f) and NEL (\x85), and
+// adds U+FEFF, which Python keeps as a character.
+const API_WHITESPACE =
+  // The control characters are the point: the API treats them as whitespace
+  // eslint-disable-next-line no-control-regex
+  /[\t-\r\x1c-\x20\x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+/g
+
 // Values as the API cleans terms (api/recipe.py clean_terms): whitespace
 // collapsed, blanks and case-insensitive duplicates dropped. Out-of-bounds
 // values are dropped too, where the API would reject the whole request.
@@ -80,7 +88,7 @@ function cleanValues(
   const out: string[] = []
   const seen = new Set<string>()
   for (const v of values) {
-    const t = v.replace(/\s+/g, ' ').trim()
+    const t = v.replace(API_WHITESPACE, ' ').trim()
     const len = termLength(t)
     if (len < minLength || len > maxLength || seen.has(t.toLowerCase()))
       continue

@@ -86,6 +86,21 @@ describe('useSubgraphManager with a share link', () => {
     expect(listSavedGraphs()).toHaveLength(1)
   })
 
+  it('picking the shared graph again never stores its stand-in id', () => {
+    const own = createSavedGraph('Own', {
+      pinned: ['https://arxiv.org/abs/2401.00009'],
+    })
+    setActiveGraphId(own.id)
+    const { result } = setup('/?v=1&n=Pins&p=2401.00001')
+    expect(result.current.manager.viewMode).toBe('pinned')
+    act(() => result.current.manager.setSelectedSubgraphId(SHARED_DRAFT_ID))
+    expect(getActiveGraphId()).toBe(own.id)
+    expect(result.current.manager.isSharedDraft).toBe(true)
+    expect(result.current.manager.viewMode).toBe('pinned')
+    act(() => result.current.manager.discardSharedDraft())
+    expect(result.current.manager.selectedSubgraphId).toBe(own.id)
+  })
+
   it('picking another graph drops the shared one', () => {
     const { result } = setup(SHARE)
     act(() => result.current.manager.setSelectedSubgraphId(null))

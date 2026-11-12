@@ -389,7 +389,10 @@ export default function ArxivGraph() {
     ? `Failed to ${source.kind === 'draft' ? 'generate' : 'load'} graph: ${content.error.message}`
     : null
   const showLoading = content.isLoading
+  // No recipe and no pins: a saved graph emptied by hand, or a shared
+  // pins-only draft with every pin removed
   const isEmptySavedGraph = source.kind === 'saved' && content.isEmpty
+  const isEmptyDraft = source.kind === 'draft' && content.isEmpty
 
   const [hoverId, setHoverId] = useState<number | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -1379,10 +1382,10 @@ export default function ArxivGraph() {
       {showLoading && (
         <LoadingIndicator label='Loading graph…' className='absolute inset-0' />
       )}
-      {isEmptySavedGraph && (
+      {(isEmptySavedGraph || isEmptyDraft) && (
         <div className='absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center'>
           <p className='text-lg text-neutral-300'>
-            &ldquo;{activeSavedGraph?.name}&rdquo; is empty
+            &ldquo;{activeSavedGraph?.name ?? shareGraph?.name}&rdquo; is empty
           </p>
           <p className='text-sm text-neutral-500 max-w-sm'>
             Search for papers above and use &ldquo;Pin to graph&rdquo; to start
@@ -1414,14 +1417,16 @@ export default function ArxivGraph() {
           </button>
         </div>
       )}
-      {source.kind === 'draft' && data && (
+      {/* Kept with nothing loaded when the draft is empty, so it can still
+          be edited or discarded */}
+      {source.kind === 'draft' && (data || isEmptyDraft) && (
         <BottomBarSlot left={bottomBarLeft} right={bottomBarRight}>
           <div className='pointer-events-auto min-w-0'>
             <DraftGraphBar
               // Remount per draft so a half-typed name doesn't carry over
               key={sourceKey}
               pager={pager}
-              empty={data.nodes.length === 0}
+              empty={!data || data.nodes.length === 0}
               defaultName={shareGraph?.name ?? ''}
               basedOnName={source.basedOn?.name}
               chips={source.filters ? filterSummary(source.filters) : []}

@@ -116,6 +116,20 @@ describe('share links', () => {
       expect(f?.authors).toHaveLength(10)
     })
 
+    it('treats whitespace as the API does, beyond what JS \\s covers', () => {
+      // Python's \s (the API) matches \x1f and \x85 and not U+FEFF; JS's
+      // \s is the other way round. "ab\x1f" is a 2-character keyword to
+      // the API, which would reject it.
+      const qs = new URLSearchParams('v=1&w=all')
+      qs.append('k', 'ab\x1f')
+      qs.append('k', 'reward\x85hacking')
+      qs.append('k', 'x\ufeffy')
+      expect(parseShareParams(qs)?.filters?.keywords).toEqual([
+        'reward hacking',
+        'x\ufeffy',
+      ])
+    })
+
     it('omits empty term lists and a false peer-review flag', () => {
       const f = parse('v=1&w=1w&k=&pr=0')?.filters
       expect(f).toEqual({ tags: [], domains: [], datePreset: '1w' })
