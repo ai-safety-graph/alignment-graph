@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 from fastapi import APIRouter, Depends
 
 from ...taxonomy import TAXONOMY_DESCRIPTIONS
@@ -33,10 +35,26 @@ _TAGS_SQL = """
 """
 
 
+# Tags only change when the daily pipeline runs, but the query reads every
+# relevant paper's heap page (~26k pages), so serve it from memory between
+# refreshes. Per-process; a stale window of up to the TTL is fine.
+_CACHE_TTL_S = 600.0
+_cache: tuple[float, dict] | None = None
+
+
+def clear_cache() -> None:
+    global _cache
+    _cache = None
+
+
 @router.get("")
 def list_tags(conn=Depends(get_conn)):
+    global _cache
+    now = time.monotonic()
+    if _cache is not None and now - _cache[0] < _CACHE_TTL_S:
+        return _cache[1]
     rows = conn.execute(_TAGS_SQL).fetchall()
-    return {
+    result = {
         r[0]: {
             "size": int(r[1]),
             "primary_size": int(r[2]),
@@ -44,3 +62,5 @@ def list_tags(conn=Depends(get_conn)):
         }
         for r in rows
     }
+    _cache = (now, result)
+    return result

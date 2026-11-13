@@ -38,9 +38,9 @@ def test_list_papers_total_zero_when_nothing_matches(client, make_paper):
 
 
 def test_list_papers_pages_are_stable_across_same_date_papers(client, make_paper):
-    # Inserted in reverse id order so heap order disagrees with the id
+    # Inserted in id order so heap order disagrees with the id DESC
     # tie-breaker; without it, pages over same-date papers can overlap.
-    for i in reversed(range(6)):
+    for i in range(6):
         make_paper(f"2401.0010{i}", published="2024-01-01")
 
     aids = []
@@ -48,7 +48,7 @@ def test_list_papers_pages_are_stable_across_same_date_papers(client, make_paper
         res = client.get("/api/papers", params={"page": page, "limit": 2})
         aids += [item["aid"] for item in res.json()["items"]]
 
-    assert aids == [f"https://arxiv.org/abs/2401.0010{i}" for i in range(6)]
+    assert aids == [f"https://arxiv.org/abs/2401.0010{i}" for i in reversed(range(6))]
 
 
 def test_list_papers_excludes_unkept(client, make_paper):
@@ -331,3 +331,16 @@ def test_search_log_failure_does_not_break_request(client, monkeypatch):
     monkeypatch.setattr(deps, "borrow_conn", _boom)
     res = client.get("/api/papers", params={"q": "anything"})
     assert res.status_code == 200
+
+
+def test_list_papers_total_on_full_and_short_pages(client, make_paper):
+    for i in range(5):
+        make_paper(f"2401.0020{i}", published=f"2024-01-0{i + 1}")
+
+    full = client.get("/api/papers", params={"page": 1, "limit": 2}).json()
+    last = client.get("/api/papers", params={"page": 3, "limit": 2}).json()
+    past = client.get("/api/papers", params={"page": 9, "limit": 2}).json()
+    exact = client.get("/api/papers", params={"page": 1, "limit": 5}).json()
+
+    assert [full["total"], last["total"], past["total"], exact["total"]] == [5, 5, 5, 5]
+    assert len(last["items"]) == 1 and past["items"] == []

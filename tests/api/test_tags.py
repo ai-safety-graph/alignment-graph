@@ -38,3 +38,16 @@ def test_list_tags_includes_taxonomy_description(client, make_paper):
         == TAXONOMY_DESCRIPTIONS["AI governance and policy"]
     )
     assert body["not a taxonomy tag"]["description"] is None
+
+
+def test_list_tags_is_cached_until_cleared(client, make_paper):
+    from aisafety_pipeline.api.routes import tags as tags_routes
+
+    make_paper("2401.00086", tags=[("rlhf", 0.9)])
+    assert client.get("/api/tags").json()["rlhf"]["size"] == 1
+
+    make_paper("2401.00087", tags=[("rlhf", 0.9)])
+    assert client.get("/api/tags").json()["rlhf"]["size"] == 1
+
+    tags_routes.clear_cache()
+    assert client.get("/api/tags").json()["rlhf"]["size"] == 2

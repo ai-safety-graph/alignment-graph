@@ -155,7 +155,7 @@ Query params:
 
 `tags`, `domain`, `from`/`to`, `peer_reviewed`, `kw` and `author` are the graph-recipe filters. Both endpoints build that WHERE clause with `recipe.recipe_where()`, so a recipe's graph and its Browse listing always match the same papers: each facet is "any of" within itself, ANDed with the others. `q` is added on top here only. Keywords match `db.PAPER_TEXT_EXPR` (title + abstract) and authors match `authors`, each as one `~*` alternation, so they're served by the partial trigram indexes `idx_papers_text_trgm` / `idx_papers_authors_trgm` (`migrations/add_recipe_trigram_indexes.sql`). `~* ANY(array)` can't use a GIN index, and a keyword with no run of 3 letters or digits has no trigram (pg_trgm ignores punctuation); either one scans the whole papers heap (seconds on prod). Keywords under 3 characters are rejected; longer ones without such a run (`C++`) are allowed and scan, since rejecting them would block real keywords. (`q` scans every row too, though more cheaply: an `ILIKE` over titles and authors rather than a regex over abstracts.) User input is escaped before it goes into the regex.
 
-Ordered by `published DESC, id` (stable across pages). `total` comes from `count(*) OVER ()` on the page query (one round trip); only a page past the end, which has no row to carry it, runs a separate `COUNT(*)`. Returns: `{ total, page, limit, items }` where items have `aid, t, au, pd, ln, dm, tags, pr, vn` — no `id`, coords or `sm` (summary); fetch a single paper for the summary.
+Ordered by `published DESC, id DESC` (stable across pages), matching the partial index `idx_papers_relevant_published` so the page is read straight off the index. `total` is derived from a short (last) page without a query; otherwise it comes from a separate `COUNT(*)`. Don't fold the count back in as `count(*) OVER ()` — that forces a scan and sort of every matching row per page and drained the production Disk IO budget. Returns: `{ total, page, limit, items }` where items have `aid, t, au, pd, ln, dm, tags, pr, vn` — no `id`, coords or `sm` (summary); fetch a single paper for the summary.
 
 ### `GET /api/papers/related`
 
@@ -200,7 +200,7 @@ Query params: `q` (required, 3–80 characters), `limit` (default 10, 1–20). `
 
 ### `GET /api/tags`
 
-All tag metadata, computed live from `papers.llm_tags` of `llm_relevant` papers with at least one tag (not precomputed/cached). `size` counts every paper holding the tag at any rank; `primary_size` counts only papers where it's the first-listed (i.e. `llm_tags[1]`) tag — used so pie-chart percentages sum to 100% instead of being inflated by multi-tag overlap.
+All tag metadata, computed live from `papers.llm_tags` of `llm_relevant` papers with at least one tag (not precomputed), cached in-process for 10 minutes (`_CACHE_TTL_S`) since tags only change on the daily pipeline run. `size` counts every paper holding the tag at any rank; `primary_size` counts only papers where it's the first-listed (i.e. `llm_tags[1]`) tag — used so pie-chart percentages sum to 100% instead of being inflated by multi-tag overlap.
 
 `description` is the tag's entry in `taxonomy.TAXONOMY_DESCRIPTIONS` (the text the LLM classifier is given), or `null` for a tag no longer in the taxonomy; the UI's About page renders it as a glossary.
 
