@@ -38,3 +38,41 @@ def test_list_tags_includes_taxonomy_description(client, make_paper):
         == TAXONOMY_DESCRIPTIONS["AI governance and policy"]
     )
     assert body["not a taxonomy tag"]["description"] is None
+
+
+def test_list_tags_is_cached_until_cleared(client, make_paper):
+    from aisafety_pipeline.api.routes import tags as tags_routes
+
+    make_paper("2401.00086", tags=[("rlhf", 0.9)])
+    assert client.get("/api/tags").json()["rlhf"]["size"] == 1
+
+    make_paper("2401.00087", tags=[("rlhf", 0.9)])
+    assert client.get("/api/tags").json()["rlhf"]["size"] == 1
+
+    tags_routes.clear_cache()
+    assert client.get("/api/tags").json()["rlhf"]["size"] == 2
+
+
+def test_list_tags_cache_hit_skips_the_pool(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from aisafety_pipeline.api import main as api_main
+    from aisafety_pipeline.api.deps import PoolTimeout
+    from aisafety_pipeline.api.ratelimit import limiter
+    from aisafety_pipeline.api.routes import tags as tags_routes
+
+    monkeypatch.setattr(limiter, "enabled", False)
+    monkeypatch.setattr(tags_routes, "_cache", (tags_routes.time.monotonic(), {"rlhf": {"size": 7}}))
+
+    def _busy():
+        raise PoolTimeout("no database connection free within 5s")
+        yield  # pragma: no cover
+
+    # tags_conn calls get_conn directly on a miss, past dependency_overrides.
+    monkeypatch.setattr(tags_routes, "get_conn", _busy)
+    hit = TestClient(api_main.app).get("/api/tags")
+    tags_routes.clear_cache()
+    miss = TestClient(api_main.app).get("/api/tags")
+
+    assert hit.status_code == 200 and hit.json() == {"rlhf": {"size": 7}}
+    assert miss.status_code == 503

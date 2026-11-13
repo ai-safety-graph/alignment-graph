@@ -102,11 +102,17 @@ def client(conn, test_dsn: str, monkeypatch: pytest.MonkeyPatch):
     # Requests use the overridden get_conn below, but the pool would still
     # connect there -- point it at the test database instead.
     monkeypatch.setattr(deps, "DATABASE_URL", test_dsn)
+    # /api/tags caches its result in-process; each test seeds its own papers.
+    from aisafety_pipeline.api.routes import tags as tags_routes
+
+    tags_routes.clear_cache()
 
     def _override_get_conn():
         yield conn
 
     api_main.app.dependency_overrides[get_conn] = _override_get_conn
+    # tags_conn calls get_conn directly on a miss, past dependency_overrides.
+    monkeypatch.setattr(tags_routes, "get_conn", _override_get_conn)
     try:
         with TestClient(api_main.app) as test_client:
             yield test_client

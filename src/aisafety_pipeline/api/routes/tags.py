@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 from fastapi import APIRouter, Depends
 
 from ...taxonomy import TAXONOMY_DESCRIPTIONS
@@ -33,10 +35,42 @@ _TAGS_SQL = """
 """
 
 
+# Tags only change when the daily pipeline runs, but the query reads every
+# relevant paper's heap page (~26k pages), so serve it from memory between
+# refreshes. Per-process; a stale window of up to the TTL is fine.
+_CACHE_TTL_S = 600.0
+_cache: tuple[float, dict] | None = None
+
+
+def clear_cache() -> None:
+    global _cache
+    _cache = None
+
+
+def _fresh(cached: tuple[float, dict] | None) -> bool:
+    return cached is not None and time.monotonic() - cached[0] < _CACHE_TTL_S
+
+
+def tags_conn():
+    """Like get_conn, but borrows nothing while the cache is fresh, so a hit
+    is served without waiting on (or 503-ing from) a saturated pool."""
+    if _fresh(_cache):
+        yield None
+        return
+    yield from get_conn()
+
+
 @router.get("")
-def list_tags(conn=Depends(get_conn)):
+def list_tags(conn=Depends(tags_conn)):
+    global _cache
+    cached = _cache
+    # conn is None when tags_conn saw a fresh cache; serve it even if the TTL
+    # lapsed a moment since (it's only ever replaced, never cleared, outside
+    # tests). The freshness check covers callers that always pass a conn.
+    if cached is not None and (conn is None or _fresh(cached)):
+        return cached[1]
     rows = conn.execute(_TAGS_SQL).fetchall()
-    return {
+    result = {
         r[0]: {
             "size": int(r[1]),
             "primary_size": int(r[2]),
@@ -44,3 +78,5 @@ def list_tags(conn=Depends(get_conn)):
         }
         for r in rows
     }
+    _cache = (time.monotonic(), result)
+    return result

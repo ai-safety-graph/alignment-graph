@@ -42,25 +42,25 @@ def list_papers(
 
     where_sql = "WHERE " + " AND ".join(where)
 
-    # count(*) OVER () gives the total in the same round trip as the page.
+    # Sort matches idx_papers_relevant_published (published DESC, id DESC) so
+    # the page is read straight off the index. A count(*) OVER () here would
+    # force a scan + sort of every matching row on each page (~26k heap pages
+    # for the unfiltered list), which drained the production Disk IO budget.
     rows = conn.execute(
         f"""
         SELECT id, title, authors, published, link, domain_tag,
-               llm_tags AS tags, count(*) OVER () AS total,
-               peer_reviewed IS TRUE AS pr, venue AS vn
+               llm_tags AS tags, peer_reviewed IS TRUE AS pr, venue AS vn
         FROM papers {where_sql}
-        ORDER BY published DESC, id
+        ORDER BY published DESC, id DESC
         LIMIT %s OFFSET %s
         """,
         params + [limit, offset],
     ).fetchall()
 
-    if rows:
-        total = rows[0][7]
-    elif offset == 0:
-        total = 0
+    if len(rows) < limit and (rows or offset == 0):
+        # A short page is the last one, so the total is known without a count.
+        total = offset + len(rows)
     else:
-        # Past the last page there's no row to carry the total.
         total = conn.execute(
             f"SELECT COUNT(*) FROM papers {where_sql}", params
         ).fetchone()[0]
@@ -82,8 +82,8 @@ def list_papers(
             "ln": r[4] or r[0],
             "dm": r[5] or "unknown",
             "tags": list(r[6]) if r[6] else [],
-            "pr": bool(r[8]),
-            "vn": r[9],
+            "pr": bool(r[7]),
+            "vn": r[8],
         }
         for r in rows
     ]
