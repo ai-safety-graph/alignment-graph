@@ -91,7 +91,7 @@ def test_pool_timeout_returns_503_with_cors(monkeypatch: pytest.MonkeyPatch):
     api_main.app.dependency_overrides[get_conn] = _busy
     try:
         origin = api_main.API_CORS_ORIGINS[0]
-        res = TestClient(api_main.app).get("/api/tags", headers={"Origin": origin})
+        res = TestClient(api_main.app).get("/api/papers", headers={"Origin": origin})
     finally:
         api_main.app.dependency_overrides.pop(get_conn, None)
 

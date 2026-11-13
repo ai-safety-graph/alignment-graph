@@ -47,12 +47,28 @@ def clear_cache() -> None:
     _cache = None
 
 
+def _fresh(cached: tuple[float, dict] | None) -> bool:
+    return cached is not None and time.monotonic() - cached[0] < _CACHE_TTL_S
+
+
+def tags_conn():
+    """Like get_conn, but borrows nothing while the cache is fresh, so a hit
+    is served without waiting on (or 503-ing from) a saturated pool."""
+    if _fresh(_cache):
+        yield None
+        return
+    yield from get_conn()
+
+
 @router.get("")
-def list_tags(conn=Depends(get_conn)):
+def list_tags(conn=Depends(tags_conn)):
     global _cache
-    now = time.monotonic()
-    if _cache is not None and now - _cache[0] < _CACHE_TTL_S:
-        return _cache[1]
+    cached = _cache
+    # conn is None when tags_conn saw a fresh cache; serve it even if the TTL
+    # lapsed a moment since (it's only ever replaced, never cleared, outside
+    # tests). The freshness check covers callers that always pass a conn.
+    if cached is not None and (conn is None or _fresh(cached)):
+        return cached[1]
     rows = conn.execute(_TAGS_SQL).fetchall()
     result = {
         r[0]: {
@@ -62,5 +78,5 @@ def list_tags(conn=Depends(get_conn)):
         }
         for r in rows
     }
-    _cache = (now, result)
+    _cache = (time.monotonic(), result)
     return result

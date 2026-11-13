@@ -111,6 +111,8 @@ def client(conn, test_dsn: str, monkeypatch: pytest.MonkeyPatch):
         yield conn
 
     api_main.app.dependency_overrides[get_conn] = _override_get_conn
+    # tags_conn calls get_conn directly on a miss, past dependency_overrides.
+    monkeypatch.setattr(tags_routes, "get_conn", _override_get_conn)
     try:
         with TestClient(api_main.app) as test_client:
             yield test_client

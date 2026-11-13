@@ -200,7 +200,7 @@ Query params: `q` (required, 3–80 characters), `limit` (default 10, 1–20). `
 
 ### `GET /api/tags`
 
-All tag metadata, computed live from `papers.llm_tags` of `llm_relevant` papers with at least one tag (not precomputed), cached in-process for 10 minutes (`_CACHE_TTL_S`) since tags only change on the daily pipeline run. `size` counts every paper holding the tag at any rank; `primary_size` counts only papers where it's the first-listed (i.e. `llm_tags[1]`) tag — used so pie-chart percentages sum to 100% instead of being inflated by multi-tag overlap.
+All tag metadata, computed live from `papers.llm_tags` of `llm_relevant` papers with at least one tag (not precomputed), cached in-process for 10 minutes (`_CACHE_TTL_S`) since tags only change on the daily pipeline run. A hit doesn't borrow a pooled connection (`tags_conn`), so it's served even when the pool is saturated. `size` counts every paper holding the tag at any rank; `primary_size` counts only papers where it's the first-listed (i.e. `llm_tags[1]`) tag — used so pie-chart percentages sum to 100% instead of being inflated by multi-tag overlap.
 
 `description` is the tag's entry in `taxonomy.TAXONOMY_DESCRIPTIONS` (the text the LLM classifier is given), or `null` for a tag no longer in the taxonomy; the UI's About page renders it as a glossary.
 
