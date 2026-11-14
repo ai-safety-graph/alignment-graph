@@ -28,9 +28,12 @@ _UPSERT_RELATED = """
               IS DISTINCT FROM (EXCLUDED.neighbor_ids, EXCLUDED.sims)
 """
 
+# Rows for papers not in this run's set (no longer relevant, lost their
+# embedding, or deleted). Matching on the ids already in hand only reads
+# paper_related; joining papers instead looked up every row's paper by
+# primary key (~35k scattered heap reads, ~10s on prod).
 _DELETE_STALE = """
-    DELETE FROM paper_related r USING papers p
-    WHERE p.id = r.paper_id AND (p.llm_relevant IS NOT TRUE OR p.embedding IS NULL)
+    DELETE FROM paper_related WHERE paper_id <> ALL(%s::text[])
 """
 
 
@@ -89,7 +92,7 @@ def compute_related(db_path: str | None = None, k: int = RELATED_K) -> int:
             changed += write_cur.rowcount
             conn.commit()
 
-        write_cur.execute(_DELETE_STALE)
+        write_cur.execute(_DELETE_STALE, (ids,))
         removed = write_cur.rowcount
         conn.commit()
 

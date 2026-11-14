@@ -416,6 +416,12 @@ def init_db(db_arg: str | None = None) -> PgConnection:
         # venue stage work queue: relevant papers never derived.
         "CREATE INDEX IF NOT EXISTS idx_papers_venue_pending ON papers (id) "
         "WHERE llm_relevant AND venue_derived_at IS NULL",
+        # llm-classify work queue (llm_classify._eligibility_clause): kept
+        # papers neither classified nor in flight in a batch. Without it the
+        # pending count and paged select read the heap of every kept paper
+        # (~70k, ~24k pages per query on prod) to find a handful.
+        "CREATE INDEX IF NOT EXISTS idx_papers_unclassified ON papers (id) "
+        "WHERE ai_stage2_keep AND llm_classified_at IS NULL AND llm_batch_id IS NULL",
     ):
         cur.execute(stmt)
     conn.commit()
