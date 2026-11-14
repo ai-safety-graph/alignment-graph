@@ -165,7 +165,7 @@ Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `ai_regex_hit
 
 - Partial HNSW indexes (`vector_cosine_ops`), both `WHERE llm_relevant = TRUE AND <col> IS NOT NULL` so they only match API queries that gate on `llm_relevant`: `idx_papers_embedding_llm` on `embedding`, `idx_papers_embedding_topic_llm` on `embedding_topic`. The older non-partial `idx_papers_embedding`/`idx_papers_embedding_topic` are dropped.
 - `idx_papers_llm_relevant`, GIN `idx_papers_llm_tags`, partial `idx_papers_llm_batch_id`, `idx_papers_keep`, `idx_papers_domain`.
-- "Work queue" partial indexes for the incremental stages: `idx_papers_missing_embedding`, `idx_papers_unscored`, `idx_papers_missing_topic`, `idx_papers_unplaced`, `idx_papers_venue_pending`.
+- "Work queue" partial indexes for the incremental stages: `idx_papers_missing_embedding`, `idx_papers_unscored`, `idx_papers_missing_topic`, `idx_papers_unplaced`, `idx_papers_venue_pending`, `idx_papers_unclassified` (llm-classify: kept papers neither classified nor in a batch).
 - Partial `idx_papers_relevant_published` and `idx_papers_reviewed_published` (`WHERE llm_relevant AND peer_reviewed`): keyset order for graph range pages and the peer-reviewed filter.
 - Partial `idx_papers_raw_harvested_at` (backs stage 1's watermark scan) and `idx_search_log_ts`.
 

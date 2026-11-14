@@ -76,3 +76,18 @@ def test_compute_related_removes_rows_for_papers_no_longer_relevant(conn, test_d
     compute_related(test_dsn)
 
     assert _related(conn, a) is None
+
+
+def test_compute_related_removes_rows_for_papers_that_lost_their_embedding(conn, test_dsn, committed_papers):
+    a = committed_papers("2401.40031", embedding=_unit(1))
+    b = committed_papers("2401.40032", embedding=_unit(0, 1))
+    committed_papers("2401.40033", embedding=_unit(0, 0, 1))
+    compute_related(test_dsn)
+    assert _related(conn, a) is not None
+
+    conn.execute("UPDATE papers SET embedding = NULL WHERE id = %s", (a,))
+    conn.commit()
+    compute_related(test_dsn)
+
+    assert _related(conn, a) is None
+    assert _related(conn, b) is not None
