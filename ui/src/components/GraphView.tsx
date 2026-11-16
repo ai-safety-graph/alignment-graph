@@ -80,7 +80,7 @@ import GraphPager from './GraphPager'
 import FilterChips from './FilterChips'
 import GenerateGraphModal from './GenerateGraphModal'
 import LoadingIndicator from './LoadingIndicator'
-import { HeaderLogo, ViewSwitch } from './HeaderNav'
+import { GRAPH_PICKER_WIDTH, HeaderLogo, ViewSwitch } from './HeaderNav'
 import { NewGraphButton, NewGraphMenuItem } from './NewGraph'
 import { track } from '../lib/analytics'
 import { useCapabilities } from '../hooks/useCapabilities'
@@ -1337,9 +1337,6 @@ export default function ArxivGraph() {
         : SUBGRAPH_NODE_COLOR
     ctx.arc(n.x, n.y, r, 0, 2 * Math.PI, false)
     ctx.fill()
-    ctx.lineWidth = 0.5
-    ctx.strokeStyle = 'rgba(255,255,255,0.7)'
-    ctx.stroke()
     if (!ghostIds.has(n.id) && pinnedAids.has(n.aid)) {
       ctx.beginPath()
       ctx.lineWidth = 1.5
@@ -1665,8 +1662,6 @@ export default function ArxivGraph() {
         <div className='flex-1 basis-0 min-w-fit pr-4 flex'>
           <div className='flex items-center gap-2 pointer-events-auto'>
             <HeaderLogo current='graph' />
-            {/* A little more room after the logo than between controls */}
-            <div aria-hidden className='w-1' />
 
             {/* Picking a graph and starting a new one share the dropdown;
               until there's something to pick, a button stands in */}
@@ -1674,7 +1669,7 @@ export default function ArxivGraph() {
               <NewGraphButton onClick={() => setModal(NEW_GRAPH_MODAL)} />
             ) : (
               <Dropdown
-                className='max-w-[140px] lg:max-w-[240px]'
+                className={GRAPH_PICKER_WIDTH}
                 label={
                   source.kind === 'draft'
                     ? draftName
@@ -1700,6 +1695,8 @@ export default function ArxivGraph() {
                 <NewGraphMenuItem onClick={() => setModal(NEW_GRAPH_MODAL)} />
               </Dropdown>
             )}
+
+            <ViewSwitch current='graph' onLeave={confirmLeaveTo('/browse')} />
 
             {pendingExit && (
               <div className='flex items-center gap-1.5 text-[13px] text-neutral-300 whitespace-nowrap'>
@@ -1815,7 +1812,6 @@ export default function ArxivGraph() {
 
         <div className='flex-1 basis-0 min-w-fit pl-4 flex justify-end'>
           <div className='flex items-center gap-4 xl:gap-10 pointer-events-auto'>
-            <ViewSwitch current='graph' onLeave={confirmLeaveTo('/browse')} />
             <Link
               to='/about'
               onClick={confirmLeaveTo('/about')}

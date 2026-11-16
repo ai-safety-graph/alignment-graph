@@ -24,7 +24,7 @@ import FilterBar from './FilterBar'
 import Dropdown from './Dropdown'
 import LoadingIndicator from './LoadingIndicator'
 import LatestBatchBadge from './LatestBatchBadge'
-import { HeaderLogo, ViewSwitch } from './HeaderNav'
+import { GRAPH_PICKER_WIDTH, HeaderLogo, ViewSwitch } from './HeaderNav'
 import { NewGraphButton, NewGraphMenuItem } from './NewGraph'
 import GenerateGraphModal from './GenerateGraphModal'
 import ShareLinkButton from './ShareLinkButton'
@@ -510,7 +510,7 @@ export default function BrowseView() {
     <div
       role='tablist'
       aria-label={`Papers in ${selectedSubgraph.name}`}
-      className='shrink-0 flex items-center p-0.5 rounded-md border border-neutral-700 bg-neutral-950 text-[13px]'
+      className='shrink-0 flex items-center p-0.5 rounded-md bg-neutral-950 text-[13px]'
     >
       {(
         [
@@ -700,19 +700,6 @@ export default function BrowseView() {
     </div>
   )
 
-  // The dropdown above already names the graph, so this row is just the
-  // list-mode tabs (or a plain label) and the Filters toggle.
-  const subgraphTitle = (
-    <div className='shrink-0 px-4 pt-4 pb-2 flex items-center justify-between gap-3 text-sm text-neutral-400'>
-      {listModeTabs || (
-        <span className='min-w-0 truncate text-lg font-medium text-neutral-200'>
-          All papers
-        </span>
-      )}
-      {filterBar && filterToggleButton}
-    </div>
-  )
-
   // Only the all-papers list mentions the latest update (About does too);
   // wide screens only, as the half-width list column at md has no room
   const batchNote = listMode === 'all' && (
@@ -740,7 +727,7 @@ export default function BrowseView() {
 
   // Desktop only: phones edit and delete from the graph sheet
   const recipeActions = (
-    <div className='shrink-0 flex items-center gap-3'>
+    <div className='min-w-0 flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-xs'>
       {editRecipeButton}
       {selectedSubgraph && !isSharedDraft && (
         <>
@@ -748,7 +735,7 @@ export default function BrowseView() {
             <ShareLinkButton
               graph={selectedSubgraph}
               view={view}
-              className='hidden md:flex items-center gap-1 text-neutral-500 hover:text-white underline underline-offset-2 cursor-pointer'
+              className='hidden md:flex items-center gap-1 text-neutral-500 hover:text-[#4ea8de] underline underline-offset-2 cursor-pointer'
             />
           )}
           <button
@@ -764,6 +751,25 @@ export default function BrowseView() {
     </div>
   )
 
+  // The dropdown above already names the graph, so this row is just the
+  // list-mode tabs (or a plain label) on the left, and the graph's
+  // Edit/Share/Delete with the Filters toggle on the right. The list column
+  // is only half the page at md/lg, so the right side drops to its own line
+  // (and wraps within it) rather than overflowing
+  const subgraphTitle = (
+    <div className='shrink-0 px-4 pt-4 pb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 text-sm text-neutral-400'>
+      {listModeTabs || (
+        <span className='min-w-0 truncate text-lg font-medium text-neutral-200'>
+          All papers
+        </span>
+      )}
+      <div className='ml-auto min-w-0 flex flex-wrap items-center justify-end gap-x-4 gap-y-1'>
+        {showGraphActions && recipeActions}
+        {filterBar && filterToggleButton}
+      </div>
+    </div>
+  )
+
   // The count follows the debounced search, so the wording does too
   const searching = !!debouncedQuery.trim()
   const matchVerb = total === 1 ? 'matches' : 'match'
@@ -774,18 +780,11 @@ export default function BrowseView() {
         ? ` ${matchVerb} your search`
         : ' (no filters)'
 
-  // Whether the count line (or the pins-only summary) is already showing
-  // Edit/Delete, so the fallback row below it isn't needed
-  const graphActionsInline = isMatches
-    ? !recipe || !!papers
-    : listMode === 'pinned' && !!subgraphNodes?.length
-
   // A graph with a recipe shows it in the count line; a pins-only graph has
   // no matches to count, so it says so here
   const recipeSummary = isMatches && selectedSubgraph && !recipe && (
     <div className='px-4 pb-3 flex flex-wrap items-center gap-1.5 text-xs text-neutral-500'>
       <span>No filters: this graph holds only pinned papers.</span>
-      {recipeActions}
     </div>
   )
 
@@ -806,15 +805,15 @@ export default function BrowseView() {
       <div className='hidden md:flex relative z-20 shrink-0 bg-neutral-950 px-4 py-3 items-center gap-3 border-b border-neutral-800'>
         {/* The two sides split the leftover width equally (but never below
             their content), which keeps the search box centred on the page */}
-        <div className='flex-1 basis-0 min-w-fit pr-4 flex items-center gap-3'>
+        <div className='flex-1 basis-0 min-w-fit pr-4 flex items-center gap-2'>
           <HeaderLogo current='list' />
-          {renderGraphPicker('md:max-w-[160px] lg:max-w-[320px]')}
+          {renderGraphPicker(GRAPH_PICKER_WIDTH)}
+          <ViewSwitch current='list' />
         </div>
         <div className='relative flex-[0_1_36rem] min-w-0 flex items-center gap-2'>
           {isBrowsing ? searchControls : subgraphSearchControls}
         </div>
         <div className='flex-1 basis-0 min-w-fit pl-4 flex justify-end items-center gap-4'>
-          <ViewSwitch current='list' />
           {aboutLink}
         </div>
       </div>
@@ -839,7 +838,7 @@ export default function BrowseView() {
               </div>
 
               {/* One sticky block for both layouts' controls and the count
-                  line, so a graph's filter chips (and Edit/Delete on desktop) stay in view
+                  line, so a graph's filter chips and actions stay in view
                   while the list scrolls. On desktop it stays below the top
                   bar (z-20) so the graph picker's menu draws over it. */}
               <div className='sticky top-0 z-20 md:z-10 bg-neutral-950'>
@@ -916,7 +915,6 @@ export default function BrowseView() {
                               </span>
                             ))}
                           </p>
-                          {recipeActions}
                         </>
                       ) : (
                         <span>
@@ -958,18 +956,9 @@ export default function BrowseView() {
                       Showing {subgraphItems.length} of {subgraphNodes.length}{' '}
                       pinned papers
                     </span>
-                    {recipeActions}
                   </div>
                 )}
 
-                {/* Edit/Delete normally ride on the count line; keep them
-                    reachable while it's absent (loading, a failed fetch, no
-                    pins yet) */}
-                {showGraphActions && !graphActionsInline && (
-                  <div className='hidden md:flex px-4 py-1.5 text-xs justify-end'>
-                    {recipeActions}
-                  </div>
-                )}
               </div>
 
               {isBrowsing && !semantic && error && (!isMatches || recipe) && (
