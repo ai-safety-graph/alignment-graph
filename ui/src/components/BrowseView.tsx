@@ -735,7 +735,7 @@ export default function BrowseView() {
             <ShareLinkButton
               graph={selectedSubgraph}
               view={view}
-              className='hidden md:flex items-center gap-1 text-neutral-500 hover:text-white underline underline-offset-2 cursor-pointer'
+              className='hidden md:flex items-center gap-1 text-neutral-500 hover:text-[#4ea8de] underline underline-offset-2 cursor-pointer'
             />
           )}
           <button
