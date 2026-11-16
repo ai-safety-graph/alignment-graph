@@ -281,7 +281,7 @@ export default function ArxivGraph() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const [confirmingDelete, setConfirmingDelete] = useState(false)
-  // Opened by the header's ? button, or once on its own (see below)
+  // Opened by the header's Tour button, or once on its own (see below)
   const [tourOpen, setTourOpen] = useState(false)
   const closeTour = () => {
     setTourSeen()

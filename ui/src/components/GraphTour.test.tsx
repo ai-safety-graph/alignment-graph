@@ -71,4 +71,33 @@ describe('GraphTour', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Next' }))
     expect(screen.queryByTestId('tour-highlight')).toBeNull()
   })
+
+  it('keeps Tab inside the card', async () => {
+    const outside = document.createElement('button')
+    outside.textContent = 'Behind'
+    document.body.appendChild(outside)
+    render(<GraphTour onClose={() => {}} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+
+    for (let i = 0; i < 6; i++) {
+      await userEvent.tab()
+      expect(screen.getByRole('dialog')).toContainElement(
+        document.activeElement as HTMLElement,
+      )
+    }
+    await userEvent.tab({ shift: true })
+    expect(document.activeElement).not.toBe(outside)
+  })
+
+  it('returns focus to the opener when it closes', () => {
+    const opener = document.createElement('button')
+    document.body.appendChild(opener)
+    opener.focus()
+    const { unmount } = render(<GraphTour onClose={() => {}} />)
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Next' }),
+    )
+    unmount()
+    expect(document.activeElement).toBe(opener)
+  })
 })

@@ -41,6 +41,7 @@ export default function GraphTour({
   const [index, setIndex] = useState(0)
   const [rect, setRect] = useState<Rect | null>(null)
   const nextRef = useRef<HTMLButtonElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
   const step = TOUR_STEPS[index]
   const last = index === TOUR_STEPS.length - 1
 
@@ -50,6 +51,16 @@ export default function GraphTour({
     window.addEventListener('resize', update)
     return () => window.removeEventListener('resize', update)
   }, [step.target])
+
+  // Hand focus back to whatever had it (e.g. the Tour button) on close.
+  // Declared before the effect below so it records focus before Next takes it.
+  useEffect(() => {
+    const opener = document.activeElement
+    return () => {
+      if (opener instanceof HTMLElement && opener !== document.body)
+        opener.focus()
+    }
+  }, [])
 
   useEffect(() => {
     nextRef.current?.focus()
@@ -73,7 +84,23 @@ export default function GraphTour({
       if (e.key === 'Escape') close('skip')
       else if (e.key === 'ArrowRight') next()
       else if (e.key === 'ArrowLeft') back()
-      else return
+      else if (e.key === 'Tab') {
+        // Keep Tab inside the card: the page behind it is covered, and a
+        // control reached there (e.g. New graph) would open under the tour
+        const buttons = [
+          ...(dialogRef.current?.querySelectorAll('button') ?? []),
+        ]
+        if (!buttons.length) return
+        const at = buttons.indexOf(document.activeElement as HTMLButtonElement)
+        const dir = e.shiftKey ? -1 : 1
+        const to =
+          at === -1
+            ? e.shiftKey
+              ? buttons.length - 1
+              : 0
+            : (at + dir + buttons.length) % buttons.length
+        buttons[to].focus()
+      } else return
       e.preventDefault()
       e.stopPropagation()
     }
@@ -125,6 +152,7 @@ export default function GraphTour({
         />
       )}
       <div
+        ref={dialogRef}
         role='dialog'
         aria-modal='true'
         aria-labelledby='graph-tour-title'
