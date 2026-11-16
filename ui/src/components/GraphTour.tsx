@@ -113,7 +113,7 @@ export default function GraphTour({
         <div
           data-testid='tour-highlight'
           aria-hidden
-          className='absolute rounded-lg pointer-events-none transition-all duration-200'
+          className='absolute rounded pointer-events-none transition-all duration-200'
           style={{
             top: rect.top - PAD,
             left: rect.left - PAD,
