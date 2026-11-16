@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+
 import numpy as np
 from psycopg2.extras import execute_values
 
@@ -37,6 +39,24 @@ _DELETE_STALE = """
 """
 
 
+# pipeline_state key holding a fingerprint of the last completed run's input.
+# Embeddings are only ever filled where NULL (embed never overwrites one), so
+# the set of relevant embedded ids fully determines the result; when it
+# hasn't changed, a recompute would read every SPECTER2 vector (~400 MB on
+# prod, the bulk of a quiet day's Disk IO) to write nothing.
+RELATED_STATE_KEY = "related_fingerprint"
+
+
+def related_fingerprint(ids: list[str], k: int) -> str:
+    """Hash of the sorted input ids and k. Any paper gaining or losing
+    relevance or an embedding changes it."""
+    h = hashlib.sha256(f"k={k}\n".encode())
+    for pid in ids:
+        h.update(pid.encode())
+        h.update(b"\n")
+    return h.hexdigest()
+
+
 def top_k_neighbours(X: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray]:
     """Exact cosine top-k for every row of L2-normalised `X`, excluding the
     row itself. Returns (indices, sims), each (n, k), most similar first."""
@@ -56,11 +76,13 @@ def top_k_neighbours(X: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray]:
     return idx_out, sim_out
 
 
-def compute_related(db_path: str | None = None, k: int = RELATED_K) -> int:
+def compute_related(db_path: str | None = None, k: int = RELATED_K, force: bool = False) -> int:
     """Recompute the SPECTER2 nearest neighbours of every llm_relevant paper
-    into `paper_related`. Always a full recompute: new papers change the
-    neighbours of old ones. Returns the number of rows inserted or changed."""
-    from .db import connect
+    into `paper_related`. A full recompute (new papers change the neighbours
+    of old ones), skipped when the input set matches the last completed run
+    unless `force` (e.g. after re-embedding papers in place by hand).
+    Returns the number of rows inserted or changed."""
+    from .db import connect, get_state, set_state
     from .filters import load_vectors
 
     conn = connect(db_path)
@@ -70,6 +92,14 @@ def compute_related(db_path: str | None = None, k: int = RELATED_K) -> int:
         ).fetchall()]
         if len(ids) < 2:
             print(f"{YELLOW}compute-related:{RESET} fewer than 2 relevant embedded papers, nothing to do")
+            return 0
+
+        fingerprint = related_fingerprint(ids, k)
+        if not force and get_state(conn, RELATED_STATE_KEY) == fingerprint:
+            print(
+                f"{GREEN}compute-related:{RESET} {len(ids)} papers unchanged since the last run, "
+                "skipping (--force to recompute)"
+            )
             return 0
 
         vec_by_id = load_vectors(conn, ids, model="specter2")
@@ -95,6 +125,8 @@ def compute_related(db_path: str | None = None, k: int = RELATED_K) -> int:
         write_cur.execute(_DELETE_STALE, (ids,))
         removed = write_cur.rowcount
         conn.commit()
+        # Only after every write committed, so a crashed run recomputes.
+        set_state(conn, RELATED_STATE_KEY, fingerprint)
 
         print(
             f"{GREEN}compute-related:{RESET} {len(ids)} papers (k={nbr_idx.shape[1]}), "
@@ -106,4 +138,6 @@ def compute_related(db_path: str | None = None, k: int = RELATED_K) -> int:
 
 
 def cmd_compute_related(args):
-    return compute_related(db_path=args.db)
+    # `force_related`, not `force`: run-all shares one namespace across stages
+    # and sets `force` for llm-classify.
+    return compute_related(db_path=args.db, force=getattr(args, "force_related", False))

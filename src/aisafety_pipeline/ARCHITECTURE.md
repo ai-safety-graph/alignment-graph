@@ -93,7 +93,7 @@ Places `llm_relevant` papers in 2D from their topic embeddings — incrementally
 
 ### `related.py`
 
-Precomputes the top `RELATED_K` (20) SPECTER2 neighbours of every `llm_relevant` paper into `paper_related`, which `GET /api/papers/related` serves. It's an exact cosine search in numpy over the whole relevant set (chunked `X @ X.T` + `argpartition`), always a full recompute since new papers change old papers' neighbours. An upsert skips rows whose neighbours didn't change (sims rounded to 4 dp so float noise doesn't rewrite everything), and rows for papers no longer relevant/embedded are deleted.
+Precomputes the top `RELATED_K` (20) SPECTER2 neighbours of every `llm_relevant` paper into `paper_related`, which `GET /api/papers/related` serves. It's an exact cosine search in numpy over the whole relevant set (chunked `X @ X.T` + `argpartition`), always a full recompute since new papers change old papers' neighbours. An upsert skips rows whose neighbours didn't change (sims rounded to 4 dp so float noise doesn't rewrite everything), and rows for papers no longer relevant/embedded are deleted. The whole stage is skipped when the input set (relevant ids with an embedding, plus `k`) hashes the same as the last completed run's, stored in `pipeline_state` under `related_fingerprint`. Embeddings are only ever filled where NULL, so the ids determine the result; `--force` recomputes anyway (e.g. after re-embedding papers in place).
 
 ### `api/`
 
@@ -165,7 +165,7 @@ Columns: `id`, `title`, `authors`, `published`, `summary`, `link`, `ai_regex_hit
 
 - Partial HNSW indexes (`vector_cosine_ops`), both `WHERE llm_relevant = TRUE AND <col> IS NOT NULL` so they only match API queries that gate on `llm_relevant`: `idx_papers_embedding_llm` on `embedding`, `idx_papers_embedding_topic_llm` on `embedding_topic`. The older non-partial `idx_papers_embedding`/`idx_papers_embedding_topic` are dropped.
 - `idx_papers_llm_relevant`, GIN `idx_papers_llm_tags`, partial `idx_papers_llm_batch_id`, `idx_papers_keep`, `idx_papers_domain`.
-- "Work queue" partial indexes for the incremental stages: `idx_papers_missing_embedding`, `idx_papers_unscored`, `idx_papers_missing_topic`, `idx_papers_unplaced`, `idx_papers_venue_pending`, `idx_papers_unclassified` (llm-classify: kept papers neither classified nor in a batch).
+- "Work queue" partial indexes for the incremental stages: `idx_papers_missing_embedding`, `idx_papers_unscored`, `idx_papers_missing_topic`, `idx_papers_unplaced`, `idx_papers_venue_pending`, `idx_papers_unclassified` (llm-classify: kept papers neither classified nor in a batch), `idx_papers_related_input` (compute-related's input ids, read every run for the unchanged-input check).
 - Partial `idx_papers_relevant_published` and `idx_papers_reviewed_published` (`WHERE llm_relevant AND peer_reviewed`): keyset order for graph range pages and the peer-reviewed filter.
 - Partial `idx_papers_raw_harvested_at` (backs stage 1's watermark scan) and `idx_search_log_ts`.
 
