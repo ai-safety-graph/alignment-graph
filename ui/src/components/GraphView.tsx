@@ -372,11 +372,15 @@ export default function ArxivGraph() {
   // a graph, so it waits out the new-graph modal and the empty state, then
   // a moment more for the layout to settle.
   const hasPapers = !!data?.nodes.length
+  // It also stays out of the way of the "discard the draft?" prompt, and
+  // re-checks on firing in case the Tour button was used meanwhile.
   useEffect(() => {
-    if (modal || !hasPapers || getTourSeen()) return
-    const timer = setTimeout(() => setTourOpen(true), 500)
+    if (modal || pendingExit || !hasPapers || getTourSeen()) return
+    const timer = setTimeout(() => {
+      if (!getTourSeen()) setTourOpen(true)
+    }, 500)
     return () => clearTimeout(timer)
-  }, [modal, hasPapers])
+  }, [modal, pendingExit, hasPapers])
 
   const setMembership = (next: GraphMembership) => {
     if (source.kind === 'draft') {
