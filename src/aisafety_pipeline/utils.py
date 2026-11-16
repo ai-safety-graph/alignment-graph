@@ -96,6 +96,8 @@ def build_parser() -> argparse.ArgumentParser:
                        help="Precompute SPECTER2 nearest neighbours into paper_related (served by "
                             "GET /api/papers/related)")
     cr.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
+    cr.add_argument("--force", dest="force_related", action="store_true",
+                    help="Recompute even if the relevant embedded papers are unchanged since the last run")
     cr.set_defaults(func=related.cmd_compute_related)
 
     vn = sp.add_parser("venue",

@@ -422,6 +422,11 @@ def init_db(db_arg: str | None = None) -> PgConnection:
         # (~70k, ~24k pages per query on prod) to find a handful.
         "CREATE INDEX IF NOT EXISTS idx_papers_unclassified ON papers (id) "
         "WHERE ai_stage2_keep AND llm_classified_at IS NULL AND llm_batch_id IS NULL",
+        # compute-related's input set (`ORDER BY id`), read every run to check
+        # whether anything changed; index-only instead of visiting the heap
+        # of every relevant paper (~23k pages on prod).
+        "CREATE INDEX IF NOT EXISTS idx_papers_related_input ON papers (id) "
+        "WHERE llm_relevant AND embedding IS NOT NULL",
     ):
         cur.execute(stmt)
     conn.commit()
