@@ -727,7 +727,7 @@ export default function BrowseView() {
 
   // Desktop only: phones edit and delete from the graph sheet
   const recipeActions = (
-    <div className='shrink-0 flex items-center gap-3 text-xs'>
+    <div className='min-w-0 flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-xs'>
       {editRecipeButton}
       {selectedSubgraph && !isSharedDraft && (
         <>
@@ -753,15 +753,17 @@ export default function BrowseView() {
 
   // The dropdown above already names the graph, so this row is just the
   // list-mode tabs (or a plain label) on the left, and the graph's
-  // Edit/Share/Delete with the Filters toggle on the right
+  // Edit/Share/Delete with the Filters toggle on the right. The list column
+  // is only half the page at md/lg, so the right side drops to its own line
+  // (and wraps within it) rather than overflowing
   const subgraphTitle = (
-    <div className='shrink-0 px-4 pt-4 pb-2 flex items-center justify-between gap-3 text-sm text-neutral-400'>
+    <div className='shrink-0 px-4 pt-4 pb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 text-sm text-neutral-400'>
       {listModeTabs || (
         <span className='min-w-0 truncate text-lg font-medium text-neutral-200'>
           All papers
         </span>
       )}
-      <div className='shrink-0 flex items-center gap-4'>
+      <div className='ml-auto min-w-0 flex flex-wrap items-center justify-end gap-x-4 gap-y-1'>
         {showGraphActions && recipeActions}
         {filterBar && filterToggleButton}
       </div>
