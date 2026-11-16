@@ -44,6 +44,7 @@ export function ViewSwitch({ current, onLeave }: Props) {
   return (
     <nav
       aria-label='View'
+      data-tour='view-switch'
       className='shrink-0 flex items-center p-0.5 rounded-md bg-neutral-950 text-[13px]'
     >
       {VIEWS.map(({ view, to, label, Icon }) =>
