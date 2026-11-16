@@ -281,15 +281,8 @@ export default function ArxivGraph() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const [confirmingDelete, setConfirmingDelete] = useState(false)
-  // First visitors get the tour once the new-graph modal they open on is
-  // closed, so the two never stack. Shared links skip it: those visitors
-  // came to see something specific, and can still open it from ?.
+  // Opened by the header's ? button, or once on its own (see below)
   const [tourOpen, setTourOpen] = useState(false)
-  useEffect(() => {
-    if (!modal && !shared && !getTourSeen()) setTourOpen(true)
-    // `shared` is fixed for the view's lifetime
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modal])
   const closeTour = () => {
     setTourSeen()
     setTourOpen(false)
@@ -373,6 +366,17 @@ export default function ArxivGraph() {
   )
   const data = content.data
   const pageAids = content.pageAids
+
+  // Visitors who haven't seen the tour get it the first time a graph with
+  // papers is on screen, share links included. Most of its steps point at
+  // a graph, so it waits out the new-graph modal and the empty state, then
+  // a moment more for the layout to settle.
+  const hasPapers = !!data?.nodes.length
+  useEffect(() => {
+    if (modal || !hasPapers || getTourSeen()) return
+    const timer = setTimeout(() => setTourOpen(true), 500)
+    return () => clearTimeout(timer)
+  }, [modal, hasPapers])
 
   const setMembership = (next: GraphMembership) => {
     if (source.kind === 'draft') {
