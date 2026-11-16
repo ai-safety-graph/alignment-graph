@@ -128,7 +128,7 @@ export default function GraphTour({
         role='dialog'
         aria-modal='true'
         aria-labelledby='graph-tour-title'
-        className='absolute bg-neutral-950 border border-[#333333] rounded-lg px-4 py-3 text-[13px] text-neutral-400 shadow-xl'
+        className='absolute bg-neutral-950 rounded px-4 py-3 text-[13px] text-neutral-400 shadow-xl'
         style={{ width: CARD_WIDTH, ...cardStyle }}
       >
         <h2
