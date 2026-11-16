@@ -129,14 +129,41 @@ def test_compute_related_recomputes_when_a_paper_joins_the_set(conn, test_dsn, c
     assert _related(conn, a)[0][0] == c
 
 
-def test_compute_related_force_recomputes_unchanged_input(conn, test_dsn, committed_papers):
+def test_compute_related_recomputes_when_rows_go_missing(conn, test_dsn, committed_papers):
     a = committed_papers("2401.40061", embedding=_unit(1))
     committed_papers("2401.40062", embedding=_unit(0, 1))
     compute_related(test_dsn)
     conn.execute("DELETE FROM paper_related WHERE paper_id = %s", (a,))
     conn.commit()
 
-    assert compute_related(test_dsn) == 0
-    assert _related(conn, a) is None
-    assert compute_related(test_dsn, force=True) == 1
+    assert compute_related(test_dsn) == 1
     assert _related(conn, a) is not None
+
+
+def test_compute_related_force_recomputes_unchanged_input(
+    conn, test_dsn, committed_papers, monkeypatch
+):
+    committed_papers("2401.40071", embedding=_unit(1))
+    committed_papers("2401.40072", embedding=_unit(0, 1))
+    compute_related(test_dsn)
+
+    loaded = []
+    real_load = filters.load_vectors
+    monkeypatch.setattr(
+        filters, "load_vectors", lambda *a, **kw: loaded.append(1) or real_load(*a, **kw)
+    )
+    compute_related(test_dsn, force=True)
+    assert loaded
+
+
+def test_compute_related_fingerprint_covers_algorithm_settings(monkeypatch):
+    from aisafety_pipeline import related
+
+    ids = ["https://arxiv.org/abs/2401.00001", "https://arxiv.org/abs/2401.00002"]
+    base = related.related_fingerprint(ids, 20)
+    assert related.related_fingerprint(ids, 10) != base
+    monkeypatch.setattr(related, "_SIM_DECIMALS", 3)
+    assert related.related_fingerprint(ids, 20) != base
+    monkeypatch.setattr(related, "_SIM_DECIMALS", 4)
+    monkeypatch.setattr(related, "_RELATED_ALGO_VERSION", 2)
+    assert related.related_fingerprint(ids, 20) != base

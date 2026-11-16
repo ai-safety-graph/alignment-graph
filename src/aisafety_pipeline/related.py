@@ -45,12 +45,18 @@ _DELETE_STALE = """
 # hasn't changed, a recompute would read every SPECTER2 vector (~400 MB on
 # prod, the bulk of a quiet day's Disk IO) to write nothing.
 RELATED_STATE_KEY = "related_fingerprint"
+# Bump when the neighbour computation changes in a way that alters stored
+# rows (scoring, tie-breaking, ...), so the next run recomputes even though
+# the input ids didn't change. k and _SIM_DECIMALS are hashed directly.
+_RELATED_ALGO_VERSION = 1
 
 
 def related_fingerprint(ids: list[str], k: int) -> str:
-    """Hash of the sorted input ids and k. Any paper gaining or losing
-    relevance or an embedding changes it."""
-    h = hashlib.sha256(f"k={k}\n".encode())
+    """Hash of the sorted input ids, k, rounding and algorithm version. Any
+    paper gaining or losing relevance or an embedding changes it."""
+    h = hashlib.sha256(
+        f"v={_RELATED_ALGO_VERSION}\nk={k}\ndecimals={_SIM_DECIMALS}\n".encode()
+    )
     for pid in ids:
         h.update(pid.encode())
         h.update(b"\n")
@@ -95,7 +101,14 @@ def compute_related(db_path: str | None = None, k: int = RELATED_K, force: bool 
             return 0
 
         fingerprint = related_fingerprint(ids, k)
-        if not force and get_state(conn, RELATED_STATE_KEY) == fingerprint:
+        # A completed run leaves exactly one row per input id. The count catches
+        # rows lost outside the pipeline (a manual delete, a partial restore),
+        # which would otherwise keep being skipped until the id set changed.
+        if (
+            not force
+            and get_state(conn, RELATED_STATE_KEY) == fingerprint
+            and conn.execute("SELECT count(*) AS n FROM paper_related").fetchone()["n"] == len(ids)
+        ):
             print(
                 f"{GREEN}compute-related:{RESET} {len(ids)} papers unchanged since the last run, "
                 "skipping (--force to recompute)"
