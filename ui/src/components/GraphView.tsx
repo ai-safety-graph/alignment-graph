@@ -378,10 +378,12 @@ export default function ArxivGraph() {
   // a moment more for the layout to settle.
   const hasPapers = !!data?.nodes.length
   // It also stays out of the way of the "discard the draft?" prompt, and
-  // re-checks on firing in case the Tour button was used meanwhile.
+  // re-checks on firing in case the Tour button was used meanwhile. An
+  // explicit request from About doesn't wait for papers: the user just asked
+  // for it, so an empty graph shouldn't swallow the click.
   useEffect(() => {
-    const wanted = () => tourRequest.current || !getTourSeen()
-    if (modal || pendingExit || !hasPapers || !wanted()) return
+    const wanted = () => tourRequest.current || (hasPapers && !getTourSeen())
+    if (modal || pendingExit || !wanted()) return
     const timer = setTimeout(() => {
       if (!wanted()) return
       tourRequest.current = false
