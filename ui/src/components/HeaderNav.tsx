@@ -17,14 +17,19 @@ type Props = {
 }
 
 // Desktop header, shared by the graph and list views: the logo (home) sits
-// at the left edge, the view switch on the right beside About.
+// at the left edge, followed by the graph picker and then the view switch.
+// Both views lay these out in a `gap-2` row; the logo carries a little extra
+// room after it, and the picker's width cap is shared so the view switch
+// lands in the same place whichever view is showing.
+export const GRAPH_PICKER_WIDTH = 'max-w-[140px] lg:max-w-[240px]'
+
 export function HeaderLogo({ current, onLeave }: Props) {
   return (
     <Link
       to='/'
       aria-label='Alignment Graph home'
       onClick={current === 'graph' ? undefined : onLeave}
-      className='shrink-0'
+      className='shrink-0 md:mr-1'
     >
       <img
         src='/ag-logo.svg'
@@ -39,7 +44,7 @@ export function ViewSwitch({ current, onLeave }: Props) {
   return (
     <nav
       aria-label='View'
-      className='shrink-0 flex items-center p-0.5 rounded-md border border-neutral-700 bg-neutral-950 text-[13px]'
+      className='shrink-0 flex items-center p-0.5 rounded-md bg-neutral-950 text-[13px]'
     >
       {VIEWS.map(({ view, to, label, Icon }) =>
         view === current ? (
