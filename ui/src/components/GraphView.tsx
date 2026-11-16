@@ -1839,18 +1839,19 @@ export default function ArxivGraph() {
         </div>
 
         <div className='flex-1 basis-0 min-w-fit pl-4 flex justify-end'>
-          <div className='flex items-center gap-4 xl:gap-10 pointer-events-auto'>
+          <div className='flex items-center gap-4 pointer-events-auto'>
+            {/* Styled like About beside it, so the two read as a pair */}
             <button
               type='button'
-              aria-label='Show tour'
-              title='Show tour'
+              title='Show the tour'
               onClick={() => {
                 if (selectedId != null) onBackgroundClick()
                 setTourOpen(true)
               }}
-              className='cursor-pointer text-neutral-300 hover:text-white transition-colors'
+              className='flex items-center gap-1.5 cursor-pointer text-[13px] text-neutral-300 hover:text-white underline underline-offset-2 transition-colors'
             >
-              <CircleHelp size={16} />
+              <CircleHelp size={14} />
+              Tour
             </button>
             <Link
               to='/about'

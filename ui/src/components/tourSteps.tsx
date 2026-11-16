@@ -64,7 +64,8 @@ export const TOUR_STEPS: TourStep[] = [
     body: (
       <>
         The same papers as a searchable list. You can reopen this tour any time
-        with the <span className='text-white'>?</span> button at the top right.
+        with the <span className='text-white'>Tour</span> button at the top
+        right.
       </>
     ),
   },
