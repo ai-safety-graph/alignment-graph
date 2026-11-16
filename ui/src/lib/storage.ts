@@ -181,3 +181,24 @@ export function setLegendCollapsed(collapsed: boolean): void {
     // ignore
   }
 }
+
+const TOUR_SEEN_KEY = 'ais_tour_seen'
+
+// Whether the graph tour has been finished or skipped. Without storage the
+// tour counts as seen, so a private window isn't shown it on every load; the
+// header's ? button still opens it.
+export function getTourSeen(): boolean {
+  try {
+    return localStorage.getItem(TOUR_SEEN_KEY) === '1'
+  } catch {
+    return true
+  }
+}
+
+export function setTourSeen(): void {
+  try {
+    localStorage.setItem(TOUR_SEEN_KEY, '1')
+  } catch {
+    // ignore
+  }
+}

@@ -23,6 +23,7 @@ import {
   Plus,
   Pencil,
   Info,
+  CircleHelp,
 } from 'lucide-react'
 
 import { useForceConfig } from '../hooks/useForceConfig'
@@ -52,10 +53,12 @@ import {
   deleteSavedGraph,
   getActiveGraphId,
   getLegendCollapsed,
+  getTourSeen,
   listSavedGraphs,
   MAX_GRAPH_NAME_LENGTH,
   MAX_PINNED,
   setActiveGraphId,
+  setTourSeen,
   updateSavedGraph,
   withAdded,
   withRemoved,
@@ -72,6 +75,7 @@ import { GRAPH_PAGE_SIZE, pageLabel } from '../lib/graphContent'
 import { graphPinsKey, useGraphContent } from '../hooks/useGraphContent'
 
 import GraphLegend from './GraphLegend'
+import GraphTour from './GraphTour'
 import GraphPaperDetails from './GraphPaperDetails'
 import SearchResultsOverlay from './SearchResultsOverlay'
 import Dropdown from './Dropdown'
@@ -277,6 +281,19 @@ export default function ArxivGraph() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  // First visitors get the tour once the new-graph modal they open on is
+  // closed, so the two never stack. Shared links skip it: those visitors
+  // came to see something specific, and can still open it from ?.
+  const [tourOpen, setTourOpen] = useState(false)
+  useEffect(() => {
+    if (!modal && !shared && !getTourSeen()) setTourOpen(true)
+    // `shared` is fixed for the view's lifetime
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modal])
+  const closeTour = () => {
+    setTourSeen()
+    setTourOpen(false)
+  }
   // Mirrors GraphLegend's own state, to keep the bottom bar clear of it
   const [legendCollapsed, setLegendCollapsed] = useState(getLegendCollapsed)
   // Where the user asked to go while a draft is open (a saved graph or
@@ -997,7 +1014,7 @@ export default function ArxivGraph() {
     setQuery,
     onBackgroundClick,
     searchInputRef,
-    enabled: !modal,
+    enabled: !modal && !tourOpen,
   })
 
   // Graph source actions. Switching source drops the selection, whose ids
@@ -1623,7 +1640,7 @@ export default function ArxivGraph() {
             />
           </div>
         )}
-        <div className='pointer-events-auto'>
+        <div className='pointer-events-auto' data-tour='legend'>
           <GraphLegend onCollapsedChange={setLegendCollapsed} />
         </div>
       </div>
@@ -1665,36 +1682,40 @@ export default function ArxivGraph() {
 
             {/* Picking a graph and starting a new one share the dropdown;
               until there's something to pick, a button stands in */}
-            {savedGraphs.length === 0 && source.kind !== 'draft' ? (
-              <NewGraphButton onClick={() => setModal(NEW_GRAPH_MODAL)} />
-            ) : (
-              <Dropdown
-                className={GRAPH_PICKER_WIDTH}
-                label={
-                  source.kind === 'draft'
-                    ? draftName
-                    : (activeSavedGraph?.name ??
-                      (savedGraphs.length ? 'Saved graphs' : 'No saved graphs'))
-                }
-              >
-                {savedGraphs.map((g) => (
-                  <button
-                    key={g.id}
-                    type='button'
-                    onClick={() => openSavedGraph(g)}
-                    title={g.name}
-                    className={`w-full truncate text-left px-4 py-2 text-sm hover:bg-[#333333] cursor-pointer transition-colors ${
-                      activeSavedGraph?.id === g.id
-                        ? 'text-[#4ea8de]'
-                        : 'text-neutral-300'
-                    }`}
-                  >
-                    {g.name}
-                  </button>
-                ))}
-                <NewGraphMenuItem onClick={() => setModal(NEW_GRAPH_MODAL)} />
-              </Dropdown>
-            )}
+            <div data-tour='graph-picker' className='flex'>
+              {savedGraphs.length === 0 && source.kind !== 'draft' ? (
+                <NewGraphButton onClick={() => setModal(NEW_GRAPH_MODAL)} />
+              ) : (
+                <Dropdown
+                  className={GRAPH_PICKER_WIDTH}
+                  label={
+                    source.kind === 'draft'
+                      ? draftName
+                      : (activeSavedGraph?.name ??
+                        (savedGraphs.length
+                          ? 'Saved graphs'
+                          : 'No saved graphs'))
+                  }
+                >
+                  {savedGraphs.map((g) => (
+                    <button
+                      key={g.id}
+                      type='button'
+                      onClick={() => openSavedGraph(g)}
+                      title={g.name}
+                      className={`w-full truncate text-left px-4 py-2 text-sm hover:bg-[#333333] cursor-pointer transition-colors ${
+                        activeSavedGraph?.id === g.id
+                          ? 'text-[#4ea8de]'
+                          : 'text-neutral-300'
+                      }`}
+                    >
+                      {g.name}
+                    </button>
+                  ))}
+                  <NewGraphMenuItem onClick={() => setModal(NEW_GRAPH_MODAL)} />
+                </Dropdown>
+              )}
+            </div>
 
             <ViewSwitch current='graph' onLeave={confirmLeaveTo('/browse')} />
 
@@ -1729,7 +1750,10 @@ export default function ArxivGraph() {
         {/* Search bar */}
         <div className='flex-[0_1_42rem] min-w-0 flex justify-center'>
           <div className='w-full min-w-0 flex items-center justify-center gap-2 pointer-events-auto'>
-            <div className='flex-1 min-w-0 max-w-[550px] bg-[#2a2a2a] backdrop-blur-xs rounded-md'>
+            <div
+              data-tour='search'
+              className='flex-1 min-w-0 max-w-[550px] bg-[#2a2a2a] backdrop-blur-xs rounded-md'
+            >
               <div className='flex items-center gap-2'>
                 <div className='relative flex-1'>
                   <Search
@@ -1812,6 +1836,18 @@ export default function ArxivGraph() {
 
         <div className='flex-1 basis-0 min-w-fit pl-4 flex justify-end'>
           <div className='flex items-center gap-4 xl:gap-10 pointer-events-auto'>
+            <button
+              type='button'
+              aria-label='Show tour'
+              title='Show tour'
+              onClick={() => {
+                if (selectedId != null) onBackgroundClick()
+                setTourOpen(true)
+              }}
+              className='cursor-pointer text-neutral-300 hover:text-white transition-colors'
+            >
+              <CircleHelp size={16} />
+            </button>
             <Link
               to='/about'
               onClick={confirmLeaveTo('/about')}
@@ -1823,6 +1859,8 @@ export default function ArxivGraph() {
           </div>
         </div>
       </div>
+
+      {tourOpen && <GraphTour onClose={closeTour} />}
     </div>
   )
 }

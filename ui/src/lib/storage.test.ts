@@ -5,9 +5,11 @@ import {
   deleteSavedGraph,
   getActiveGraphId,
   getSavedGraph,
+  getTourSeen,
   listSavedGraphs,
   MAX_PINNED,
   setActiveGraphId,
+  setTourSeen,
   updateSavedGraph,
   withAdded,
   withRemoved,
@@ -106,5 +108,22 @@ describe('membership edits', () => {
     const m = { pinned: ['a', 'b'], hidden: ['h'] }
     expect(withRemoved(m, 'a')).toEqual({ pinned: ['b'], hidden: ['h'] })
     expect(withRemoved(m, 'x')).toEqual(m)
+  })
+})
+
+describe('tour seen', () => {
+  it('starts unseen and remembers being seen', () => {
+    expect(getTourSeen()).toBe(false)
+    setTourSeen()
+    expect(getTourSeen()).toBe(true)
+  })
+
+  it('counts as seen when storage throws', () => {
+    const throwing = () => {
+      throw new Error('blocked')
+    }
+    vi.stubGlobal('localStorage', { getItem: throwing, setItem: throwing })
+    expect(() => setTourSeen()).not.toThrow()
+    expect(getTourSeen()).toBe(true)
   })
 })
