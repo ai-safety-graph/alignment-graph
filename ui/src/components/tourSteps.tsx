@@ -29,9 +29,8 @@ export const TOUR_STEPS: TourStep[] = [
     body: (
       <>
         <span className='text-white'>New graph</span> picks topic tags, research
-        domains, a date range and{' '}
-        <span className='text-white'>Peer-reviewed only</span>. Saved graphs
-        live here too, so you can switch between them.
+        domains and a date range. Saved graphs live here too, so you can switch
+        between them.
       </>
     ),
   },
@@ -40,11 +39,10 @@ export const TOUR_STEPS: TourStep[] = [
     title: 'Search',
     body: (
       <>
-        Search by keyword, or turn on semantic search with ✨. Press{' '}
-        <kbd className={KBD}>/</kbd> or <kbd className={KBD}>Ctrl</kbd>+
-        <kbd className={KBD}>K</kbd> to search and{' '}
-        <kbd className={KBD}>Esc</kbd> to clear. Matches outside this graph show
-        up in green.
+        Search papers by keyword. Press <kbd className={KBD}>/</kbd> or{' '}
+        <kbd className={KBD}>Ctrl</kbd>+<kbd className={KBD}>K</kbd> to search
+        and <kbd className={KBD}>Esc</kbd> to clear. Matches outside this graph
+        show up in green.
       </>
     ),
   },
