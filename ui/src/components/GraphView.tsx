@@ -1337,9 +1337,6 @@ export default function ArxivGraph() {
         : SUBGRAPH_NODE_COLOR
     ctx.arc(n.x, n.y, r, 0, 2 * Math.PI, false)
     ctx.fill()
-    ctx.lineWidth = 0.5
-    ctx.strokeStyle = 'rgba(255,255,255,0.7)'
-    ctx.stroke()
     if (!ghostIds.has(n.id) && pinnedAids.has(n.aid)) {
       ctx.beginPath()
       ctx.lineWidth = 1.5
