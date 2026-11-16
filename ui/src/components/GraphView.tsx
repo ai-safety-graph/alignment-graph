@@ -88,7 +88,7 @@ import { GRAPH_PICKER_WIDTH, HeaderLogo, ViewSwitch } from './HeaderNav'
 import { NewGraphButton, NewGraphMenuItem } from './NewGraph'
 import { track } from '../lib/analytics'
 import { useCapabilities } from '../hooks/useCapabilities'
-import { useNewGraphRequest } from '../hooks/useNewGraphRequest'
+import { useNewGraphRequest, useTourRequest } from '../hooks/useRouteRequest'
 import { useSharedGraph } from '../hooks/useSharedGraph'
 import ShareLinkButton from './ShareLinkButton'
 
@@ -283,7 +283,12 @@ export default function ArxivGraph() {
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   // Opened by the header's Tour button, or once on its own (see below)
   const [tourOpen, setTourOpen] = useState(false)
+  // About's "Take the tour" asks for it even if it was seen before. Pending
+  // until the tour opens, so it shows once, not every time the effect reruns.
+  const tourRequested = useTourRequest()
+  const tourRequest = useRef(tourRequested)
   const closeTour = () => {
+    tourRequest.current = false
     setTourSeen()
     setTourOpen(false)
   }
@@ -375,9 +380,12 @@ export default function ArxivGraph() {
   // It also stays out of the way of the "discard the draft?" prompt, and
   // re-checks on firing in case the Tour button was used meanwhile.
   useEffect(() => {
-    if (modal || pendingExit || !hasPapers || getTourSeen()) return
+    const wanted = () => tourRequest.current || !getTourSeen()
+    if (modal || pendingExit || !hasPapers || !wanted()) return
     const timer = setTimeout(() => {
-      if (!getTourSeen()) setTourOpen(true)
+      if (!wanted()) return
+      tourRequest.current = false
+      setTourOpen(true)
     }, 500)
     return () => clearTimeout(timer)
   }, [modal, pendingExit, hasPapers])
