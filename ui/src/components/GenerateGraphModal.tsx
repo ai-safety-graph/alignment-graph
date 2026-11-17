@@ -210,7 +210,12 @@ export default function GenerateGraphModal({
           <div className='shrink-0 flex items-center gap-2'>
             <button
               type='button'
-              onClick={clearAllFilters}
+              onClick={() => {
+                clearAllFilters()
+                // The button disables itself, which would drop focus out of
+                // the dialog and with it Escape/Enter handling
+                panelRef.current?.focus()
+              }}
               disabled={!hasActiveFilters}
               className='whitespace-nowrap flex items-center gap-1 px-3 py-1 rounded-md border border-neutral-700 text-sm text-neutral-400 hover:text-neutral-200 hover:border-neutral-500 cursor-pointer disabled:text-neutral-700 disabled:hover:text-neutral-700 disabled:hover:border-neutral-700 disabled:cursor-not-allowed'
             >

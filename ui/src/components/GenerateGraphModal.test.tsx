@@ -297,4 +297,19 @@ describe('GenerateGraphModal', () => {
     await userEvent.keyboard('{Escape}')
     expect(onClose).toHaveBeenCalled()
   })
+
+  it('keeps focus in the dialog after Clear filters, so Escape still closes', async () => {
+    mockApi(() => 3)
+    const { onClose } = renderModal()
+
+    await userEvent.click(await screen.findByRole('button', { name: /rlhf/ }))
+    const clear = screen.getByRole('button', { name: 'Clear filters' })
+    await waitFor(() => expect(clear).toBeEnabled())
+    await userEvent.click(clear)
+
+    expect(clear).toBeDisabled()
+    expect(screen.getByRole('dialog')).toHaveFocus()
+    await userEvent.keyboard('{Escape}')
+    expect(onClose).toHaveBeenCalled()
+  })
 })
