@@ -5,7 +5,7 @@ import { ChevronRight, Plus } from 'lucide-react'
 import { fetchCoverage } from '../lib/api'
 import { useLatestBatch } from '../hooks/useLatestBatch'
 import { useTagCatalog } from '../hooks/useTagCatalog'
-import { NEW_GRAPH_STATE } from '../hooks/useNewGraphRequest'
+import { NEW_GRAPH_STATE, TOUR_STATE } from '../hooks/useRouteRequest'
 
 const REPO_URL = 'https://github.com/ai-safety-graph/alignment-graph'
 const ISSUES_URL = `${REPO_URL}/issues`
@@ -182,26 +182,25 @@ export default function AboutView() {
           </div>
 
           <Section title='How to use'>
-            <SubHeading>Quick start</SubHeading>
-            <ol className='list-decimal pl-5 flex flex-col gap-2'>
-              <li>
-                <span className='text-white'>Pick a topic.</span> Click{' '}
-                <span className='text-white'>New graph</span> and choose topic
-                tags, research domains and a date range. Turn on{' '}
-                <span className='text-white'>Peer-reviewed only</span> to keep
-                only accepted papers.
-              </li>
-              <li>
-                <span className='text-white'>Explore.</span> Each dot is a
-                paper, and papers on similar topics sit close together. Click
-                one to see its summary and related papers.
-              </li>
-              <li>
-                <span className='text-white'>Keep what's useful.</span> Save the
-                graph, then <span className='text-white'>Pin</span> papers to it
-                from their details.
-              </li>
-            </ol>
+            <p>
+              Click <span className='text-white'>New graph</span> and choose
+              topic tags, research domains and a date range, optionally only
+              peer-reviewed papers. Papers on similar topics sit close together;
+              click one for its summary and related papers, and{' '}
+              <span className='text-white'>Pin</span> the ones you want to keep.
+            </p>
+            {/* The tour lives in the graph view, which phones don't have */}
+            <p className='hidden md:block'>
+              New here?{' '}
+              <Link
+                to='/'
+                state={TOUR_STATE}
+                className='text-[#4ea8de] hover:underline'
+              >
+                Take the tour
+              </Link>{' '}
+              for a quick walk through the graph view.
+            </p>
 
             <SubHeading>Views</SubHeading>
             <ul className='list-disc pl-5 flex flex-col gap-2'>
