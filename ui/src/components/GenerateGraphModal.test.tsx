@@ -312,4 +312,18 @@ describe('GenerateGraphModal', () => {
     await userEvent.keyboard('{Escape}')
     expect(onClose).toHaveBeenCalled()
   })
+
+  it('ignores a held Enter repeating into the dialog', async () => {
+    mockApi(() => 3)
+    const { onGenerate } = renderModal()
+
+    const dialog = screen.getByRole('dialog')
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Generate graph' })).toBeEnabled(),
+    )
+    fireEvent.keyDown(dialog, { key: 'Enter', repeat: true })
+    expect(onGenerate).not.toHaveBeenCalled()
+    fireEvent.keyDown(dialog, { key: 'Enter' })
+    expect(onGenerate).toHaveBeenCalled()
+  })
 })

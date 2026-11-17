@@ -99,6 +99,9 @@ export default function GenerateGraphModal({
       onClose()
     } else if (
       e.key === 'Enter' &&
+      // A held Enter on a button (e.g. Clear filters, which hands focus back
+      // to the panel) would otherwise repeat into the panel and generate
+      !e.repeat &&
       !(e.target as HTMLElement).closest('button, [role="slider"]')
     ) {
       e.preventDefault()
