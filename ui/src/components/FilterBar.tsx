@@ -30,6 +30,8 @@ interface FilterBarProps {
   showTagCounts?: boolean
   // Off when the bar sits inside a container that already frames it (mobile overlay)
   bordered?: boolean
+  // Off when the host renders its own Clear Filters control (Generate graph modal)
+  showHeader?: boolean
 }
 
 function DateSlider({
@@ -194,6 +196,7 @@ export default function FilterBar({
   isExpanded = true,
   showTagCounts = true,
   bordered = true,
+  showHeader = true,
 }: FilterBarProps) {
   if (!isExpanded) {
     return hasActiveFilters ? (
@@ -220,17 +223,21 @@ export default function FilterBar({
       className={`w-full bg-neutral-950 ${bordered ? 'my-2 rounded-lg border border-neutral-700' : ''}`}
     >
       <div className='px-5 py-3 space-y-2'>
-        <div className='flex items-center justify-between gap-2'>
-          <div className='text-xs font-medium text-neutral-400'>Filter by</div>
-          <button
-            onClick={onClearAll}
-            disabled={!hasActiveFilters}
-            className='flex items-center gap-1 px-3 py-1 rounded-md border bg-neutral-950 border-neutral-700 text-xs text-neutral-400 hover:text-neutral-200 hover:border-neutral-500 disabled:text-neutral-700 disabled:hover:text-neutral-700 disabled:hover:border-neutral-700 disabled:cursor-not-allowed'
-          >
-            Clear Filters
-            <RotateCcw size={13} />
-          </button>
-        </div>
+        {showHeader && (
+          <div className='flex items-center justify-between gap-2'>
+            <div className='text-xs font-medium text-neutral-400'>
+              Filter by
+            </div>
+            <button
+              onClick={onClearAll}
+              disabled={!hasActiveFilters}
+              className='flex items-center gap-1 px-3 py-1 rounded-md border bg-neutral-950 border-neutral-700 text-xs text-neutral-400 hover:text-neutral-200 hover:border-neutral-500 disabled:text-neutral-700 disabled:hover:text-neutral-700 disabled:hover:border-neutral-700 disabled:cursor-not-allowed'
+            >
+              Clear Filters
+              <RotateCcw size={13} />
+            </button>
+          </div>
+        )}
 
         {datePreset !== undefined &&
           onSetDatePreset &&

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { X } from 'lucide-react'
+import { RotateCcw, X } from 'lucide-react'
 
 import FilterBar from './FilterBar'
 import RecipeTermsInput from './RecipeTermsInput'
@@ -10,7 +10,6 @@ import type { GraphFilters } from '../lib/graphFilters'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useServerFilters } from '../hooks/useServerFilters'
 import { useTagCatalog } from '../hooks/useTagCatalog'
-import { GRAPH_PAGE_SIZE } from '../lib/graphContent'
 import { MAX_GRAPH_NAME_LENGTH } from '../lib/storage'
 
 export default function GenerateGraphModal({
@@ -100,6 +99,9 @@ export default function GenerateGraphModal({
       onClose()
     } else if (
       e.key === 'Enter' &&
+      // A held Enter on a button (e.g. Clear filters, which hands focus back
+      // to the panel) would otherwise repeat into the panel and generate
+      !e.repeat &&
       !(e.target as HTMLElement).closest('button, [role="slider"]')
     ) {
       e.preventDefault()
@@ -107,13 +109,10 @@ export default function GenerateGraphModal({
     }
   }
 
-  let countLabel = 'Counting papers…'
-  if (total !== undefined) {
-    countLabel =
-      total > GRAPH_PAGE_SIZE
-        ? `${total.toLocaleString()} papers match · shown ${GRAPH_PAGE_SIZE} at a time, newest first`
-        : `${total.toLocaleString()} ${total === 1 ? 'paper matches' : 'papers match'}`
-  }
+  const countLabel =
+    total === undefined
+      ? 'Counting papers…'
+      : `${total.toLocaleString()} ${total === 1 ? 'paper matches' : 'papers match'}`
 
   return (
     <div
@@ -129,7 +128,7 @@ export default function GenerateGraphModal({
         aria-labelledby='generate-graph-title'
         tabIndex={-1}
         onKeyDown={onKeyDown}
-        className='w-full max-w-[760px] max-h-[85vh] flex flex-col rounded-lg border border-neutral-700 bg-neutral-950 shadow-lg outline-none'
+        className='w-full max-w-[760px] max-h-[85vh] flex flex-col rounded bg-neutral-950 shadow-lg outline-none'
       >
         <div className='flex items-start justify-between gap-4 px-5 pt-4'>
           <div>
@@ -178,7 +177,9 @@ export default function GenerateGraphModal({
             peerReviewedOnly={peerReviewedOnly}
             onTogglePeerReviewed={togglePeerReviewed}
             onClearAll={clearAllFilters}
+            showTagCounts={false}
             bordered={false}
+            showHeader={false}
           />
         </div>
 
@@ -210,6 +211,20 @@ export default function GenerateGraphModal({
             {total === 0 ? 'No papers match these filters' : countLabel}
           </span>
           <div className='shrink-0 flex items-center gap-2'>
+            <button
+              type='button'
+              onClick={() => {
+                clearAllFilters()
+                // The button disables itself, which would drop focus out of
+                // the dialog and with it Escape/Enter handling
+                panelRef.current?.focus()
+              }}
+              disabled={!hasActiveFilters}
+              className='whitespace-nowrap flex items-center gap-1 px-3 py-1 rounded-md border border-neutral-700 text-sm text-neutral-400 hover:text-neutral-200 hover:border-neutral-500 cursor-pointer disabled:text-neutral-700 disabled:hover:text-neutral-700 disabled:hover:border-neutral-700 disabled:cursor-not-allowed'
+            >
+              Clear filters
+              <RotateCcw size={13} aria-hidden />
+            </button>
             <button
               type='button'
               onClick={onClose}
