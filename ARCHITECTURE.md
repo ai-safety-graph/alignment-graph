@@ -60,7 +60,7 @@ Primary backend package. Owns:
 - arXiv/OAI harvesting
 - Persistence (PostgreSQL + pgvector via `PgConnection`)
 - Embedding generation and storage
-- Filtering (stage-1 regex + stage-2 semantic seed-centroid filter; `centroid-multi` is an experimental per-subtopic variant, not the default)
+- Filtering (stage-1 regex + stage-2 semantic seed-centroid filter)
 - LLM-based relevance + multi-label taxonomy classification (via OpenAI, sync or Batch API) — the live tag source
 - Peer-review status and venue (`venue.py`): rules over arXiv journal-ref/DOI/comments, then OpenAlex lookups for papers left unknown
 - Graph layout computation (incremental kNN placement by default; full UMAP/PCA refit with `--full`) and coordinate persistence to PostgreSQL
@@ -129,7 +129,7 @@ The public orchestration surface is defined in `src/aisafety_pipeline/utils.py`:
 - `harvest` — OAI-PMH fetch into `papers_raw`
 - `stage1` — regex filter into `papers`
 - `embed` — SPECTER2 embeddings (`papers.embedding`)
-- `filter` — semantic stage-2 filter (`--method centroid` or `centroid-multi`)
+- `filter` — semantic stage-2 filter (cosine similarity to the `seeds.txt` centroid, `--tau`)
 - `llm-classify` / `llm-classify-submit` / `llm-classify-collect` / `llm-classify-run` — LLM relevance + taxonomy classification into `llm_relevant`/`llm_tags` (the live tag source; `llm-classify-run` is the recommended production command — submits, waits, and collects Batch API jobs until the corpus is classified)
 - `venue` — peer-review status (`peer_reviewed`, `venue`, `venue_type`) for LLM-relevant papers, derived from arXiv journal-ref/DOI/comments (`--full` re-derives after rule changes)
 - `venue-enrich` — looks up papers `venue` left unknown in OpenAlex for a published version; rechecks recent ones monthly (`--limit`, default `OPENALEX_MAX_PER_RUN`)

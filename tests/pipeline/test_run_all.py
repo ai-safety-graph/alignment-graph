@@ -8,7 +8,7 @@ from aisafety_pipeline import utils
 
 
 def _make_args(**overrides):
-    defaults = dict(db=None, seeds="seeds.txt", tau=0.92, filter_method="centroid",
+    defaults = dict(db=None, seeds="seeds.txt", tau=0.92,
                      device="auto", coords="umap", skip=[])
     defaults.update(overrides)
     return argparse.Namespace(**defaults)

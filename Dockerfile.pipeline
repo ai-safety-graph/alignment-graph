@@ -2,7 +2,7 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY pyproject.toml README.md seeds.txt seeds_subtopics.tsv ./
+COPY pyproject.toml README.md seeds.txt ./
 COPY src ./src
 
 # Unlike the API's Dockerfile, this image needs the full pipeline: numpy,

@@ -40,7 +40,7 @@ def _row(conn, aid):
 
 
 def _filter_args(dsn, seeds_path, full=False):
-    return SimpleNamespace(db=dsn, method="centroid", seeds=str(seeds_path), tau=0.5, full=full)
+    return SimpleNamespace(db=dsn, seeds=str(seeds_path), tau=0.5, full=full)
 
 
 def test_filter_only_scores_unscored_papers_by_default(conn, test_dsn, committed_papers, tmp_path):

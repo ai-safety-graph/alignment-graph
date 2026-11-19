@@ -60,19 +60,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     d = sp.add_parser("filter", help="Stage-2 semantic filter")
     d.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
-    d.add_argument("--method", choices=["centroid", "centroid-multi", "logreg"], default="centroid")
     d.add_argument("--seeds", help="Path to seeds.txt (one arXiv id/url per line)")
-    d.add_argument("--seeds-subtopics", dest="seeds_subtopics",
-                    help="Path to seeds_subtopics.tsv (arxiv_id, subtopic, ...) for --method centroid-multi "
-                         "(default: seeds_subtopics.tsv)")
-    d.add_argument("--labels", help="labels.csv with columns: id,label (0/1)")
     d.add_argument("--tau", type=float, default=None,
-                    help="Threshold on sim/proba (centroid: raw cosine, default "
-                         f"{config.STAGE2_CENTROID_TAU}; centroid-multi: z-score, default 0.38, "
-                         "not directly comparable to the centroid method's tau)")
+                    help="Cosine-similarity threshold to the seed centroid "
+                         f"(default {config.STAGE2_CENTROID_TAU})")
     d.add_argument("--full", action="store_true",
-                   help="centroid: rescore every paper instead of only unscored ones (use after "
-                        "changing the seeds or --tau). centroid-multi always rescores everything.")
+                   help="Rescore every paper instead of only unscored ones (use after "
+                        "changing the seeds or --tau)")
     d.set_defaults(func=filters.cmd_filter)
 
     cl = sp.add_parser("compute-layout", help="Compute 2D layout coordinates and persist graph_x/y to Postgres")
@@ -185,9 +179,7 @@ def build_parser() -> argparse.ArgumentParser:
     ra.add_argument("--db", default=None, help="PostgreSQL DSN (postgresql://...); defaults to $DATABASE_URL")
     ra.add_argument("--seeds", default="seeds.txt", help="Path to seeds.txt for the stage-2 filter")
     ra.add_argument("--tau", type=float, default=None,
-                    help="Stage-2 filter threshold (default: the filter command's per-method default)")
-    ra.add_argument("--filter-method", dest="filter_method", choices=["centroid", "centroid-multi", "logreg"],
-                     default="centroid")
+                    help=f"Stage-2 filter threshold (default {config.STAGE2_CENTROID_TAU})")
     ra.add_argument("--device", default="auto", help="auto|cpu|mps|cuda|cuda:N (embed / embed-topic)")
     ra.add_argument("--coords", choices=["umap", "pca", "none"], default="umap")
     ra.add_argument("--skip", action="append", default=[], choices=_RUN_ALL_STAGE_NAMES,
@@ -247,7 +239,7 @@ def _cmd_run_all(args) -> None:
         # embed / embed-topic
         device=args.device, batch_size=32,
         # filter
-        method=args.filter_method, seeds=args.seeds, seeds_subtopics=None, labels=None, tau=args.tau,
+        seeds=args.seeds, tau=args.tau,
         # llm-classify-run
         model=config.LLM_MODEL, force=False, poll_interval=60,
         # compute-layout

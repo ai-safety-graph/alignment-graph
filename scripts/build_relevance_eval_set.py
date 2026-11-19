@@ -3,15 +3,14 @@
 Interactively build a hand-labeled ground-truth set for stage-2 relevance
 ("is this paper actually about AI safety/alignment?"), by sampling papers
 that made it past stage 1 and asking a human to judge each one -- so
-stage-2 filtering methods (single centroid vs. multi-centroid, different
-tau) can be scored against a fixed yardstick instead of eyeballed sample
+the stage-2 centroid filter (at different tau) can be scored against a fixed yardstick instead of eyeballed sample
 output.
 
 Scope / known limitation: this samples from `papers` (stage-1 survivors
 only), stratified across the current ai_regex_hit / ai_stage2_keep split
 so the reviewer sees a mix of clear hits, borderline cases, and current
 rejects -- not from `papers_raw`. It can measure stage-2 precision/recall
-(and compare stage-2 methods against each other), but NOT stage-1 recall,
+(at different thresholds), but NOT stage-1 recall,
 since papers stage 1's regex already dropped never reach `papers` at all
 and so are never sampled here. That's a separate, larger gap (see
 CLAUDE.md-adjacent discussion) that would need sampling from `papers_raw`
