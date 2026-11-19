@@ -1,6 +1,6 @@
 # AI Safety Pipeline & Visualisation
 
-A staged pipeline for harvesting **arXiv** papers → storing in **PostgreSQL + pgvector** → generating **SPECTER2 embeddings** → applying filters → LLM topic tagging → BGE topic embeddings + 2-D layout → serving live via **FastAPI**.
+A staged pipeline for harvesting **arXiv** papers → storing in **PostgreSQL + pgvector** → generating **SPECTER2 embeddings** → applying filters → LLM topic tagging → peer-review detection (arXiv fields + **OpenAlex**) → BGE topic embeddings + 2-D layout → precomputed related papers → serving live via **FastAPI**.
 
 [Live Web App](https://alignmentgraph.com/)
 
@@ -9,10 +9,12 @@ A staged pipeline for harvesting **arXiv** papers → storing in **PostgreSQL + 
 - 🔄 OAI-PMH harvest from arXiv (`cs`, `stat`, `econ`, `eess.SY`)
 - 🗄️ Storage: **PostgreSQL + pgvector**
 - 🧠 Embeddings via [SPECTER2](https://huggingface.co/allenai/specter2) (filtering, related papers) and [BGE](https://huggingface.co/BAAI/bge-base-en-v1.5) (semantic search, layout)
-- 🧹 Two-stage filtering: regex + semantic centroid / multi-centroid
+- 🧹 Two-stage filtering: regex + semantic seed-centroid filter (plus an experimental per-subtopic `centroid-multi` variant)
 - 🏷️ LLM-based relevance + multi-label taxonomy tagging (OpenAI, sync or Batch API) — the live tag source served by the API
+- 🎓 Peer-review status + venue, derived from arXiv journal-ref/DOI/comments and enriched via [OpenAlex](https://openalex.org)
+- 🔗 Related papers precomputed from SPECTER2 nearest neighbours
 - 🔍 Semantic search via pgvector ANN (self-hosted only; `ENABLE_SEMANTIC_SEARCH=true`)
-- 🚀 FastAPI backend with live paper listing, detail, and semantic search endpoints
+- 🚀 FastAPI backend with live paper listing/detail, graph, related papers, authors, tags and semantic search endpoints
 - 🗺️ 2D graph layout coordinates (UMAP/PCA, then incremental kNN placement) precomputed and served live from Postgres
 
 ---
@@ -113,9 +115,25 @@ Only scores papers that have no score yet (`ai_sem_sim IS NULL`). Pass `--full` 
 aisafety-pipeline llm-classify-run
 ```
 
-This submits, waits for, and collects OpenAI Batch API jobs until every unclassified paper has `llm_relevant`/`llm_tags` set — this is what the API serves.
+This submits, waits for, and collects OpenAI Batch API jobs until every unclassified paper has `llm_relevant`/`llm_tags` set — this is what the API serves. (`llm-classify` runs synchronously instead; `llm-classify-submit` / `llm-classify-collect` split the batch flow into manual steps.)
 
-**6. Generate BGE topic embeddings for relevant papers**
+**6. Derive peer-review status from arXiv fields**
+
+```bash
+aisafety-pipeline venue
+```
+
+Sets `peer_reviewed`, `venue` and `venue_type` for `llm_relevant` papers from their arXiv journal-ref, publisher DOI and comments (e.g. "accepted at ICLR 2026"). No signal means *unknown* (`NULL`), not "not reviewed". Incremental; pass `--full` to re-derive everything after changing the rules in `venue.py`.
+
+**7. Enrich unknowns from OpenAlex**
+
+```bash
+aisafety-pipeline venue-enrich
+```
+
+Looks up papers `venue` left unknown in OpenAlex, which links many arXiv preprints to their published journal/conference version. Papers never checked go first; unknown papers from the last ~18 months are rechecked monthly, since acceptance often comes months after posting. Capped at `--limit` (default `OPENALEX_MAX_PER_RUN`, 5000) per run. `OPENALEX_MAILTO` and `OPENALEX_API_KEY` are optional (see `.env.example`). After changing the venue-naming rules, run `venue-enrich --refresh-names` once.
+
+**8. Generate BGE topic embeddings for relevant papers**
 
 ```bash
 aisafety-pipeline embed-topic --device auto
@@ -123,7 +141,7 @@ aisafety-pipeline embed-topic --device auto
 
 Only embeds `llm_relevant` rows — run this *after* `llm-classify-run`, not alongside `embed`. These are what `compute-layout` and semantic search use; skipping this step is why relevant papers can be missing graph coordinates.
 
-**7a. Compute graph layout**
+**9. Compute graph layout**
 
 ```bash
 aisafety-pipeline compute-layout --coords umap
@@ -131,7 +149,15 @@ aisafety-pipeline compute-layout --coords umap
 
 By default this only places relevant papers that have no coordinates yet, each at the mean position of its nearest already-placed neighbours (`--knn-k`, default 10), so existing points don't move. Pass `--full` to refit the whole UMAP layout, e.g. monthly or after a large backfill, so new topics form their own clusters. With no layout at all yet it does a full fit automatically.
 
-**7b. Start the API**
+**10. Precompute related papers**
+
+```bash
+aisafety-pipeline compute-related
+```
+
+Stores the top 20 SPECTER2 neighbours of every relevant paper in `paper_related`, which `GET /api/papers/related` serves (falling back to a live pgvector search for papers not yet precomputed). Always a full recompute, but skipped entirely when the set of relevant embedded papers hasn't changed; pass `--force` after re-embedding papers in place.
+
+**11. Start the API**
 
 ```bash
 aisafety-pipeline serve --reload
@@ -147,7 +173,7 @@ API docs available at `http://localhost:8000/docs`.
 aisafety-pipeline run-all
 ```
 
-Chains harvest → stage1 → embed → filter → llm-classify-run → embed-topic → compute-layout in that fixed order, stopping immediately on the first stage's failure. This is what the scheduled Railway cron job (`Dockerfile.pipeline`) runs daily — see that file; the Railway service itself (Dockerfile path, cron schedule, restart policy) is configured in the Railway dashboard, not a config file. The harvest watermark and in-flight OpenAI batch tracking are stored in the `pipeline_state` table (not local files), so this is safe to run from a fresh container on every invocation. Pass `--skip <stage>` (repeatable) to omit a stage for manual recovery/debugging.
+Chains harvest → stage1 → embed → filter → llm-classify-run → venue → venue-enrich → embed-topic → compute-layout → compute-related in that fixed order, stopping immediately on the first stage's failure. The exception is `venue-enrich`: OpenAlex is optional enrichment, so its errors never stop the run, but a permanent one (e.g. a bad API key) makes `run-all` exit non-zero after the last stage. This is what the scheduled Railway cron job (`Dockerfile.pipeline`) runs daily — see that file; the Railway service itself (Dockerfile path, cron schedule, restart policy) is configured in the Railway dashboard, not a config file. The harvest watermark and in-flight OpenAI batch tracking are stored in the `pipeline_state` table (not local files), so this is safe to run from a fresh container on every invocation. Pass `--skip <stage>` (repeatable) to omit a stage for manual recovery/debugging.
 
 ### Configure the frontend
 
