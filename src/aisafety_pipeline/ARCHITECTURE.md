@@ -63,7 +63,7 @@ Harvests metadata from arXiv via OAI-PMH (sets in `config.OAI_SETS`) into `paper
 Implements filtering stages:
 
 - **stage 1**: regex/keyword gating into `papers`, also deriving `domain_tag` (`tech`/`gov`/`both`/`unknown`) from the arXiv categories; policy-ish categories (`cs.CY`, `cs.SI`, `cs.CR`, `econ.*`) get a looser match. Incremental: only scans `papers_raw` rows whose `harvested_at` (stamped by every harvest upsert) is newer than the `stage1_watermark` key in `pipeline_state`. It does a full scan when that key is missing, or with `--full` (needed after changing the stage-1 regexes).
-- **stage 2**: semantic filtering over SPECTER2 vectors, `--method centroid` (cosine to one seed centroid from `seeds.txt`, threshold `--tau`, default `0.90`) or `centroid-multi` (per-subtopic centroids from `seeds_subtopics.tsv`, z-scored per group). `logreg` is accepted by the parser but not implemented. `centroid` only scores papers with `ai_sem_sim IS NULL` unless `--full` is passed (needed after changing the seeds or tau); `centroid-multi` always rescores everything, since its z-scores depend on the whole population.
+- **stage 2**: semantic filtering over SPECTER2 vectors, cosine similarity to one seed centroid from `seeds.txt`, threshold `--tau` (default `STAGE2_CENTROID_TAU`, `0.90`). Deliberately loose: the LLM classification stage makes the real relevance call. Only scores papers with `ai_sem_sim IS NULL` unless `--full` is passed (needed after changing the seeds or tau).
 
 `load_vectors(conn, ids, model=)` reads `papers.embedding` (`model="specter2"`, default) or `papers.embedding_topic` (`model="topic"`, used by `compute_layout.py`) via `id = ANY(%s)`, L2-normalised.
 
@@ -211,7 +211,7 @@ Notable defaults:
 - Embeddings: `--device auto|cpu|mps|cuda[:N]`, `--batch-size`
 - LLM: `llm-classify --limit/--dry-run/--force`; `llm-classify-collect --batch-id/--wait/--poll-interval`
 - Serve: `--host`/`--port` default to `API_HOST`/`API_PORT` (`0.0.0.0`/`8000`); production runs uvicorn directly from the root `Dockerfile` instead
-- `run-all`: `--seeds`, `--tau`, `--filter-method`, `--device`, `--coords`, repeatable `--skip <stage>`; always incremental (`full=False`), with `batch_size=32` and `knn_k=10` hard-coded. Stops on the first failing stage, then records `latest_batch`.
+- `run-all`: `--seeds`, `--tau`, `--device`, `--coords`, repeatable `--skip <stage>`; always incremental (`full=False`), with `batch_size=32` and `knn_k=10` hard-coded. Stops on the first failing stage, then records `latest_batch`.
 
 ---
 

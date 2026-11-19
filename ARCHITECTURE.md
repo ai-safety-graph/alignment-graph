@@ -60,7 +60,7 @@ Primary backend package. Owns:
 - arXiv/OAI harvesting
 - Persistence (PostgreSQL + pgvector via `PgConnection`)
 - Embedding generation and storage
-- Filtering (stage-1 regex + stage-2 semantic seed-centroid filter; `centroid-multi` is an experimental per-subtopic variant, not the default)
+- Filtering (stage-1 regex + stage-2 semantic seed-centroid filter)
 - LLM-based relevance + multi-label taxonomy classification (via OpenAI, sync or Batch API) — the live tag source
 - Peer-review status and venue (`venue.py`): rules over arXiv journal-ref/DOI/comments, then OpenAlex lookups for papers left unknown
 - Graph layout computation (incremental kNN placement by default; full UMAP/PCA refit with `--full`) and coordinate persistence to PostgreSQL
@@ -129,14 +129,14 @@ The public orchestration surface is defined in `src/aisafety_pipeline/utils.py`:
 - `harvest` — OAI-PMH fetch into `papers_raw`
 - `stage1` — regex filter into `papers`
 - `embed` — SPECTER2 embeddings (`papers.embedding`)
-- `filter` — semantic stage-2 filter (`--method centroid` or `centroid-multi`)
+- `filter` — semantic stage-2 filter (cosine similarity to the `seeds.txt` centroid, `--tau`)
 - `llm-classify` / `llm-classify-submit` / `llm-classify-collect` / `llm-classify-run` — LLM relevance + taxonomy classification into `llm_relevant`/`llm_tags` (the live tag source; `llm-classify-run` is the recommended production command — submits, waits, and collects Batch API jobs until the corpus is classified)
 - `venue` — peer-review status (`peer_reviewed`, `venue`, `venue_type`) for LLM-relevant papers, derived from arXiv journal-ref/DOI/comments (`--full` re-derives after rule changes)
 - `venue-enrich` — looks up papers `venue` left unknown in OpenAlex for a published version; rechecks recent ones monthly (`--limit`, default `OPENALEX_MAX_PER_RUN`)
 - `embed-topic` — BGE topic embeddings (`papers.embedding_topic`) for LLM-relevant papers
 - `compute-layout` — persists `graph_x/y` to DB (incremental kNN placement; `--full` refits UMAP/PCA)
 - `compute-related` — precomputes SPECTER2 neighbours into `paper_related` (skipped when its input is unchanged; `--force` after re-embedding)
-- `run-all` — every stage above in order, for the scheduled job (`--skip <stage>` to omit stages); records a latest-batch summary in `pipeline_state`
+- `run-all` — harvest → stage1 → embed → filter → llm-classify (via `llm-classify-run`) → venue → venue-enrich → embed-topic → compute-layout → compute-related, for the scheduled job (not `init-db` or the other `llm-classify-*` commands; `--skip <stage>` to omit stages by those names); records a latest-batch summary in `pipeline_state`
 - `serve` — start FastAPI with uvicorn (`--host`, `--port`, `--reload`; defaults from `API_HOST`/`API_PORT`)
 
 Ad-hoc tooling (backfills, eval-set builders, filter/classifier evaluation, mojibake repair, the search-log report query) lives in `scripts/` and is not part of the scheduled pipeline.

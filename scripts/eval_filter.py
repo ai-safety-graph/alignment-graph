@@ -1,19 +1,14 @@
 #!/usr/bin/env python3
 """
-Score stage-2 relevance filtering methods against the hand-labeled set
-built by build_relevance_eval_set.py, so the single global centroid and
-the multi-centroid (seeds_subtopics.tsv) approach can be compared on the
-same yardstick instead of by eyeballing `filter` output.
-
-The two methods use tau on different scales (single: raw cosine; multi:
-per-group z-score, see filters._col_zscore), so this sweeps each
-independently and reports its own best-F1 point rather than assuming a
-shared tau is comparable.
+Score the stage-2 centroid filter against the hand-labeled set built by
+build_relevance_eval_set.py, sweeping tau (raw cosine similarity to the
+seed centroid) so its precision/recall trade-off can be checked before
+changing STAGE2_CENTROID_TAU, instead of by eyeballing `filter` output.
 
 Usage:
     python scripts/eval_filter.py
-    python scripts/eval_filter.py --seeds seeds.txt --seeds-subtopics seeds_subtopics.tsv
-    python scripts/eval_filter.py --sweep=-2.0:2.0:0.1
+    python scripts/eval_filter.py --seeds seeds.txt
+    python scripts/eval_filter.py --sweep=0.80:0.98:0.01
 """
 from __future__ import annotations
 
@@ -21,8 +16,6 @@ import argparse
 import json
 import sys
 from pathlib import Path
-
-import numpy as np
 
 try:
     from dotenv import load_dotenv
@@ -34,9 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from aisafety_pipeline.db import connect  # noqa: E402
 from aisafety_pipeline.filters import (  # noqa: E402
-    _col_zscore,
     build_centroid,
-    build_group_centroids,
     load_vectors,
 )
 
@@ -82,8 +73,7 @@ def main() -> int:
     ap.add_argument("--db", default=None, help="PostgreSQL DSN; defaults to $DATABASE_URL")
     ap.add_argument("--eval-set", default="data/relevance_eval_set.json")
     ap.add_argument("--seeds", default="seeds.txt")
-    ap.add_argument("--seeds-subtopics", default="seeds_subtopics.tsv")
-    ap.add_argument("--sweep", default="-2.0:2.0:0.1", help="lo:hi:step for both methods' tau ranges")
+    ap.add_argument("--sweep", default="0.80:0.98:0.01", help="lo:hi:step for the tau range")
     args = ap.parse_args()
 
     eval_path = Path(args.eval_set)
@@ -112,26 +102,18 @@ def main() -> int:
             return 1
         labels = {pid: labels[pid] for pid in ids}
 
-        C_single = build_centroid(conn, args.seeds)
-        single_scores = {pid: float(V[pid] @ C_single) for pid in ids}
-
-        group_centroids = build_group_centroids(conn, args.seeds_subtopics)
-        topics = sorted(group_centroids)
-        C_multi = np.vstack([group_centroids[t] for t in topics])
-        raw = np.vstack([V[pid] for pid in ids]) @ C_multi.T
-        z = _col_zscore(raw)
-        best_z = z.max(axis=1)
-        multi_scores = {pid: float(best_z[i]) for i, pid in enumerate(ids)}
+        C = build_centroid(conn, args.seeds)
+        scores = {pid: float(V[pid] @ C) for pid in ids}
     finally:
         conn.close()
 
     floors = parse_sweep(args.sweep)
-    report("centroid (single, raw cosine)", single_scores, labels, floors)
-    report("centroid-multi (best sub-centroid z-score)", multi_scores, labels, floors)
+    report("centroid (raw cosine)", scores, labels, floors)
 
     print(f"\n{YELLOW}eval:{RESET} pick based on whether you'd rather over- or under-keep "
           f"(precision vs recall), not F1 alone -- then re-check a few papers by eye before "
-          f"changing the production --tau for either method.")
+          f"changing the production tau. Stage 2 is meant to be loose: the LLM "
+          f"classification stage makes the real relevance call, so favour recall.")
     return 0
 
 

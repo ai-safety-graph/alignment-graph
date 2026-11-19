@@ -9,7 +9,7 @@ A staged pipeline for harvesting **arXiv** papers → storing in **PostgreSQL + 
 - 🔄 OAI-PMH harvest from arXiv (`cs`, `stat`, `econ`, `eess.SY`)
 - 🗄️ Storage: **PostgreSQL + pgvector**
 - 🧠 Embeddings via [SPECTER2](https://huggingface.co/allenai/specter2) (filtering, related papers) and [BGE](https://huggingface.co/BAAI/bge-base-en-v1.5) (semantic search, layout)
-- 🧹 Two-stage filtering: regex + semantic seed-centroid filter (plus an experimental per-subtopic `centroid-multi` variant)
+- 🧹 Two-stage filtering: regex + semantic seed-centroid filter
 - 🏷️ LLM-based relevance + multi-label taxonomy tagging (OpenAI, sync or Batch API) — the live tag source served by the API
 - 🎓 Peer-review status + venue, derived from arXiv journal-ref/DOI/comments and enriched via [OpenAlex](https://openalex.org)
 - 🔗 Related papers precomputed from SPECTER2 nearest neighbours
@@ -102,7 +102,7 @@ aisafety-pipeline embed --device auto
 **4. Stage-2 semantic filter**
 
 ```bash
-aisafety-pipeline filter --method centroid --seeds seeds.txt
+aisafety-pipeline filter --seeds seeds.txt
 ```
 
 The centroid threshold defaults to 0.90 cosine similarity (`STAGE2_CENTROID_TAU` in `config.py`). It is deliberately loose, since the LLM classification stage makes the real relevance call.
