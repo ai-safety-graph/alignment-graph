@@ -136,7 +136,7 @@ The public orchestration surface is defined in `src/aisafety_pipeline/utils.py`:
 - `embed-topic` — BGE topic embeddings (`papers.embedding_topic`) for LLM-relevant papers
 - `compute-layout` — persists `graph_x/y` to DB (incremental kNN placement; `--full` refits UMAP/PCA)
 - `compute-related` — precomputes SPECTER2 neighbours into `paper_related` (skipped when its input is unchanged; `--force` after re-embedding)
-- `run-all` — every stage above in order, for the scheduled job (`--skip <stage>` to omit stages); records a latest-batch summary in `pipeline_state`
+- `run-all` — harvest → stage1 → embed → filter → llm-classify (via `llm-classify-run`) → venue → venue-enrich → embed-topic → compute-layout → compute-related, for the scheduled job (not `init-db` or the other `llm-classify-*` commands; `--skip <stage>` to omit stages by those names); records a latest-batch summary in `pipeline_state`
 - `serve` — start FastAPI with uvicorn (`--host`, `--port`, `--reload`; defaults from `API_HOST`/`API_PORT`)
 
 Ad-hoc tooling (backfills, eval-set builders, filter/classifier evaluation, mojibake repair, the search-log report query) lives in `scripts/` and is not part of the scheduled pipeline.
